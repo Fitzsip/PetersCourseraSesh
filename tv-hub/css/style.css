@@ -225,3 +225,4 @@ input.field.wide { width: 900px; font-size: 30px; }
 .digits small { display: block; font-size: 36px; font-weight: 700; letter-spacing: 0; color: var(--muted); }
 .tile .sub.warn { color: #ffcf7a; }
 .tile .flag.soon { background: rgba(255,255,255,0.92); color: #0b0e1a; }
+.tile.pic .src { max-width: calc(100% - 150px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
