@@ -6,7 +6,7 @@
  * name when the ID is missing or wrong, so new apps work without knowing their ID.
  */
 var TVHUB_DEFAULTS = {
-  version: 4,
+  version: 5,
 
   apps: [
     { id: 'netflix', name: 'Netflix',     appId: '3201907018807', match: '^netflix',        color: '#e50914', text: '#ffffff', hotkey: 'red' },
@@ -78,8 +78,23 @@ var TVHUB_DEFAULTS = {
   // Shows you're following: [{ tvmazeId, name, app }]. Add them from the home screen.
   shows: [],
 
+  // Towns for the weather in the top bar (choose yours in Settings).
+  towns: [
+    ['Dublin', 53.35, -6.26], ['Cork', 51.90, -8.47], ['Galway', 53.27, -9.05], ['Limerick', 52.66, -8.63],
+    ['Waterford', 52.26, -7.11], ['Kilkenny', 52.65, -7.25], ['Wexford', 52.34, -6.46], ['Sligo', 54.27, -8.47],
+    ['Athlone', 53.42, -7.94], ['Dundalk', 54.00, -6.40], ['Drogheda', 53.72, -6.35], ['Letterkenny', 54.95, -7.73],
+    ['Tralee', 52.27, -9.70], ['Ennis', 52.84, -8.98], ['Castlebar', 53.86, -9.30], ['Mullingar', 53.53, -7.34],
+    ['Navan', 53.65, -6.68], ['Naas', 53.22, -6.66], ['Carlow', 52.84, -6.93], ['Clonmel', 52.36, -7.70],
+    ['Belfast', 54.60, -5.93], ['Derry', 55.00, -7.32]
+  ],
+
   options: {
     smartOrder: false,         // put the apps you use most first
+    town: 'Dublin',            // weather
+    alertLive: true,           // banner when an event in My sports goes live
+    alertSoon: true,           // and 10 minutes before it starts
+    ambientMins: 10,           // screensaver after this many idle minutes on the home screen (0 = off)
+    spotifyKey: null,          // colour button that plays/pauses Spotify
     livePreview: true,         // show the live channel behind the home screen
     // Used only when the TV doesn't let this app tune channels itself.
     tvViewerAppId: 'org.tizen.tv-viewer'

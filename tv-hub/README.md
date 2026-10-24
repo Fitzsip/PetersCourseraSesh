@@ -15,6 +15,13 @@ It's an ordinary Samsung (Tizen) app that you install with Samsung's own **Devel
 | **Satellite TV** | Your free-to-air channels. Highlight one and it plays in the preview window; press OK to watch full screen. CH ▲▼ flicks through them. |
 | **My sport** | Live and upcoming events for the sports you follow, set to **F1, NFL and Premier League** to start with. They come from Sky's guide for the next few days, on whichever Sky Sports channel shows them, e.g. *LIVE · Premier League: Arsenal v Spurs · Main Event · Premier League* or *Sun 18:00 · NFL: Chiefs v Bills*. After them come tiles for your Sky Sports channels: Main Event, Premier League, F1 and NFL, with the others switched on in Settings. OK opens NOW. |
 | **Type a number** | Type `102` on the remote and it jumps to that satellite channel. The number box shows the channel's name before it switches. `1` to `9` also open your 1st to 9th satellite channels. |
+| **Spotify** | Now playing, with album art and progress. Play/pause, skip, back and volume, plus your playlists and recently played, all from the TV remote. **Play on…** switches between the TV, your phone, an Echo or any other Spotify Connect device. A colour button can be set to play/pause. Needs Spotify Premium and a one-time phone set-up; see below. |
+| **Sport alerts** | A banner when an F1, NFL or Premier League event you follow goes live, and 10 minutes before. OK opens NOW. |
+| **Stats** | At the end of My sport: **F1** standings and this race weekend's session times in Irish time, the **Premier League table**, and this week's **NFL** games with live scores. |
+| **Weather** | Now, today and tomorrow in the top bar, for the town you pick in Settings. |
+| **New episodes** | A show in My shows with an episode out today appears in On now, e.g. *NEW TONIGHT 21:00*. |
+| **Screensaver** | After 10 idle minutes on the home screen: a big clock, the weather, what Spotify is playing and the next live sport. Any button wakes it. |
+| **Backup** | Settings › Backup shows a QR code holding your whole setup. Scan it with your phone and keep the text; paste it back to restore. |
 | **Settings** | The INFO button opens it. Everything is set up with the remote: the sports you follow, show, hide and reorder apps; assign colour buttons; choose channels; add or remove online channels and Sport channels. Remove and Reset ask you to press OK twice. |
 
 ## Try it on your computer first
@@ -100,7 +107,37 @@ You need a Windows, Mac or Linux computer on the same Wi-Fi or network as the TV
 4. Choose which app goes on each colour button.
 5. Add your shows: highlight **+ Add a show**, type the name with the on-screen keyboard, pick the right result, then choose which app you watch it on. TV Hub suggests one.
 
+## Set up Spotify (once, about 10 minutes, from your phone)
+
+1. On your phone, go to **developer.spotify.com/dashboard** and sign in with your Spotify account.
+2. Tap **Create app**:
+   1. Any name and description, e.g. "TV Hub".
+   2. **Redirect URI:** enter `http://127.0.0.1:8888/callback` and tap **Add**.
+   3. Under the APIs, tick **Web API**.
+   4. Agree to the terms and **Save**.
+3. Open the app's **Settings** and copy the **Client ID**.
+4. On the TV, open TV Hub → **Spotify** row → **Connect Spotify**:
+   1. Choose the Client ID box.
+   2. Paste the Client ID using **Apps2Samsung → Remote**, whose keyboard types straight into the TV.
+   3. Choose **Save**. A QR code appears.
+5. Scan the QR code with your phone's camera and approve.
+6. Your phone opens a page that **won't load**, with an address starting `127.0.0.1`. That's expected.
+7. Copy that whole address and paste it into the second box on the TV, again with Apps2Samsung's Remote. Then choose **Connect**.
+
+If Spotify says the user isn't registered, go to your app's **User Management** on developer.spotify.com and add your own name and Spotify email.
+
 ## Good to know
+
+- **Spotify.**
+  - Controlling playback needs **Premium**.
+  - **Play on…** lists the devices Spotify currently sees. The TV usually only appears while its Spotify app is open; your phone or Echo appear while their Spotify app is running.
+  - Your Spotify sign-in is stored separately from your settings, and is never included in a backup.
+- **Stats sources.**
+  - **F1:** the open jolpica-f1 project.
+  - **Premier League and NFL:** ESPN's public (unofficial) data feed.
+  - If either changes, that screen says it couldn't load, and nothing else is affected.
+- **Weather** is from Open-Meteo, which is free and needs no account.
+- **The screensaver** hides the live TV picture, but the channel's sound may continue. Turn the screensaver off in Settings if that bothers you.
 
 - **Streaming apps don't share what you're watching.** Netflix, Disney+, Prime and NOW keep viewing history private, so nothing outside those apps can read your "Continue watching" list. That's why you add shows to **My shows** yourself. TV Hub then keeps them up to date using TVmaze, a free TV database.
 - **Online channels and Sport open the app, not the exact channel.** Samsung gives apps no way to jump straight into a specific live channel inside another app. Pressing OK on *RTÉ One* opens RTÉ Player, and you pick RTÉ One under *Live*. The message on screen tells you which channel to choose.
@@ -137,7 +174,10 @@ tv-hub/
   js/platform.js   Talks to the TV (launch apps, tune channels, remote keys, web requests)
   js/guide.js      Online TV guide for RTÉ, Virgin Media and Sky Sports
   js/shows.js      "My shows" info from TVmaze
-  js/app.js        Home screen, live TV, sport, shows, settings and navigation
+  js/spotify.js    Spotify sign-in (PKCE) and remote control
+  js/extras.js     Weather, F1 standings and schedule, Premier League table, NFL scores
+  js/vendor/qrcode.js  QR code generator (MIT, Kazuhiko Arase)
+  js/app.js        Home screen, live TV, sport, shows, Spotify, alerts, backup, screensaver, settings
   build.sh         Package, sign and install with Tizen Studio from the command line
   make-wgt.sh      Make the unsigned dist/TVHub.wgt for Apps2Samsung
   dist/TVHub.wgt   The packaged app, ready to install

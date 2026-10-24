@@ -74,7 +74,7 @@ body.no-preview .preview { background: var(--bg-2); }
 body.demo .preview-fallback, body.demo .watch-fallback { display: flex; }
 
 /* Rows scroll up under the hero as you move down. */
-.rows-viewport { height: 614px; overflow: hidden; margin: 0 -96px; padding: 0 96px; }
+.rows-viewport { height: 590px; overflow: hidden; margin: 0 -96px; padding: 0 96px; }
 .rows { padding-top: 4px; transition: transform 0.25s ease; will-change: transform; }
 .row-title { font-size: 28px; color: #c9d1e8; margin: 14px 0 12px; }
 
@@ -226,3 +226,47 @@ input.field.wide { width: 900px; font-size: 30px; }
 .tile .sub.warn { color: #ffcf7a; }
 .tile .flag.soon { background: rgba(255,255,255,0.92); color: #0b0e1a; }
 .tile.pic .src { max-width: calc(100% - 150px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- Weather, Spotify, stats, alerts, screensaver ---------- */
+.weather { font-size: 24px; color: #c9d1e8; margin-top: 4px; }
+.topbar { height: 120px; }
+.tile.ctl { width: 150px; background: #1f2937; align-items: center; justify-content: center; text-align: center; padding: 10px; }
+.tile.ctl .name { font-size: 30px; }
+.tile.stat { background: var(--bg-2); border-color: rgba(122,162,255,0.4); width: 280px; }
+.tile.stat .name { color: var(--text); font-size: 28px; }
+
+.step { margin: 10px 0 6px; }
+.step-title { font-size: 30px; font-weight: 700; margin: 18px 0 8px; }
+.step-text { font-size: 24px; color: #c9d1e8; line-height: 1.4; }
+.step-text.tip { color: var(--muted); margin-top: 8px; }
+.qr-wrap { display: flex; align-items: center; margin: 12px 0; }
+.qr-wrap > * + * { margin-left: 32px; }
+.qr { background: #fff; padding: 12px; border-radius: 12px; flex: 0 0 auto; max-width: 520px; image-rendering: pixelated; }
+
+.statline { padding: 6px 10px; border-radius: 8px; font-size: 26px; }
+.statline.focused { background: rgba(255,255,255,0.12); }
+.statline.past { opacity: 0.5; }
+.statline.live { color: #ff8a80; font-weight: 700; }
+
+.alert {
+  position: absolute; left: 50%; top: 40px; transform: translateX(-50%); z-index: 40;
+  display: flex; align-items: center; max-width: 1500px;
+  background: rgba(10, 13, 26, 0.96); border: 3px solid var(--red); border-radius: 22px; padding: 22px 34px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+}
+.alert > * + * { margin-left: 28px; }
+.alert-flag { background: var(--red); color: #fff; font-size: 26px; font-weight: 800; padding: 8px 16px; border-radius: 10px; white-space: nowrap; }
+.alert-title { font-size: 38px; font-weight: 800; }
+.alert-sub { font-size: 24px; color: #c9d1e8; margin-top: 4px; }
+
+.ambient { position: absolute; top: 0; right: 0; bottom: 0; left: 0; z-index: 35; background: #000; }
+.amb-box { position: absolute; left: 160px; top: 200px; transition: transform 2s ease; }
+.amb-clock { font-size: 220px; font-weight: 200; line-height: 1; letter-spacing: 4px; }
+.amb-date { font-size: 44px; color: #c9d1e8; margin-top: 10px; }
+.amb-weather { font-size: 40px; color: #c9d1e8; margin-top: 18px; }
+.amb-music { display: flex; align-items: center; margin-top: 60px; }
+.amb-music > * + * { margin-left: 28px; }
+.amb-art { width: 150px; height: 150px; border-radius: 12px; background: #222 center / cover no-repeat; }
+.amb-track { font-size: 42px; font-weight: 700; }
+.amb-artist { font-size: 30px; color: #c9d1e8; margin-top: 6px; }
+.amb-sport { font-size: 32px; color: #ffcf7a; margin-top: 40px; }

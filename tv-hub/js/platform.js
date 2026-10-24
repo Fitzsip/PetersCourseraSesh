@@ -242,26 +242,29 @@ var Platform = (function () {
     });
   }
 
-  // GET a URL as text. cb(err, text). On the TV, the app's config.xml allows these requests.
-  function getText(url, headers, cb) {
+  // HTTP request. cb(err, text, status). On the TV, config.xml allows these cross-site requests.
+  function request(method, url, headers, body, cb) {
     var xhr = new XMLHttpRequest();
     var done = false;
-    function finish(err, text) { if (!done) { done = true; cb(err, text); } }
+    function finish(err, text) { if (!done) { done = true; cb(err, text, xhr.status); } }
     try {
-      xhr.open('GET', url, true);
+      xhr.open(method, url, true);
       xhr.timeout = 12000;
       if (headers) for (var h in headers) xhr.setRequestHeader(h, headers[h]);
       xhr.onload = function () {
         if (xhr.status >= 200 && xhr.status < 300) finish(null, xhr.responseText);
-        else finish(new Error('HTTP ' + xhr.status));
+        else finish(new Error('HTTP ' + xhr.status), xhr.responseText);
       };
       xhr.onerror = function () { finish(new Error('Network error')); };
       xhr.ontimeout = function () { finish(new Error('Timed out')); };
-      xhr.send();
+      xhr.send(body == null ? null : body);
     } catch (e) {
       finish(e);
     }
   }
+
+  // GET a URL as text. cb(err, text).
+  function getText(url, headers, cb) { request('GET', url, headers, null, cb); }
 
   /*
    * Fix up app IDs by looking for each app by name on the TV. Apps whose ID isn't installed
@@ -303,6 +306,7 @@ var Platform = (function () {
     actionFor: actionFor,
     launchApp: launchApp,
     getText: getText,
+    request: request,
     resolveApps: resolveApps,
     getInstalledApps: getInstalledApps,
     getTvChannels: getTvChannels,

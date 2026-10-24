@@ -41,7 +41,7 @@
     var d = clone(TVHUB_DEFAULTS);
     return {
       version: d.version, apps: d.apps, channels: d.channels, online: d.online, shows: d.shows,
-      sportHidden: defaultSportHidden(), mySports: d.mySports, options: d.options, usage: {}, lastKey: null
+      sportHidden: defaultSportHidden(), mySports: d.mySports, options: d.options, usage: {}, lastKey: null, alerted: {}
     };
   }
 
@@ -58,6 +58,7 @@
     var d = TVHUB_DEFAULTS;
     var lists = { apps: d.apps, channels: [], online: d.online, shows: [], sportHidden: defaultSportHidden(), mySports: d.mySports };
     for (var key in lists) if (!Array.isArray(saved[key])) saved[key] = clone(lists[key]);
+    if (!saved.alerted || typeof saved.alerted !== 'object') saved.alerted = {};
     return saved;
   }
 
@@ -241,7 +242,7 @@
 
   var screens = {};
   var current = 'home';
-  var OVERLAYS = ['settings', 'picker', 'search'];
+  var OVERLAYS = ['settings', 'picker', 'search', 'pair', 'stats', 'backup'];
 
   function show(name) {
     var prev = current;
@@ -360,8 +361,11 @@
     Guide.skySchedule(SPORT.map(function (c) { return c.sid; }), 3, function (list) {
       sportEvents = buildEvents(list);
       paint('events');
+      checkAlerts();
       scheduleRebuild();
     });
+    pollMusic();
+    loadMusicLists();
     state.channels.forEach(function (ch) { paint('sat-' + chKey(ch)); });
   }
 
@@ -376,6 +380,7 @@
     renderOnNow();
     renderShows();
     renderApps();
+    renderMusic();
     renderChannels();
     renderSport();
     renderTools();
@@ -409,7 +414,9 @@
   var shownSignature = '';
   function signature() {
     var keys = function (list) { return list.map(function (e) { return e.key; }).join(); };
-    return state.online.join() + '|' + keys(liveEvents()) + '|' + keys((sportEvents || []).slice(0, 12));
+    return state.online.join() + '|' + keys(liveEvents()) + '|' + keys((sportEvents || []).slice(0, 12)) + '|' +
+      episodesToday().map(function (x) { return x.show.tvmazeId + (x.upcoming ? 'u' : ''); }).join() + '|' +
+      (Spotify.isPaired() ? 'S' + (music.lists ? music.lists.length : '-') : '');
   }
 
   function renderOnNow() {
@@ -428,6 +435,7 @@
       };
       row.appendChild(more);
     }
+    episodesToday().forEach(function (x) { row.appendChild(episodeTile(x)); });
     var li = lastIndex();
     if (li !== -1) row.appendChild(satelliteTile(state.channels[li], 'onnow-sat', true));
     var empty = !row.firstChild;
@@ -615,6 +623,12 @@
       s.appendChild(document.createTextNode(app.name));
       hk.appendChild(s);
     });
+    if (state.options.spotifyKey && Spotify.isPaired()) {
+      var sp = el('span');
+      sp.appendChild(el('i', 'dot ' + state.options.spotifyKey));
+      sp.appendChild(document.createTextNode('Play / pause'));
+      hk.appendChild(sp);
+    }
     if (state.channels.length) hk.appendChild(el('span', null, '0–9  channel number'));
   }
 
@@ -663,6 +677,7 @@
     row.innerHTML = '';
     (sportEvents || []).slice(0, 12).forEach(function (e) { row.appendChild(eventTile(e, 'sport-')); });
     visibleSport().forEach(function (c) { row.appendChild(sportTile(c, 'sport-' + c.key)); });
+    statsTiles(row);
     var names = SPORTS.filter(function (sp) { return state.mySports.indexOf(sp.key) !== -1; }).map(function (sp) { return sp.name; });
     $('sport-note').textContent = names.length ? names.join(' · ') + ' — live and coming up on Sky Sports' : 'choose your sports in Settings';
     var empty = !row.firstChild;
@@ -1200,6 +1215,7 @@
         var next = HOTKEYS[(HOTKEYS.indexOf(app.hotkey) + 1)] || null; // cycles red→green→yellow→blue→none
         var had = next && appForHotkey(next);
         if (next) state.apps.forEach(function (o) { if (o.hotkey === next) o.hotkey = null; });
+        if (next && state.options.spotifyKey === next) state.options.spotifyKey = null;
         app.hotkey = next;
         if (had && had !== app) toast('The ' + next + ' button now opens ' + app.name + ' instead of ' + had.name);
         changed();
@@ -1293,6 +1309,45 @@
       }, hidden ? '' : 'on'));
       body.appendChild(row);
     });
+
+    section(body, 'Spotify');
+    var spRow = el('div', 'srow nav-row');
+    spRow.appendChild(el('div', 'label', Spotify.isPaired() ? 'Connected' : 'Not connected'));
+    spRow.appendChild(chip(Spotify.isPaired() ? 'Reconnect' : 'Connect Spotify', function () { show('pair'); }));
+    spRow.appendChild(chip('Play/pause button: ' + (state.options.spotifyKey || 'none'), function () {
+      var next = HOTKEYS[(HOTKEYS.indexOf(state.options.spotifyKey) + 1)] || null;
+      var had = next && appForHotkey(next);
+      if (had) had.hotkey = null;
+      state.options.spotifyKey = next;
+      if (had) toast('The ' + next + ' button now plays/pauses Spotify instead of opening ' + had.name);
+      changed();
+    }));
+    if (Spotify.isPaired()) spRow.appendChild(confirmChip('Disconnect', function () { Spotify.unpair(); music.state = null; music.lists = null; changed(); }));
+    body.appendChild(spRow);
+
+    section(body, 'Alerts, weather and screensaver');
+    var alRow = el('div', 'srow nav-row');
+    alRow.appendChild(el('div', 'label', 'Sport alerts'));
+    alRow.appendChild(chip('When it goes live: ' + (state.options.alertLive ? 'On' : 'Off'),
+      function () { state.options.alertLive = !state.options.alertLive; changed(); }, state.options.alertLive ? 'on' : ''));
+    alRow.appendChild(chip('10 minutes before: ' + (state.options.alertSoon ? 'On' : 'Off'),
+      function () { state.options.alertSoon = !state.options.alertSoon; changed(); }, state.options.alertSoon ? 'on' : ''));
+    body.appendChild(alRow);
+    var wxRow = el('div', 'srow nav-row');
+    wxRow.appendChild(el('div', 'label', 'Weather and screensaver'));
+    wxRow.appendChild(chip('Weather for: ' + state.options.town, openTownPicker));
+    wxRow.appendChild(chip('Screensaver: ' + (state.options.ambientMins ? 'after ' + state.options.ambientMins + ' min' : 'Off'), function () {
+      var steps = [0, 5, 10, 20, 30];
+      state.options.ambientMins = steps[(steps.indexOf(state.options.ambientMins) + 1) % steps.length];
+      changed();
+    }));
+    body.appendChild(wxRow);
+
+    section(body, 'Backup');
+    var bkRow = el('div', 'srow nav-row');
+    bkRow.appendChild(el('div', 'label', 'Keep your setup safe, or move it to another TV'));
+    bkRow.appendChild(chip('Back up or restore', function () { show('backup'); }));
+    body.appendChild(bkRow);
 
     section(body, 'Options');
     var opts = el('div', 'srow nav-row');
@@ -1492,6 +1547,602 @@
       });
   }
 
+  // ---------------------------------------------------------------- Spotify
+
+  var music = { state: null, err: null, at: 0, stateAt: 0, lists: null, listsAt: 0, devices: [] };
+
+  function pollMusic(force) {
+    if (!Spotify.isPaired()) return;
+    if (!force && Date.now() - music.at < 4000) return;
+    music.at = Date.now();
+    Spotify.playback(function (err, st) {
+      music.err = err;
+      music.state = st;
+      music.stateAt = Date.now();
+      paint('music');
+      if (ambientOn) drawAmbient();
+    });
+  }
+
+  // Playlists and recently played, refreshed every 15 minutes.
+  function loadMusicLists() {
+    if (!Spotify.isPaired() || Date.now() - music.listsAt < 15 * MINUTE) return;
+    music.listsAt = Date.now();
+    var out = [], left = 2;
+    function done() {
+      if (--left) return;
+      music.lists = out;
+      scheduleRebuild();
+    }
+    Spotify.playlists(function (err, items) {
+      items.forEach(function (p) {
+        out.push({ key: 'pl-' + p.id, name: p.name, sub: 'Playlist', uri: p.uri, image: p.images && p.images[0] && p.images[0].url });
+      });
+      done();
+    });
+    Spotify.recent(function (err, items) {
+      var seen = {};
+      items.forEach(function (it) {
+        var t = it.track || {};
+        var uri = it.context && it.context.uri || t.uri;
+        if (!uri || seen[uri]) return;
+        seen[uri] = true;
+        var type = it.context ? it.context.type : 'track';
+        out.push({ key: 'rp-' + hash(uri), name: type === 'track' ? t.name : (type === 'album' && t.album ? t.album.name : t.name),
+          sub: 'Recently played · ' + ((t.artists || []).map(function (a) { return a.name; }).join(', ')),
+          uri: uri, image: t.album && t.album.images && t.album.images[0] && t.album.images[0].url });
+      });
+      done();
+    });
+  }
+
+  function nowItem() { return music.state && music.state.item; }
+  function isPlaying() { return !!(music.state && music.state.is_playing); }
+  function musicProgress() {
+    var st = music.state, item = nowItem();
+    if (!st || !item || !item.duration_ms) return 0;
+    var ms = st.progress_ms + (st.is_playing ? Date.now() - music.stateAt : 0);
+    return Math.max(0, Math.min(1, ms / item.duration_ms));
+  }
+  function artistOf(item) {
+    if (!item) return '';
+    return item.artists ? item.artists.map(function (a) { return a.name; }).join(', ') : (item.show && item.show.name) || '';
+  }
+  function artOf(item) {
+    var imgs = item && ((item.album && item.album.images) || item.images);
+    return imgs && imgs[0] && imgs[0].url;
+  }
+
+  // Run a Spotify command, then re-read what's playing.
+  function musicDo(fn, okMsg) {
+    fn(function (err) {
+      if (err) toast(err); else if (okMsg) toast(okMsg);
+      setTimeout(function () { pollMusic(true); }, 700);
+    });
+  }
+
+  // Where to play when nothing is active: this TV if Spotify is open on it, else the first device.
+  function withTarget(cb) {
+    if (music.state && music.state.device) return cb(null);
+    Spotify.devices(function (err, list) {
+      music.devices = list;
+      if (!list.length) {
+        toast('No Spotify devices found — open Spotify on your phone or this TV, then try again');
+        return;
+      }
+      var tv = list.filter(function (d) { return d.type === 'TV' || /tv|samsung/i.test(d.name); })[0];
+      cb((tv || list[0]).id);
+    });
+  }
+
+  function togglePlay() {
+    if (!Spotify.isPaired()) return show('pair');
+    if (isPlaying()) return musicDo(Spotify.pause, 'Paused');
+    withTarget(function (id) { musicDo(function (cb) { Spotify.play(id, cb); }, 'Playing'); });
+  }
+
+  function changeVolume(delta) {
+    var d = music.state && music.state.device;
+    if (!d) return toast('Nothing is playing');
+    if (d.volume_percent == null) return toast(d.name + ' doesn’t let Spotify change its volume');
+    musicDo(function (cb) { Spotify.volume(d.volume_percent + delta, cb); }, 'Volume ' + Math.max(0, Math.min(100, d.volume_percent + delta)) + '%');
+  }
+
+  function openDevicePicker() {
+    Spotify.devices(function (err, list) {
+      if (err) return toast(err);
+      openPicker({
+        title: 'Play Spotify on…', hint: 'OK to switch · BACK to go back', back: 'home',
+        empty: 'No devices found. Open Spotify on your phone, speaker or this TV, then try again.',
+        items: function () {
+          var items = list.map(function (d) {
+            return { label: d.name + '   ·   ' + d.type + (d.is_active ? '   (playing)' : ''), chip: d.is_active ? '✓ Current' : 'Play here', on: d.is_active,
+              select: function () { musicDo(function (cb) { Spotify.transfer(d.id, true, cb); }, 'Playing on ' + d.name); show('home'); return true; } };
+          });
+          var sp = appById('spotify');
+          if (sp && sp.appId) items.push({ label: 'Open the Spotify app on this TV (leaves TV Hub)', chip: 'Open', select: function () { show('home'); openApp(sp); return true; } });
+          return items;
+        }
+      });
+    });
+  }
+
+  function renderMusic() {
+    var row = $('row-music');
+    row.innerHTML = '';
+    if (!Spotify.isPaired()) {
+      var c = tile('add', 'music-connect');
+      c.appendChild(el('div', 'name', 'Connect Spotify'));
+      c.onselect = function () { show('pair'); };
+      c.onfocusitem = function () {
+        hero({ eyebrow: 'Spotify', title: 'Control Spotify from TV Hub',
+          line1: 'See what’s playing, skip, change volume and play your playlists, on the TV, your phone or the Echo.',
+          line2: 'One-time setup with your phone (Spotify Premium needed).', hint: 'Press OK to set up', art: { color: '#1db954', label: 'Spotify' } });
+      };
+      row.appendChild(c);
+      $('music-note').textContent = '';
+      return;
+    }
+    // Now playing
+    var t = tile('pic wide', 'music-now');
+    t.style.backgroundColor = '#14532d';
+    var src = el('div', 'src', 'Spotify');
+    src.style.background = '#1db954';
+    src.style.color = '#000';
+    t.appendChild(src);
+    var flag = el('div', 'flag soon', '');
+    t.appendChild(flag);
+    var name = el('div', 'name small', 'Nothing playing');
+    var sub = el('div', 'sub', 'OK to play');
+    var bar = el('div', 'bar');
+    bar.appendChild(el('i'));
+    t.appendChild(name);
+    t.appendChild(sub);
+    t.appendChild(bar);
+    function draw() {
+      var item = nowItem();
+      name.textContent = item ? item.name : 'Nothing playing';
+      sub.textContent = item ? artistOf(item) : (music.err || 'OK to play');
+      flag.textContent = isPlaying() ? 'PLAYING' : (item ? 'PAUSED' : '');
+      flag.classList.toggle('hidden', !item);
+      bar.firstChild.style.width = Math.round(musicProgress() * 100) + '%';
+      setImage(t, artOf(item));
+      var dev = music.state && music.state.device;
+      $('music-note').textContent = dev ? 'on ' + dev.name + (dev.volume_percent != null ? ' · volume ' + dev.volume_percent + '%' : '') : '';
+      if (t.classList.contains('focused')) t.onfocusitem();
+    }
+    onPaint('music', draw);
+    t.onselect = togglePlay;
+    t.onfocusitem = function () {
+      var item = nowItem();
+      hero({ eyebrow: 'Spotify' + (music.state && music.state.device ? ' · ' + music.state.device.name : ''),
+        title: item ? item.name : 'Nothing playing', line1: artistOf(item),
+        progress: item ? musicProgress() : null, line2: item && item.album ? item.album.name : (music.err || ''),
+        hint: isPlaying() ? 'OK pauses · use the buttons to the right to skip or change volume' : 'OK plays',
+        art: { image: artOf(item), color: '#1db954', label: 'Spotify' } });
+    };
+    draw();
+    row.appendChild(t);
+
+    // Controls
+    [['music-prev', '◀◀', 'Previous', function () { musicDo(Spotify.previous); }],
+      ['music-play', '▶ II', 'Play / pause', togglePlay],
+      ['music-next', '▶▶', 'Next', function () { musicDo(Spotify.next); }],
+      ['music-voldn', 'Vol −', 'Volume down', function () { changeVolume(-10); }],
+      ['music-volup', 'Vol +', 'Volume up', function () { changeVolume(10); }],
+      ['music-device', 'Play on…', 'Choose where Spotify plays', openDevicePicker]].forEach(function (b) {
+      var ct = tile('ctl', b[0]);
+      ct.appendChild(el('div', 'name', b[1]));
+      ct.onselect = b[3];
+      ct.onfocusitem = function () {
+        var item = nowItem();
+        hero({ eyebrow: 'Spotify', title: b[2], line1: item ? 'Now: ' + item.name + ' · ' + artistOf(item) : 'Nothing playing',
+          progress: item ? musicProgress() : null, hint: 'Press OK', art: { image: artOf(item), color: '#1db954', label: 'Spotify' } });
+      };
+      row.appendChild(ct);
+    });
+
+    // Playlists and recently played
+    (music.lists || []).slice(0, 20).forEach(function (p) {
+      var pt = tile('pic', 'music-' + p.key);
+      pt.style.backgroundColor = '#1f2937';
+      setImage(pt, p.image);
+      pt.appendChild(el('div', 'name small', p.name));
+      pt.appendChild(el('div', 'sub', p.sub));
+      pt.onselect = function () { withTarget(function (id) { musicDo(function (cb) { Spotify.playContext(p.uri, id, cb); }, 'Playing ' + p.name); }); };
+      pt.onfocusitem = function () {
+        hero({ eyebrow: 'Spotify · ' + p.sub, title: p.name, hint: 'OK plays it', art: { image: p.image, color: '#1db954', label: p.name } });
+      };
+      row.appendChild(pt);
+    });
+  }
+
+  // ---------------------------------------------------------------- Spotify pairing screen
+
+  var pairNav = new Nav($('pair'), 'first');
+
+  function renderPair() {
+    var body = $('pair-body');
+    body.innerHTML = '';
+    var step1 = el('div', 'step');
+    step1.appendChild(el('div', 'step-title', '1. Create a Spotify app (once, on your phone)'));
+    step1.appendChild(el('div', 'step-text', 'Go to developer.spotify.com/dashboard → Create app. Any name and description. Redirect URI: ' +
+      Spotify.REDIRECT + ' (press Add). Tick “Web API”, agree and Save. Then open the app’s Settings and copy its Client ID.'));
+    body.appendChild(step1);
+    var r1 = el('div', 'srow nav-row');
+    var cid = el('input', 'field wide focusable');
+    cid.type = 'text';
+    cid.placeholder = 'Paste the Client ID here';
+    cid.value = Spotify.clientId();
+    cid.onselect = function () { cid.focus(); };
+    r1.appendChild(cid);
+    r1.appendChild(chip('Save', function () {
+      if (!Spotify.setClientId(cid.value)) return toast('A Client ID is 32 letters and numbers — check it was pasted in full');
+      toast('Saved — now scan the QR code');
+      renderPair();
+      pairNav.focus(1, 0);
+    }));
+    body.appendChild(r1);
+    body.appendChild(el('div', 'step-text tip', 'Tip: to paste from your phone, open Apps2Samsung → Remote and use its keyboard, which types straight into the TV.'));
+
+    if (Spotify.clientId().length === 32) {
+      var step2 = el('div', 'step');
+      step2.appendChild(el('div', 'step-title', '2. Sign in on your phone'));
+      var wrap = el('div', 'qr-wrap');
+      var img = el('img', 'qr');
+      img.src = qrDataUrl(Spotify.authUrl(), 360);
+      wrap.appendChild(img);
+      wrap.appendChild(el('div', 'step-text', 'Scan with your phone’s camera and approve. Your phone then opens a page that won’t load, with an address starting 127.0.0.1 — that’s expected. Copy that whole address and paste it below.'));
+      step2.appendChild(wrap);
+      body.appendChild(step2);
+      var r2 = el('div', 'srow nav-row');
+      var code = el('input', 'field wide focusable');
+      code.type = 'text';
+      code.placeholder = 'Paste the 127.0.0.1 address here';
+      code.onselect = function () { code.focus(); };
+      r2.appendChild(code);
+      r2.appendChild(chip('Connect', function () {
+        toast('Connecting…');
+        Spotify.finishPairing(code.value, function (err) {
+          if (err) return toast(err, 6000);
+          toast('Spotify connected');
+          music.listsAt = 0;
+          show('home');
+          homeNav.focusKey('music-now');
+        });
+      }));
+      body.appendChild(r2);
+      var r3 = el('div', 'srow nav-row');
+      r3.appendChild(chip('New QR code', function () { renderPair(); pairNav.focus(2, 0); }));
+      body.appendChild(r3);
+    }
+  }
+
+  screens.pair = {
+    enter: function () { Platform.hideTvWindow(); renderPair(); pairNav.focus(0, 0); },
+    key: inputScreenKeys(pairNav, function () { show('home'); })
+  };
+
+  // Key handling for overlay screens with text boxes: arrows leave the box, BACK closes.
+  function inputScreenKeys(nav, back) {
+    return function (a) {
+      var active = document.activeElement;
+      if (active && active.tagName === 'INPUT') {
+        if (a === 'ENTER' || a === 'UP' || a === 'DOWN' || a === 'BACK') { active.blur(); if (a === 'ENTER' || a === 'BACK') return; }
+        else return;
+      }
+      if (a === 'BACK') return back();
+      if (a === 'ENTER') return nav.select();
+      nav.move(a);
+    };
+  }
+
+  function qrDataUrl(text, px) {
+    qrcode.stringToBytes = qrcode.stringToBytesFuncs['UTF-8'];
+    var qr = qrcode(0, 'L');
+    qr.addData(text, 'Byte');
+    qr.make();
+    var cell = Math.max(2, Math.floor(px / (qr.getModuleCount() + 8)));
+    return qr.createDataURL(cell, cell * 4);
+  }
+
+  // ---------------------------------------------------------------- sport stats screens
+
+  var statsNav = new Nav($('stats'), 'first');
+
+  function statLine(body, text, cls) {
+    var row = el('div', 'srow nav-row');
+    row.appendChild(el('div', 'label statline focusable' + (cls ? ' ' + cls : ''), text));
+    body.appendChild(row);
+  }
+
+  function openStats(kind) {
+    var titles = { f1: 'Formula 1', pl: 'Premier League table', nfl: 'NFL this week' };
+    $('stats-title').textContent = titles[kind];
+    var body = $('stats-body');
+    body.innerHTML = '';
+    body.appendChild(el('div', 'label', 'Loading…'));
+    show('stats');
+    function fail() { body.innerHTML = ''; statLine(body, 'Couldn’t load this right now — try again later'); statsNav.focus(0, 0); }
+    if (kind === 'f1') Extras.f1(function (d) {
+      if (!d) return fail();
+      body.innerHTML = '';
+      if (d.race) {
+        body.appendChild(el('div', 'section-title', 'Next: ' + d.race.name + (d.race.circuit ? ' · ' + d.race.circuit : '')));
+        var now = Date.now();
+        d.race.sessions.forEach(function (s) {
+          statLine(body, s.name + '   ·   ' + Guide.when(s.start) + (s.start < now ? '   (started)' : ''), s.start < now ? 'past' : '');
+        });
+      }
+      if (d.drivers) {
+        body.appendChild(el('div', 'section-title', 'Drivers’ championship'));
+        d.drivers.forEach(function (x) { statLine(body, x.pos + '.   ' + x.name + '   ·   ' + x.team + '   ·   ' + x.points + ' pts'); });
+      }
+      if (d.teams) {
+        body.appendChild(el('div', 'section-title', 'Constructors’ championship'));
+        d.teams.forEach(function (x) { statLine(body, x.pos + '.   ' + x.name + '   ·   ' + x.points + ' pts'); });
+      }
+      statsNav.focus(0, 0);
+    });
+    if (kind === 'pl') Extras.premierLeague(function (rows) {
+      if (!rows) return fail();
+      body.innerHTML = '';
+      body.appendChild(el('div', 'section-title', 'Pos · Team · Played · W-D-L · Goal difference · Points'));
+      rows.forEach(function (r) {
+        statLine(body, r.pos + '.   ' + r.team + '   ·   P' + r.played + '   ·   ' + r.won + '-' + r.drawn + '-' + r.lost +
+          '   ·   GD ' + (r.gd > 0 ? '+' : '') + r.gd + '   ·   ' + r.points + ' pts');
+      });
+      statsNav.focus(0, 0);
+    });
+    if (kind === 'nfl') Extras.nfl(function (games) {
+      if (!games) return fail();
+      body.innerHTML = '';
+      if (!games.length) statLine(body, 'No games this week');
+      games.forEach(function (g) {
+        var text = g.state === 'pre'
+          ? g.away.name + ' at ' + g.home.name + '   ·   ' + Guide.when(g.start)
+          : g.away.name + ' ' + g.away.score + ' – ' + g.home.score + ' ' + g.home.name + '   ·   ' + (g.state === 'in' ? 'LIVE ' : '') + g.detail;
+        statLine(body, text, g.state === 'in' ? 'live' : '');
+      });
+      statsNav.focus(0, 0);
+    });
+  }
+
+  screens.stats = {
+    enter: function () { Platform.hideTvWindow(); },
+    key: function (a) {
+      if (a === 'BACK' || a === 'ENTER') return show('home');
+      statsNav.move(a);
+    }
+  };
+
+  function statsTiles(row) {
+    [['f1', 'F1 standings & race times'], ['pl', 'Premier League table'], ['nfl', 'NFL scores']].forEach(function (s) {
+      if (state.mySports.indexOf(s[0]) === -1) return;
+      var t = tile('add stat', 'stats-' + s[0]);
+      t.appendChild(el('div', 'name', s[1]));
+      t.onselect = function () { openStats(s[0]); };
+      t.onfocusitem = function () {
+        hero({ eyebrow: 'My sport', title: s[1], line1: s[0] === 'f1' ? 'Championship standings and this weekend’s session times.'
+          : s[0] === 'pl' ? 'The current table.' : 'This week’s games, with scores and kick-off times.',
+          hint: 'Press OK to open', art: { color: SKY_COLOUR, label: s[1] } });
+      };
+      row.appendChild(t);
+    });
+  }
+
+  // ---------------------------------------------------------------- "it's starting" alerts
+
+  var alertShown = null, alertTimer = null;
+
+  function checkAlerts() {
+    // One at a time: the next one shows after this is dismissed or times out.
+    if (!sportEvents || alertShown) return;
+    var now = Date.now(), seen = state.alerted;
+    for (var k in seen) if (now - seen[k] > 3 * 24 * HOUR) delete seen[k];
+    for (var i = 0; i < sportEvents.length; i++) {
+      var e = sportEvents[i];
+      var startsIn = e.start - now;
+      if (state.options.alertLive && startsIn <= 0 && -startsIn < 15 * MINUTE && now < e.stop && !seen[e.key + ':live']) return showAlert(e, 'live');
+      if (state.options.alertSoon && startsIn > 0 && startsIn <= 10 * MINUTE && !seen[e.key + ':soon']) return showAlert(e, 'soon');
+    }
+  }
+
+  function showAlert(e, kind) {
+    state.alerted[e.key + ':' + kind] = Date.now();
+    if (kind === 'live') state.alerted[e.key + ':soon'] = Date.now();
+    save();
+    if (ambientOn) exitAmbient();
+    alertShown = e;
+    $('alert-flag').textContent = kind === 'live' ? 'LIVE NOW' : 'IN ' + Math.max(1, Math.round((e.start - Date.now()) / MINUTE)) + ' MIN';
+    $('alert-title').textContent = e.title;
+    $('alert-sub').textContent = e.sport.name + ' · ' + e.channels.map(function (c) { return c.name; }).join(' and ') + '   ·   OK: watch on NOW   ·   BACK: dismiss';
+    $('alert').classList.remove('hidden');
+    clearTimeout(alertTimer);
+    alertTimer = setTimeout(hideAlert, 45000);
+  }
+
+  function hideAlert() {
+    clearTimeout(alertTimer);
+    alertShown = null;
+    $('alert').classList.add('hidden');
+    setTimeout(checkAlerts, 2000); // anything that came up meanwhile
+  }
+
+  // ---------------------------------------------------------------- new-episode reminders
+
+  function sameDay(a, b) { return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate(); }
+
+  // Shows with an episode out today (already, or later tonight).
+  function episodesToday() {
+    var now = new Date();
+    return state.shows.map(function (s) {
+      var info = s.info || {};
+      var next = info.next && info.next.airstamp && new Date(info.next.airstamp);
+      var prev = info.prev && info.prev.airstamp && new Date(info.prev.airstamp);
+      if (next && sameDay(next, now)) return { show: s, ep: info.next, at: next, upcoming: next > now };
+      if (prev && sameDay(prev, now)) return { show: s, ep: info.prev, at: prev, upcoming: false };
+      return null;
+    }).filter(Boolean);
+  }
+
+  function episodeTile(x) {
+    var s = x.show, app = appById(s.app) || {};
+    var t = tile('pic wide', 'onnow-ep-' + s.tvmazeId);
+    t.style.backgroundColor = app.color || '#232b45';
+    setImage(t, s.info && (s.info.art || s.info.poster));
+    var src = el('div', 'src', app.name || 'Show');
+    src.style.background = app.color || '#555';
+    t.appendChild(src);
+    t.appendChild(el('div', 'flag new', x.upcoming ? 'NEW TONIGHT ' + Guide.clock(x.at) : 'NEW TODAY'));
+    t.appendChild(el('div', 'name small', s.name));
+    t.appendChild(el('div', 'sub', Shows.epLabel(x.ep) + (x.ep.name ? ' · ' + x.ep.name : '')));
+    t.onselect = function () { openShow(s); };
+    t.onfocusitem = function () { heroShow(s); };
+    return t;
+  }
+
+  // ---------------------------------------------------------------- settings backup
+
+  var backupNav = new Nav($('backup'), 'first');
+
+  function backupText() {
+    return 'TVHUB1' + JSON.stringify({
+      apps: state.apps.map(function (a) { return [a.id, a.name, a.appId, a.hidden ? 1 : 0, a.hotkey || '', a.color, a.text]; }),
+      ch: state.channels.map(function (c) { return [c.major, c.minor || 0, c.name]; }),
+      on: state.online, sh: state.shows.map(function (s) { return [s.tvmazeId, s.name, s.app]; }),
+      sp: state.sportHidden, ms: state.mySports, o: state.options, last: state.lastKey, sc: Spotify.clientId()
+    });
+  }
+
+  function restore(text) {
+    var m = /TVHUB1(\{[\s\S]*\})/.exec(String(text || '').trim());
+    var d = null;
+    try { d = m && JSON.parse(m[1]); } catch (e) { d = null; }
+    if (!d || !Array.isArray(d.apps)) return 'That isn’t a TV Hub backup — it should start with TVHUB1';
+    var known = {};
+    TVHUB_DEFAULTS.apps.forEach(function (a) { known[a.id] = a; });
+    state.apps = d.apps.map(function (a) {
+      var base = known[a[0]] ? clone(known[a[0]]) : { id: a[0] };
+      base.name = a[1]; base.appId = a[2]; base.hidden = !!a[3]; base.hotkey = a[4] || null;
+      base.color = a[5] || base.color; base.text = a[6] || base.text;
+      return base;
+    });
+    state.channels = (d.ch || []).map(function (c) { return { major: c[0], minor: c[1], name: c[2] }; });
+    state.online = d.on || state.online;
+    state.shows = (d.sh || []).map(function (s) { return { tvmazeId: s[0], name: s[1], app: s[2] }; });
+    state.sportHidden = d.sp || state.sportHidden;
+    state.mySports = d.ms || state.mySports;
+    for (var k in d.o) state.options[k] = d.o[k];
+    state.lastKey = d.last || null;
+    if (d.sc) Spotify.setClientId(d.sc);
+    save();
+    return null;
+  }
+
+  function renderBackup() {
+    var body = $('backup-body');
+    body.innerHTML = '';
+    var text = backupText();
+    var wrap = el('div', 'qr-wrap');
+    var img = el('img', 'qr');
+    try { img.src = qrDataUrl(text, 480); } catch (e) { img = el('div', 'label', 'Too much to fit in a QR code — remove a few shows and try again.'); }
+    wrap.appendChild(img);
+    wrap.appendChild(el('div', 'step-text', 'Back up: scan this with your phone’s camera and save the text it shows (email it to yourself or keep it in Google Drive). ' +
+      'It holds your apps, colour buttons, channels, shows, sports and options — not your Spotify sign-in.'));
+    body.appendChild(wrap);
+    body.appendChild(el('div', 'step-title', 'Restore'));
+    body.appendChild(el('div', 'step-text', 'Paste a saved backup here (Apps2Samsung → Remote can type it into the TV), then press Restore twice.'));
+    var row = el('div', 'srow nav-row');
+    var input = el('input', 'field wide focusable');
+    input.type = 'text';
+    input.placeholder = 'Paste the TVHUB1… text here';
+    input.onselect = function () { input.focus(); };
+    row.appendChild(input);
+    row.appendChild(confirmChip('Restore', function () {
+      var err = restore(input.value);
+      if (err) return toast(err, 6000);
+      toast('Settings restored');
+      show('home');
+    }));
+    body.appendChild(row);
+  }
+
+  screens.backup = {
+    enter: function () { Platform.hideTvWindow(); renderBackup(); backupNav.focus(0, 0); },
+    key: inputScreenKeys(backupNav, function () { show('settings'); })
+  };
+
+  // ---------------------------------------------------------------- weather
+
+  var weatherNow = null;
+  function loadWeather() {
+    Extras.weather(state.options.town, function (w) {
+      weatherNow = w;
+      $('weather').textContent = w ? w.temp + '° ' + w.text + '   ·   Tomorrow ' + w.tomorrowMin + '–' + w.tomorrowMax + '° ' + w.tomorrowText : '';
+      if (ambientOn) drawAmbient();
+    });
+  }
+
+  function openTownPicker() {
+    openPicker({
+      title: 'Weather for…', hint: 'OK to choose · BACK to go back',
+      items: function () {
+        return TVHUB_DEFAULTS.towns.map(function (t) {
+          var on = t[0] === state.options.town;
+          return { label: t[0], chip: on ? '✓ Chosen' : 'Choose', on: on,
+            select: function () { state.options.town = t[0]; save(); loadWeather(); show('settings'); return true; } };
+        });
+      }
+    });
+  }
+
+  // ---------------------------------------------------------------- ambient screensaver
+
+  var ambientOn = false;
+
+  function enterAmbient() {
+    ambientOn = true;
+    Platform.hideTvWindow();
+    $('ambient').classList.remove('hidden');
+    drawAmbient();
+    pollMusic(true);
+  }
+
+  function exitAmbient() {
+    ambientOn = false;
+    $('ambient').classList.add('hidden');
+    if (current === 'home') showPreview();
+  }
+
+  function drawAmbient() {
+    var now = new Date();
+    $('amb-clock').textContent = Guide.clock(now);
+    $('amb-date').textContent = $('date').textContent;
+    $('amb-weather').textContent = weatherNow ? weatherNow.temp + '° ' + weatherNow.text + '  ·  today ' + weatherNow.todayMin + '–' + weatherNow.todayMax + '°' : '';
+    var item = nowItem();
+    $('amb-music').classList.toggle('hidden', !item);
+    if (item) {
+      setImage($('amb-art'), artOf(item));
+      $('amb-track').textContent = item.name;
+      $('amb-artist').textContent = artistOf(item) + (isPlaying() ? '' : '  (paused)');
+    }
+    var live = liveEvents()[0];
+    var next = (sportEvents || []).filter(function (e) { return e.start > Date.now(); })[0];
+    $('amb-sport').textContent = live ? 'LIVE  ' + live.title + ' · ' + live.channels[0].name
+      : next ? 'Next: ' + next.title + ' · ' + Guide.when(next.start) : '';
+    // Drift slightly so nothing sits in the same place for hours.
+    var box = $('amb-box');
+    box.style.transform = 'translate(' + (now.getMinutes() % 7) * 12 + 'px,' + (now.getMinutes() % 5) * 14 + 'px)';
+  }
+
+  function checkAmbient() {
+    var mins = state.options.ambientMins;
+    if (ambientOn) return drawAmbient();
+    if (!mins || current !== 'home' || document.hidden || alertShown || launchTimer) return;
+    if (Date.now() - lastKeyAt > mins * MINUTE) enterAmbient();
+  }
+
   // ---------------------------------------------------------------- global bits
 
   var toastTimer = null;
@@ -1515,7 +2166,10 @@
   // Every minute: progress bars move on and finished programmes give way to the next.
   // Every hour: rebuild the screen so show alerts and orderings stay current on a TV left on for days.
   var lastFullRender = Date.now();
+  var weatherAt = Date.now();
   function tick() {
+    checkAlerts();
+    if (Date.now() - weatherAt > 30 * MINUTE) { weatherAt = Date.now(); loadWeather(); }
     if (current !== 'home' || document.hidden) return;
     if (Date.now() - lastFullRender > HOUR && Date.now() - lastKeyAt > 10000) { lastFullRender = Date.now(); renderHome(); }
     else refreshData();
@@ -1532,6 +2186,19 @@
     var a = Platform.actionFor(e);
     if (!a) return;
     lastKeyAt = Date.now();
+    // The screensaver: any button just wakes it.
+    if (ambientOn) { e.preventDefault(); exitAmbient(); return; }
+    // A sport alert is showing: OK watches, BACK dismisses.
+    if (alertShown && (a === 'ENTER' || a === 'BACK')) {
+      e.preventDefault();
+      var ev = alertShown;
+      hideAlert();
+      if (a === 'ENTER') {
+        var nowApp = appById(TVHUB_DEFAULTS.sportApp);
+        if (nowApp) openApp(nowApp, 'Opening NOW — choose ' + ev.channels[0].name, 1500);
+      }
+      return;
+    }
     // While an app is about to open, OK does nothing more and any other button cancels.
     if (launchTimer) {
       e.preventDefault();
@@ -1549,6 +2216,7 @@
     if (current === 'home' || current === 'watch') {
       var colour = { RED: 'red', GREEN: 'green', YELLOW: 'yellow', BLUE: 'blue' }[a];
       if (colour) {
+        if (colour === state.options.spotifyKey && Spotify.isPaired()) return togglePlay();
         var app = appForHotkey(colour);
         if (app) openApp(app);
         return;
@@ -1562,7 +2230,7 @@
 
   // Coming back from Netflix etc.: refresh everything (keeping your place) and put the live preview back.
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden) { clearTimeout(previewTimer); cancelLaunch(); Platform.hideTvWindow(); tunedKey = null; }
+    if (document.hidden) { clearTimeout(previewTimer); cancelLaunch(); if (ambientOn) exitAmbient(); Platform.hideTvWindow(); tunedKey = null; }
     else if (current === 'home') { renderHome(); showPreview(); }
     else if (current === 'watch') screens.watch.enter();
   });
@@ -1574,6 +2242,7 @@
   if (!Platform.isTv) {
     document.body.classList.add('demo');
     $('demo-badge').classList.remove('hidden');
+    window.TVHubDebug = { backupText: backupText, restore: restore }; // for testing in a browser only
   }
   save(); // store any upgrade from an older version straight away
   Platform.registerKeys();
@@ -1583,6 +2252,12 @@
   setInterval(tick, MINUTE);
   renderHome();
   showPreview();
+  loadWeather();
+  lastKeyAt = Date.now();
+  setInterval(checkAmbient, 15000);
+  // Spotify: re-read what's playing every 5 s and move the progress bar every second.
+  setInterval(function () { if ((current === 'home' || ambientOn) && !document.hidden) pollMusic(); }, 5000);
+  setInterval(function () { if (isPlaying() && current === 'home' && !document.hidden) paint('music'); }, 1000);
   // Find NOW, RTÉ Player etc. on this TV by name if their IDs aren't known yet.
   Platform.resolveApps(state.apps, function (changedIds) {
     if (changedIds) { save(); renderHome(); }
