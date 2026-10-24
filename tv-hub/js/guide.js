@@ -5,6 +5,7 @@
  * Sources (the same public listings the open-source iptv-org/epg project uses):
  *   virgin    - virginmediatelevision.ie's own TV guide (all Virgin Media channels, one page per day)
  *   tvireland - tvireland.ie listings (one page per channel per day), used for RTÉ
+ *   entie     - entertainment.ie listings (one page per channel per day), a backup for RTÉ and Virgin Media
  *   sky       - Sky's EPG service (JSON, many channels per request), used for Sky Sports
  *
  * A programme is { title, start: Date, stop: Date, image, desc }.
@@ -111,6 +112,35 @@ var Guide = (function () {
           if (!start) continue;
           var title = a.textContent.trim();
           list.push({ title: /^close$/i.test(title) ? 'Off air' : title, start: start, image: null, desc: '' });
+        }
+        var out = {};
+        out[id] = chain(list);
+        return out;
+      }
+    },
+
+    entie: {
+      url: function (day, id) {
+        return 'https://entertainment.ie/tv/' + id + '/?date=' + pad(day.getDate()) + '-' + pad(day.getMonth() + 1) + '-' + day.getFullYear() + '&time=all-day';
+      },
+      parse: function (text, day, id) {
+        var doc = html(text);
+        var items = doc.querySelectorAll('.info-list > li');
+        var list = [];
+        for (var i = 0; i < items.length; i++) {
+          var btn = items[i].querySelector('a.btn-share');
+          var h3 = items[i].querySelector('h3');
+          if (!btn || !h3) continue;
+          // data-time is "Thu, 06:00" in UTC; data-duration is minutes.
+          var m = /(\d{1,2}):(\d{2})/.exec(btn.getAttribute('data-time') || '');
+          if (!m) continue;
+          var start = new Date(Date.UTC(day.getFullYear(), day.getMonth(), day.getDate(), +m[1], +m[2]));
+          var mins = parseInt(btn.getAttribute('data-duration'), 10) || 30;
+          list.push({
+            title: h3.textContent.replace(/\s+/g, ' ').trim(), start: start,
+            stop: new Date(start.getTime() + mins * 60000),
+            image: btn.getAttribute('data-img') || null, desc: btn.getAttribute('data-description') || ''
+          });
         }
         var out = {};
         out[id] = chain(list);
@@ -238,6 +268,19 @@ var Guide = (function () {
     });
   }
 
+  // The same, trying each listings source for a channel in turn ([[source, id], ...]) until one
+  // has something on now. If none do, the last answer is passed on.
+  function nowNextAny(feeds, cb) {
+    var i = 0;
+    (function next() {
+      var f = feeds[i++];
+      nowNext(f[0], f[1], function (nn) {
+        if (nn.now || i >= feeds.length) return cb(nn);
+        next();
+      });
+    })();
+  }
+
   // In a desktop browser the listing sites block requests, so show made-up programmes.
   var DEMO = {
     'one': ['Ireland AM', 'The Six O’Clock Show'], 'two': ['Coronation Street', 'Emmerdale'],
@@ -317,5 +360,5 @@ var Guide = (function () {
     return name + ' ' + clock(d);
   }
 
-  return { nowNext: nowNext, skySchedule: skySchedule, progress: progress, clock: clock, when: when, _sources: sources };
+  return { nowNext: nowNext, nowNextAny: nowNextAny, skySchedule: skySchedule, progress: progress, clock: clock, when: when, _sources: sources };
 })();

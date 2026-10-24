@@ -352,7 +352,7 @@
     state.online.forEach(function (k) {
       var def = PLAYER[k];
       if (!def) return;
-      Guide.nowNext(def.source, def.id, function (nn) { onlineNow[k] = nn; paint('online-' + k); });
+      Guide.nowNextAny(def.feeds, function (nn) { onlineNow[k] = nn; paint('online-' + k); });
     });
     visibleSport().forEach(function (c) {
       Guide.nowNext('sky', c.sid, function (nn) { sportNow[c.key] = nn; paint('sport-' + c.key); });

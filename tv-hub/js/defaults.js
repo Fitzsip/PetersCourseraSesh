@@ -29,16 +29,17 @@ var TVHUB_DEFAULTS = {
   // Keys from playerChannels below; add or remove them in Settings.
   online: ['rte-one', 'rte2', 'vm-one', 'vm-two'],
 
-  // Channels available inside the player apps, with where their TV guide comes from.
+  // Channels available inside the player apps. Each has listings sources in order of
+  // preference: if one fails or has nothing for right now, the next is tried.
   playerChannels: {
-    'rte-one':   { name: 'RTÉ One',            app: 'rte',    source: 'tvireland', id: '81/rte-one' },
-    'rte2':      { name: 'RTÉ2',               app: 'rte',    source: 'tvireland', id: '82/rte2' },
-    'rte-jr':    { name: 'RTÉjr',              app: 'rte',    source: 'tvireland', id: '1649/rte-jr' },
-    'rte-news':  { name: 'RTÉ News',           app: 'rte',    source: 'tvireland', id: '1650/rte-news' },
-    'vm-one':    { name: 'Virgin Media One',   app: 'virgin', source: 'virgin',    id: 'one' },
-    'vm-two':    { name: 'Virgin Media Two',   app: 'virgin', source: 'virgin',    id: 'two' },
-    'vm-three':  { name: 'Virgin Media Three', app: 'virgin', source: 'virgin',    id: 'three' },
-    'vm-more':   { name: 'Virgin Media More',  app: 'virgin', source: 'virgin',    id: 'vm_more' }
+    'rte-one':  { name: 'RTÉ One',            app: 'rte',    feeds: [['tvireland', '81/rte-one'], ['tvireland', '1856/rte-one-hd'], ['entie', 'rte-one']] },
+    'rte2':     { name: 'RTÉ2',               app: 'rte',    feeds: [['tvireland', '82/rte2'], ['tvireland', '1648/rte2-hd'], ['entie', 'rte2']] },
+    'rte-jr':   { name: 'RTÉjr',              app: 'rte',    feeds: [['tvireland', '1649/rte-jr'], ['entie', 'rte-jr']] },
+    'rte-news': { name: 'RTÉ News',           app: 'rte',    feeds: [['tvireland', '1650/rte-news']] },
+    'vm-one':   { name: 'Virgin Media One',   app: 'virgin', feeds: [['virgin', 'one'], ['entie', 'virgin-media-one']] },
+    'vm-two':   { name: 'Virgin Media Two',   app: 'virgin', feeds: [['virgin', 'two'], ['entie', 'virgin-media-two']] },
+    'vm-three': { name: 'Virgin Media Three', app: 'virgin', feeds: [['virgin', 'three'], ['entie', 'virgin-media-three']] },
+    'vm-more':  { name: 'Virgin Media More',  app: 'virgin', feeds: [['virgin', 'vm_more'], ['entie', 'virgin-media-more']] }
   },
 
   // Sport: Sky Sports channels (watched through NOW). "sid" is Sky's channel ID in its TV guide;

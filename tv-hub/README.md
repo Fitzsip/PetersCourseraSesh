@@ -107,6 +107,7 @@ You need a Windows, Mac or Linux computer on the same Wi-Fi or network as the TV
 - **Where the listings come from.** These are the same public TV-guide pages the open-source [iptv-org/epg](https://github.com/iptv-org/epg) project uses:
   - **Virgin Media:** virginmediatelevision.ie
   - **RTÉ:** tvireland.ie
+  - **Backup for RTÉ and Virgin Media:** entertainment.ie. If a channel's first source fails or has nothing for right now, TV Hub tries the next one.
   - **Sky Sports:** Sky's own TV-guide service (the Irish versions of the channels)
 
   None of them is an official API, so one could change without warning.
