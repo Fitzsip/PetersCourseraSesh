@@ -1,6 +1,6 @@
 # TV Hub
 
-One home screen for your Samsung TV. All your streaming apps and your free-to-air satellite channels sit side by side, so you switch between them with a click instead of digging through separate menus.
+One home screen for your Samsung TV. Your streaming apps, the shows you're following, your free-to-air satellite channels, RTÉ and Virgin Media channels, and live Sky Sports all sit together, so you switch between them with a click instead of digging through separate menus.
 
 It's an ordinary Samsung (Tizen) app that you install with Samsung's own **Developer Mode**. No jailbreak or firmware hacks, and nothing is changed on the TV.
 
@@ -8,10 +8,12 @@ It's an ordinary Samsung (Tizen) app that you install with Samsung's own **Devel
 
 | | |
 |---|---|
-| **Apps row** | Big tiles for Netflix, Disney+, Prime Video and YouTube. Add any app installed on the TV from a list, then hide or reorder tiles. |
+| **My shows** | The shows you're following, with posters and a **NEW EPISODE** flag when one came out in the last week, or the date of the next one. Press OK and it opens the right app. Shows with new episodes come first. |
+| **Apps row** | Big tiles for Netflix, Disney+, Prime Video, NOW, YouTube, RTÉ Player and Virgin Media Player. Add any app installed on the TV from a list, then hide or reorder tiles. |
 | **Most-used first** | Apps you open often move to the front automatically. You can turn this off. |
 | **Colour buttons** | Red, green, yellow and blue on the remote open an app straight away, from the home screen or while you watch TV. You choose which app goes on each button. |
-| **Live channels row** | Your satellite channels with *Now/Next* programme info. A tile tagged **LAST** marks the channel you watched most recently. |
+| **Live channels row** | Your satellite channels and **online channels** (RTÉ One, RTÉ2, Virgin Media One and Two, plus RTÉjr, RTÉ News, Virgin Media Three and More if you add them). Online channels show what's on now with a progress bar and what's next, and OK opens RTÉ Player or Virgin Media Player. A tile tagged **LAST** marks the satellite channel you watched most recently. |
+| **Sport row** | What's on right now on each Sky Sports channel, with a picture, the times and a progress bar. Live events are tagged **LIVE** and come first. OK opens NOW. |
 | **Live preview** | Highlight a channel and it plays in the preview window on the home screen. Press OK to watch it full screen. |
 | **Type a number** | Type `102` on the remote from anywhere in TV Hub and it jumps to that channel. `1` to `9` also open your 1st to 9th channels. |
 | **CH ▲▼** | Flicks through your channels while you watch. |
@@ -64,11 +66,23 @@ You need a Windows, Mac or Linux computer on the same Wi-Fi or network as the TV
 
 ## First-time setup (on the TV)
 
-1. Open **Settings → Import channels from TV** and tick the satellite channels you want. If the TV doesn't share its list, use **Add by number**.
-2. Check each app tile opens. If one doesn't, remove it and use **+ Add an installed app**. That list shows the exact app IDs on *your* TV.
-3. Choose which app goes on each colour button.
+1. Install **NOW**, **RTÉ Player** and **Virgin Media Player** from Samsung's app store if you haven't already. TV Hub finds them by name.
+2. Open **Settings → Import channels from TV** and tick the satellite channels you want. If the TV doesn't share its list, use **Add by number**.
+3. Check each app tile opens. If one doesn't, remove it and use **+ Add an installed app**. That list shows the exact app IDs on *your* TV.
+4. Choose which app goes on each colour button.
+5. Add your shows: highlight **+ Add a show**, type the name with the on-screen keyboard, pick the right result, then choose which app you watch it on. TV Hub suggests one.
 
 ## Good to know
+
+- **Streaming apps don't share what you're watching.** Netflix, Disney+, Prime and NOW keep viewing history private, so nothing outside those apps can read your "Continue watching" list. That's why you add shows to **My shows** yourself. TV Hub then keeps them up to date using TVmaze, a free TV database.
+- **Online channels and Sport open the app, not the exact channel.** Samsung gives apps no way to jump straight into a specific live channel inside another app. Pressing OK on *RTÉ One* opens RTÉ Player, and you pick RTÉ One under *Live*. The message on screen tells you which channel to choose.
+- **Where the listings come from.** These are the same public TV-guide pages the open-source [iptv-org/epg](https://github.com/iptv-org/epg) project uses:
+  - **Virgin Media:** virginmediatelevision.ie
+  - **RTÉ:** tvireland.ie
+  - **Sky Sports:** Sky's own TV-guide service (the Irish versions of the channels)
+
+  None of them is an official API, so one could change without warning. If that happens, the tile just shows the channel name and still opens the app.
+- **Sport listings show what Sky is broadcasting.** What you can actually watch depends on your NOW membership.
 
 - **Samsung's Home button still opens Samsung's own menu.** Only a jailbreak can replace that, so TV Hub works as your "first app" instead. Putting it in the first slot of the app bar makes it one press away.
 - **Live TV inside the app.** Older Samsungs normally allow apps to tune channels and show the picture (the `tv.channel` and `tv.window` permissions). If yours doesn't:
@@ -85,7 +99,9 @@ tv-hub/
   index.html       Screen layout
   css/style.css    Look and feel (designed for 1920×1080)
   js/defaults.js   Starting apps, channels and options
-  js/platform.js   Talks to the TV (launch apps, tune channels, remote keys)
-  js/app.js        Home screen, live TV, settings and navigation
+  js/platform.js   Talks to the TV (launch apps, tune channels, remote keys, web requests)
+  js/guide.js      Online TV guide for RTÉ, Virgin Media and Sky Sports
+  js/shows.js      "My shows" info from TVmaze
+  js/app.js        Home screen, live TV, sport, shows, settings and navigation
   build.sh         Package and install from the command line
 ```

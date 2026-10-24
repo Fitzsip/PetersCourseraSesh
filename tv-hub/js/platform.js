@@ -40,7 +40,8 @@ var Platform = (function () {
       case KEYS.UP: return 'UP';
       case KEYS.DOWN: return 'DOWN';
       case KEYS.ENTER: return 'ENTER';
-      case KEYS.BACK: case 8: case 27: return 'BACK';
+      case KEYS.BACK: case 8: case 27: case 65385: return 'BACK'; // 65385 = on-screen keyboard Cancel
+      case 65376: return 'ENTER';                                 // on-screen keyboard Done
       case KEYS.EXIT: return 'EXIT';
       case KEYS.RED: case 82: return 'RED';        // R
       case KEYS.GREEN: case 71: return 'GREEN';    // G
@@ -190,6 +191,47 @@ var Platform = (function () {
     }
   }
 
+  // GET a URL as text. cb(err, text). On the TV, the app's config.xml allows these requests.
+  function getText(url, headers, cb) {
+    var xhr = new XMLHttpRequest();
+    var done = false;
+    function finish(err, text) { if (!done) { done = true; cb(err, text); } }
+    try {
+      xhr.open('GET', url, true);
+      xhr.timeout = 12000;
+      if (headers) for (var h in headers) xhr.setRequestHeader(h, headers[h]);
+      xhr.onload = function () {
+        if (xhr.status >= 200 && xhr.status < 300) finish(null, xhr.responseText);
+        else finish(new Error('HTTP ' + xhr.status));
+      };
+      xhr.onerror = function () { finish(new Error('Network error')); };
+      xhr.ontimeout = function () { finish(new Error('Timed out')); };
+      xhr.send();
+    } catch (e) {
+      finish(e);
+    }
+  }
+
+  /*
+   * Fix up app IDs by looking for each app by name on the TV. Apps whose ID isn't installed
+   * but whose "match" pattern fits an installed app get that app's ID. cb(changed)
+   */
+  function resolveApps(apps, cb) {
+    if (!hasTizen) return cb(false);
+    getInstalledApps(function (installed) {
+      if (!installed.length) return cb(false);
+      var ids = installed.map(function (a) { return a.appId; });
+      var changed = false;
+      apps.forEach(function (app) {
+        if (!app.match || (app.appId && ids.indexOf(app.appId) !== -1)) return;
+        var re = new RegExp(app.match, 'i');
+        var hit = installed.filter(function (a) { return re.test(a.name); })[0];
+        if (hit) { app.appId = hit.appId; changed = true; }
+      });
+      cb(changed);
+    });
+  }
+
   function exit() {
     hideTvWindow();
     if (hasTizen) {
@@ -209,6 +251,8 @@ var Platform = (function () {
     registerKeys: registerKeys,
     actionFor: actionFor,
     launchApp: launchApp,
+    getText: getText,
+    resolveApps: resolveApps,
     getInstalledApps: getInstalledApps,
     getTvChannels: getTvChannels,
     showTvWindow: showTvWindow,

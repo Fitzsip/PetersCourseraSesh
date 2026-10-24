@@ -46,11 +46,11 @@ body.demo { background: #000; }
 .badge { font-size: 18px; background: #f5a623; color: #000; padding: 4px 12px; border-radius: 20px; margin-left: 12px; letter-spacing: 0; }
 
 .hero { display: flex; justify-content: space-between; height: 330px; }
-.hero-info { width: 900px; padding-top: 22px; }
+.hero-info { width: 1000px; padding-top: 22px; height: 330px; overflow: hidden; }
 .eyebrow { font-size: 22px; letter-spacing: 3px; text-transform: uppercase; color: var(--accent); }
-.hero-info h1 { font-size: 72px; font-weight: 700; margin: 8px 0 16px; }
+.hero-info h1 { font-size: 64px; font-weight: 700; margin: 6px 0 12px; line-height: 1.05; max-height: 140px; overflow: hidden; }
 .now { font-size: 32px; }
-.next { font-size: 26px; color: var(--muted); margin-top: 8px; }
+.next { font-size: 24px; color: var(--muted); margin-top: 8px; max-height: 96px; overflow: hidden; }
 .hero-hint { font-size: 22px; color: var(--muted); margin-top: 28px; }
 
 /* The preview is a transparent window; its huge shadow paints the page background
@@ -73,7 +73,9 @@ body.no-preview .preview { background: var(--bg-2); }
 }
 body.demo .preview-fallback, body.demo .watch-fallback { display: flex; }
 
-.rows { margin-top: 0; }
+/* Rows scroll up under the hero as you move down. */
+.rows-viewport { height: 614px; overflow: hidden; margin: 0 -96px; padding: 0 96px; }
+.rows { padding-top: 4px; transition: transform 0.25s ease; }
 .row-title { font-size: 26px; color: var(--muted); margin: 14px 0 12px; }
 
 .tiles { display: flex; height: 170px; transition: transform 0.2s ease; }
@@ -161,7 +163,7 @@ input.field.focused { border-color: var(--text); }
   letter-spacing: 8px;
 }
 .toast {
-  position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); z-index: 30;
+  position: absolute; left: 50%; top: 36px; transform: translateX(-50%); z-index: 30;
   font-size: 26px; background: rgba(20, 26, 46, 0.95); padding: 18px 36px; border-radius: 40px;
   box-shadow: 0 10px 30px rgba(0,0,0,0.5);
 }
@@ -174,3 +176,46 @@ input.field.focused { border-color: var(--text); }
 .banner > * + * { margin-left: 36px; }
 .srow > * + * { margin-left: 14px; }
 .banner .banner-hint { margin-left: auto; }
+
+/* ---------- Hero extras ---------- */
+.bar { width: 420px; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.18); margin-top: 12px; overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: var(--accent); }
+.preview-art {
+  position: absolute; top: 0; right: 0; bottom: 0; left: 0;
+  border-radius: inherit; background: var(--bg-2) center / cover no-repeat;
+  display: flex; align-items: flex-end; padding: 22px 26px;
+  font-size: 34px; font-weight: 800;
+}
+.preview-art.has-image span { display: none; }
+
+/* ---------- Picture tiles (shows, online channels, sport) ---------- */
+.tile.pic { background: var(--bg-2) center / cover no-repeat; overflow: hidden; }
+.tile.pic::before {
+  content: ''; position: absolute; top: 0; right: 0; bottom: 0; left: 0;
+  background: linear-gradient(to top, rgba(5,7,15,0.92) 15%, rgba(5,7,15,0.35) 70%, rgba(5,7,15,0.1));
+  border-radius: inherit;
+}
+.tile.pic > * { position: relative; }
+.tile .name.small { font-size: 26px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile .src {
+  position: absolute; top: 14px; left: 16px; font-size: 16px; font-weight: 700;
+  padding: 3px 10px; border-radius: 6px; color: #fff;
+}
+.tile .flag { position: absolute; top: 14px; right: 14px; font-size: 16px; font-weight: 800; padding: 3px 10px; border-radius: 6px; background: var(--red); color: #fff; }
+.tile .flag.new { background: #f5a623; color: #000; }
+.tile .bar { width: 100%; height: 5px; margin-top: 8px; }
+.tile.wide { width: 360px; }
+
+.tile.show { width: 360px; padding: 0; flex-direction: row; justify-content: flex-start; align-items: stretch; background: var(--bg-2); overflow: hidden; }
+.tile.show .poster { width: 114px; flex: 0 0 auto; background: #232b45 center / cover no-repeat; display: flex; align-items: center; justify-content: center; font-size: 44px; font-weight: 800; color: rgba(255,255,255,0.5); }
+.tile.show .body { flex: 1; padding: 16px 18px; display: flex; flex-direction: column; justify-content: flex-end; min-width: 0; position: relative; }
+.tile.show .src { position: static; align-self: flex-start; margin-bottom: auto; }
+.tile.show .sub { opacity: 0.9; }
+.tile.show .flag { top: auto; right: auto; position: static; align-self: flex-start; margin-top: 6px; }
+.tile.add { background: transparent; border: 3px dashed rgba(255,255,255,0.25); box-shadow: none; align-items: center; justify-content: center; text-align: center; width: 240px; }
+.tile.add .name { font-size: 26px; color: var(--muted); }
+
+input.field.wide { width: 900px; font-size: 30px; }
+.thumb { width: 54px; height: 76px; border-radius: 6px; background: #232b45 center / cover no-repeat; flex: 0 0 auto; }
+
+.hero-info h1.long { font-size: 46px; max-height: 110px; }

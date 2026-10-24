@@ -22,27 +22,38 @@
         </div>
       </header>
 
+      <!-- Details of whatever is highlighted -->
       <div class="hero">
         <div class="hero-info layer">
-          <div class="eyebrow">Live TV</div>
-          <h1 id="hero-channel">Pick a channel</h1>
-          <div id="hero-now" class="now"></div>
-          <div id="hero-next" class="next"></div>
-          <div class="hero-hint">Press <b>OK</b> on a channel to watch, or type a channel number</div>
+          <div id="hero-eyebrow" class="eyebrow">Live TV</div>
+          <h1 id="hero-title">Pick a channel</h1>
+          <div id="hero-line1" class="now"></div>
+          <div id="hero-bar" class="bar hidden"><i></i></div>
+          <div id="hero-line2" class="next"></div>
+          <div id="hero-hint" class="hero-hint"></div>
         </div>
         <div id="preview" class="preview">
           <div id="preview-fallback" class="preview-fallback"><span></span></div>
+          <div id="preview-art" class="preview-art hidden"><span></span></div>
         </div>
       </div>
 
-      <div class="rows layer">
-        <div class="row-title">Your apps</div>
-        <div id="row-apps" class="nav-row tiles"></div>
+      <div class="rows-viewport layer">
+        <div id="rows" class="rows">
+          <div class="row-title">My shows</div>
+          <div id="row-shows" class="nav-row tiles"></div>
 
-        <div class="row-title">Live channels</div>
-        <div id="row-channels" class="nav-row tiles"></div>
+          <div class="row-title">Your apps</div>
+          <div id="row-apps" class="nav-row tiles"></div>
 
-        <div id="row-tools" class="nav-row tools"></div>
+          <div class="row-title">Live channels</div>
+          <div id="row-channels" class="nav-row tiles"></div>
+
+          <div id="sport-title" class="row-title">Sport on NOW · live now</div>
+          <div id="row-sport" class="nav-row tiles"></div>
+
+          <div id="row-tools" class="nav-row tools"></div>
+        </div>
       </div>
     </section>
 
@@ -68,12 +79,25 @@
       </div>
     </section>
 
-    <!-- PICKER (installed apps / TV channels) -->
+    <!-- PICKER (installed apps / channels / which app) -->
     <section id="picker" class="screen overlay">
       <div class="panel">
         <h2 id="picker-title"></h2>
         <div id="picker-body" class="scroll"></div>
-        <div class="panel-hint">OK to add or remove · BACK when done</div>
+        <div id="picker-hint" class="panel-hint"></div>
+      </div>
+    </section>
+
+    <!-- ADD A SHOW -->
+    <section id="search" class="screen overlay">
+      <div class="panel">
+        <h2>Add a show you’re watching</h2>
+        <div class="srow nav-row">
+          <input id="search-input" class="field wide focusable" type="text" placeholder="Type the show’s name">
+          <button id="search-go" class="chip focusable">Search</button>
+        </div>
+        <div id="search-body" class="scroll"></div>
+        <div class="panel-hint">OK on a show to add it · BACK to close</div>
       </div>
     </section>
 
@@ -83,6 +107,8 @@
 
   <script src="js/defaults.js"></script>
   <script src="js/platform.js"></script>
+  <script src="js/guide.js"></script>
+  <script src="js/shows.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
