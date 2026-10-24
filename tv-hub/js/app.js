@@ -1908,70 +1908,160 @@
 
   // ---------------------------------------------------------------- sport stats screens
 
-  var statsNav = new Nav($('stats'), 'first');
+  var statsNav = new Nav($('stats'), 'nearest');
 
-  function statLine(body, text, cls) {
-    var row = el('div', 'srow nav-row');
-    row.appendChild(el('div', 'label statline focusable' + (cls ? ' ' + cls : ''), text));
-    body.appendChild(row);
-  }
+  var F1_COLOURS = {
+    mclaren: '#ff8000', ferrari: '#e8002d', red_bull: '#3671c6', mercedes: '#27f4d2', aston_martin: '#229971',
+    alpine: '#0093cc', williams: '#64c4ff', rb: '#6692ff', racing_bulls: '#6692ff', sauber: '#52e252',
+    kick_sauber: '#52e252', audi: '#bb0a30', haas: '#b6babd', cadillac: '#c9b37e'
+  };
+  function teamColour(id) { return F1_COLOURS[id] || '#7aa2ff'; }
 
   var statsToken = 0;
   function dash(v) { return v == null || v !== v ? '–' : v; }
+
+  // A focusable row (so ▲▼ scrolls through it) made of cells: [text|node, className]
+  function statRow(parent, cells, cls) {
+    var row = el('div', 'nav-row st-row focusable' + (cls ? ' ' + cls : ''));
+    cells.forEach(function (c) {
+      if (c == null) return;
+      var cell = typeof c[0] === 'object' && c[0] ? c[0] : el('div', null, String(dash(c[0])));
+      cell.className = (cell.className ? cell.className + ' ' : '') + 'st-cell ' + (c[1] || '');
+      row.appendChild(cell);
+    });
+    parent.appendChild(row);
+    return row;
+  }
+
+  function img(src, cls) {
+    var i = el('div', cls);
+    setImage(i, src);
+    return i;
+  }
+
   function openStats(kind) {
     var token = ++statsToken;
-    var titles = { f1: 'Formula 1', pl: 'Premier League table', nfl: 'NFL this week' };
+    var titles = { f1: 'Formula 1', pl: 'Premier League', nfl: 'NFL' };
     $('stats-title').textContent = titles[kind];
     var body = $('stats-body');
+    body.className = 'scroll stats-' + kind;
     body.innerHTML = '';
     body.appendChild(el('div', 'label', 'Loading…'));
     show('stats');
-    function fail() { body.innerHTML = ''; statLine(body, 'Couldn’t load this right now — try again later'); statsNav.focus(0, 0); }
-    if (kind === 'f1') Extras.f1(function (d) {
-      if (token !== statsToken || current !== 'stats') return;
-      if (!d) return fail();
-      body.innerHTML = '';
-      if (d.race) {
-        body.appendChild(el('div', 'section-title', 'Next: ' + d.race.name + (d.race.circuit ? ' · ' + d.race.circuit : '')));
-        var now = Date.now();
-        d.race.sessions.forEach(function (s) {
-          statLine(body, s.name + '   ·   ' + Guide.when(s.start) + (s.start < now ? '   (started)' : ''), s.start < now ? 'past' : '');
-        });
-      }
-      if (d.drivers) {
-        body.appendChild(el('div', 'section-title', 'Drivers’ championship'));
-        d.drivers.forEach(function (x) { statLine(body, x.pos + '.   ' + x.name + '   ·   ' + x.team + '   ·   ' + x.points + ' pts'); });
-      }
-      if (d.teams) {
-        body.appendChild(el('div', 'section-title', 'Constructors’ championship'));
-        d.teams.forEach(function (x) { statLine(body, x.pos + '.   ' + x.name + '   ·   ' + x.points + ' pts'); });
-      }
-      statsNav.focus(0, 0);
-    });
-    if (kind === 'pl') Extras.premierLeague(function (rows) {
-      if (token !== statsToken || current !== 'stats') return;
-      if (!rows) return fail();
-      body.innerHTML = '';
-      body.appendChild(el('div', 'section-title', 'Pos · Team · Played · W-D-L · Goal difference · Points'));
-      rows.forEach(function (r) {
-        statLine(body, r.pos + '.   ' + dash(r.team) + '   ·   P' + dash(r.played) + '   ·   ' + dash(r.won) + '-' + dash(r.drawn) + '-' + dash(r.lost) +
-          '   ·   GD ' + (r.gd > 0 ? '+' : '') + dash(r.gd) + '   ·   ' + dash(r.points) + ' pts');
+    function fresh() { return token === statsToken && current === 'stats'; }
+    function fail() { body.innerHTML = ''; statRow(body, [['Couldn’t load this right now — try again later', 'wide']]); statsNav.focus(0, 0); }
+    if (kind === 'f1') Extras.f1(function (d) { if (fresh()) { if (d) drawF1(body, d); else fail(); } });
+    if (kind === 'pl') Extras.premierLeague(function (rows) { if (fresh()) { if (rows) drawPL(body, rows); else fail(); } });
+    if (kind === 'nfl') Extras.nfl(function (games) { if (fresh()) { if (games) drawNFL(body, games); else fail(); } });
+  }
+
+  // ---- F1: next race weekend as a timeline, then the two championships with points bars
+  function drawF1(body, d) {
+    body.innerHTML = '';
+    if (d.race) {
+      var card = el('div', 'nav-row f1-race focusable');
+      var head = el('div', 'f1-race-head');
+      head.appendChild(el('div', 'f1-kicker', 'Next race' + (d.race.round ? ' · Round ' + d.race.round : '')));
+      head.appendChild(el('div', 'f1-race-name', d.race.name));
+      if (d.race.circuit) head.appendChild(el('div', 'f1-circuit', d.race.circuit));
+      card.appendChild(head);
+      var line = el('div', 'f1-sessions');
+      var now = Date.now(), nextMarked = false;
+      d.race.sessions.forEach(function (s) {
+        var length = (s.name === 'Race' ? 2.25 : 1.1) * HOUR;
+        var state = now >= s.start && now < s.start.getTime() + length ? 'live'
+          : now >= s.start.getTime() + length ? 'done' : (nextMarked ? '' : 'next');
+        if (state === 'next') nextMarked = true;
+        var chip = el('div', 'f1-session ' + state);
+        chip.appendChild(el('div', 'f1-session-name', s.name));
+        chip.appendChild(el('div', 'f1-session-when', state === 'live' ? 'LIVE NOW' : state === 'done' ? 'Done' : Guide.when(s.start)));
+        line.appendChild(chip);
       });
-      statsNav.focus(0, 0);
-    });
-    if (kind === 'nfl') Extras.nfl(function (games) {
-      if (token !== statsToken || current !== 'stats') return;
-      if (!games) return fail();
-      body.innerHTML = '';
-      if (!games.length) statLine(body, 'No games this week');
-      games.forEach(function (g) {
-        var text = g.state === 'pre'
-          ? g.away.name + ' at ' + g.home.name + '   ·   ' + Guide.when(g.start)
-          : g.away.name + ' ' + dash(g.away.score) + ' – ' + dash(g.home.score) + ' ' + g.home.name + '   ·   ' + (g.state === 'in' ? 'LIVE ' : '') + g.detail;
-        statLine(body, text, g.state === 'in' ? 'live' : '');
+      card.appendChild(line);
+      body.appendChild(card);
+    }
+    if (d.drivers) {
+      body.appendChild(el('div', 'st-heading', 'Drivers’ championship'));
+      var top = parseFloat(d.drivers[0] && d.drivers[0].points) || 1;
+      d.drivers.forEach(function (x) {
+        var name = el('div', 'f1-driver');
+        name.appendChild(el('span', 'f1-first', x.first ? x.first + ' ' : ''));
+        name.appendChild(el('span', 'f1-last', x.last || x.name));
+        var bar = el('div', 'st-bar');
+        var fill = el('i');
+        fill.style.width = Math.max(2, Math.round(parseFloat(x.points) / top * 100)) + '%';
+        fill.style.background = teamColour(x.teamId);
+        bar.appendChild(fill);
+        var stripe = el('div', 'f1-stripe');
+        stripe.style.background = teamColour(x.teamId);
+        statRow(body, [[x.pos, 'pos'], [stripe], [name, 'grow'], [x.team, 'muted team'], [bar, 'barcell'], [x.points, 'pts'], [x.wins + ' wins', 'muted small']]);
       });
-      statsNav.focus(0, 0);
+    }
+    if (d.teams) {
+      body.appendChild(el('div', 'st-heading', 'Constructors’ championship'));
+      var topT = parseFloat(d.teams[0] && d.teams[0].points) || 1;
+      d.teams.forEach(function (x) {
+        var bar = el('div', 'st-bar');
+        var fill = el('i');
+        fill.style.width = Math.max(2, Math.round(parseFloat(x.points) / topT * 100)) + '%';
+        fill.style.background = teamColour(x.teamId);
+        bar.appendChild(fill);
+        var stripe = el('div', 'f1-stripe');
+        stripe.style.background = teamColour(x.teamId);
+        statRow(body, [[x.pos, 'pos'], [stripe], [x.name, 'grow strong'], [bar, 'barcell'], [x.points, 'pts'], [x.wins + ' wins', 'muted small']]);
+      });
+    }
+    statsNav.focus(0, 0);
+  }
+
+  // ---- Premier League: a proper table with crests; Champions League places and relegation marked
+  function drawPL(body, rows) {
+    body.innerHTML = '';
+    var legend = el('div', 'pl-legend');
+    legend.appendChild(el('span', 'pl-key ucl', 'Champions League places'));
+    legend.appendChild(el('span', 'pl-key rel', 'Relegation'));
+    body.appendChild(legend);
+    var hdr = el('div', 'st-row pl-head');
+    ['', '', 'Club', 'P', 'W', 'D', 'L', 'GD', 'Pts'].forEach(function (h, i) {
+      hdr.appendChild(el('div', 'st-cell ' + ['pos', 'crest', 'grow', 'num', 'num', 'num', 'num', 'num', 'pts'][i], h));
     });
+    body.appendChild(hdr);
+    var n = rows.length;
+    rows.forEach(function (r, i) {
+      var zone = r.pos <= 4 ? 'ucl' : r.pos > n - 3 ? 'rel' : '';
+      var gd = r.gd == null ? null : (r.gd > 0 ? '+' : '') + r.gd;
+      statRow(body, [[r.pos, 'pos'], [img(r.logo, 'crest-img'), 'crest'], [r.team, 'grow strong'],
+        [r.played, 'num'], [r.won, 'num'], [r.drawn, 'num'], [r.lost, 'num'], [gd, 'num'], [r.points, 'pts']], 'pl-row ' + zone);
+    });
+    statsNav.focus(0, 0);
+  }
+
+  // ---- NFL: a scoreboard of game cards, three to a row
+  function drawNFL(body, games) {
+    body.innerHTML = '';
+    if (!games.length) { statRow(body, [['No games this week', 'wide']]); return statsNav.focus(0, 0); }
+    if (games[0].week) body.appendChild(el('div', 'st-heading', 'Week ' + games[0].week));
+    var row = null;
+    games.forEach(function (g, i) {
+      if (i % 3 === 0) { row = el('div', 'nav-row nfl-grid'); body.appendChild(row); }
+      var card = el('div', 'nfl-card focusable ' + g.state);
+      var status = el('div', 'nfl-status ' + g.state, g.state === 'in' ? 'LIVE · ' + g.detail : g.state === 'post' ? 'FINAL' : Guide.when(g.start));
+      card.appendChild(status);
+      [g.away, g.home].forEach(function (t, k) {
+        var line = el('div', 'nfl-team' + (g.state === 'post' && !t.winner ? ' lost' : ''));
+        var logo = img(t.logo, 'nfl-logo');
+        if (!t.logo) { logo.textContent = t.abbr || t.name.charAt(0); logo.style.background = t.color || '#232b45'; }
+        line.appendChild(logo);
+        var nm = el('div', 'nfl-name');
+        nm.appendChild(el('div', null, t.name));
+        nm.appendChild(el('div', 'nfl-rec', (k === 0 ? 'Away' : 'Home') + (t.record ? ' · ' + t.record : '')));
+        line.appendChild(nm);
+        line.appendChild(el('div', 'nfl-score', g.state === 'pre' ? '' : dash(t.score)));
+        card.appendChild(line);
+      });
+      row.appendChild(card);
+    });
+    statsNav.focus(0, 0);
   }
 
   screens.stats = {

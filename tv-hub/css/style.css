@@ -273,3 +273,73 @@ input.field.wide { width: 900px; font-size: 30px; }
 input.field.focused, input.field.wide.focused { transform: none; }
 .brand { display: flex; align-items: center; }
 .brand-logo { margin-right: 14px; flex: 0 0 auto; }
+
+/* ---------- Stats screens (F1, Premier League, NFL) ---------- */
+#stats .panel { left: 110px; right: 110px; top: 50px; bottom: 50px; padding: 36px 48px; }
+.st-heading { font-size: 26px; font-weight: 800; letter-spacing: 2px; text-transform: uppercase; color: var(--accent); margin: 26px 0 10px; }
+.st-row { display: flex; align-items: center; padding: 8px 14px; border-radius: 12px; min-height: 52px; box-sizing: border-box; }
+.st-row > * + * { margin-left: 18px; }
+.st-row:nth-of-type(even) { background: rgba(255,255,255,0.03); }
+.st-row.focused { background: rgba(122,162,255,0.18); box-shadow: inset 0 0 0 2px var(--accent); transform: none; }
+.st-cell { font-size: 26px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st-cell.pos { width: 44px; text-align: right; font-weight: 800; color: #c9d1e8; flex: 0 0 auto; }
+.st-cell.grow { flex: 1 1 auto; min-width: 0; }
+.st-cell.strong { font-weight: 700; }
+.st-cell.muted { color: var(--muted); }
+.st-cell.small { font-size: 21px; width: 96px; text-align: right; flex: 0 0 auto; }
+.st-cell.team { width: 220px; flex: 0 0 auto; font-size: 23px; }
+.st-cell.num { width: 64px; text-align: center; flex: 0 0 auto; color: #dde3f3; }
+.st-cell.pts { width: 84px; text-align: right; font-weight: 800; font-size: 28px; flex: 0 0 auto; }
+.st-cell.wide { flex: 1; font-size: 26px; }
+.st-cell.barcell { width: 360px; flex: 0 0 auto; }
+.st-bar { height: 12px; border-radius: 6px; background: rgba(255,255,255,0.08); overflow: hidden; }
+.st-bar i { display: block; height: 100%; border-radius: 6px; }
+
+.f1-race { display: flex; align-items: center; background: linear-gradient(90deg, #2b0f14, #151b30); border: 2px solid rgba(232,0,45,0.4); border-radius: 18px; padding: 22px 28px; margin-bottom: 8px; }
+.f1-race.focused { box-shadow: 0 0 0 3px var(--accent); transform: none; }
+.f1-race-head { width: 420px; flex: 0 0 auto; }
+.f1-kicker { font-size: 21px; color: #ff8a80; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+.f1-race-name { font-size: 40px; font-weight: 800; margin-top: 4px; }
+.f1-circuit { font-size: 23px; color: #c9d1e8; margin-top: 4px; }
+.f1-sessions { display: flex; flex: 1; margin-left: 24px; }
+.f1-sessions > * + * { margin-left: 12px; }
+.f1-session { flex: 1; background: rgba(255,255,255,0.06); border-radius: 12px; padding: 12px 14px; border-top: 4px solid rgba(255,255,255,0.15); }
+.f1-session.done { opacity: 0.5; }
+.f1-session.next { border-top-color: var(--accent); background: rgba(122,162,255,0.14); }
+.f1-session.live { border-top-color: var(--red); background: rgba(229,57,53,0.22); }
+.f1-session-name { font-size: 21px; font-weight: 700; }
+.f1-session-when { font-size: 21px; color: #c9d1e8; margin-top: 4px; white-space: nowrap; }
+.f1-session.live .f1-session-when { color: #fff; font-weight: 800; }
+.f1-stripe { width: 8px; height: 34px; border-radius: 4px; flex: 0 0 auto; }
+.f1-driver { font-size: 26px; }
+.f1-first { color: #c9d1e8; }
+.f1-last { font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; }
+
+.pl-legend { display: flex; margin: 0 0 12px; }
+.pl-legend > * + * { margin-left: 28px; }
+.pl-key { font-size: 21px; color: #c9d1e8; display: flex; align-items: center; }
+.pl-key::before { content: ''; width: 14px; height: 14px; border-radius: 3px; margin-right: 10px; }
+.pl-key.ucl::before { background: #3e63dd; }
+.pl-key.rel::before { background: var(--red); }
+.pl-head { color: var(--muted); font-weight: 700; min-height: 40px; background: none !important; }
+.pl-head .st-cell { font-size: 21px; color: var(--muted); }
+.pl-row { border-left: 6px solid transparent; }
+.pl-row.ucl { border-left-color: #3e63dd; }
+.pl-row.rel { border-left-color: var(--red); }
+.st-cell.crest { width: 40px; flex: 0 0 auto; }
+.crest-img { width: 36px; height: 36px; background: center / contain no-repeat; }
+
+.nfl-grid { display: flex; margin-bottom: 18px; }
+.nfl-grid > * + * { margin-left: 18px; }
+.nfl-card { flex: 0 0 calc((100% - 36px) / 3); box-sizing: border-box; background: var(--bg-2); border-radius: 16px; padding: 16px 20px; }
+.nfl-card.focused { box-shadow: 0 0 0 3px var(--accent); transform: none; }
+.nfl-card.in { box-shadow: inset 0 0 0 2px rgba(229,57,53,0.6); }
+.nfl-status { display: inline-block; font-size: 19px; font-weight: 800; letter-spacing: 1px; padding: 4px 10px; border-radius: 6px; background: rgba(255,255,255,0.1); color: #dde3f3; margin-bottom: 10px; }
+.nfl-status.in { background: var(--red); color: #fff; }
+.nfl-team { display: flex; align-items: center; padding: 6px 0; }
+.nfl-team > * + * { margin-left: 14px; }
+.nfl-team.lost { opacity: 0.55; }
+.nfl-logo { width: 48px; height: 48px; flex: 0 0 auto; border-radius: 8px; background: center / contain no-repeat; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 800; }
+.nfl-name { flex: 1; min-width: 0; font-size: 26px; font-weight: 700; }
+.nfl-rec { font-size: 18px; color: var(--muted); font-weight: 400; margin-top: 2px; }
+.nfl-score { font-size: 36px; font-weight: 800; min-width: 54px; text-align: right; }

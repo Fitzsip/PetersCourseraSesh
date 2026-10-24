@@ -82,8 +82,11 @@ var Extras = (function () {
       var table = d && d.MRData && d.MRData.StandingsTable;
       var list = table && table.StandingsLists && table.StandingsLists[0];
       if (list && list.DriverStandings) out.drivers = list.DriverStandings.filter(function (x) { return x && x.Driver; }).map(function (x) {
+        var c = x.Constructors && x.Constructors[0];
         return { pos: x.position, name: [x.Driver.givenName, x.Driver.familyName].join(' ').trim(),
-          team: x.Constructors && x.Constructors[0] ? x.Constructors[0].name : '', points: x.points, wins: x.wins };
+          first: x.Driver.givenName || '', last: x.Driver.familyName || '', code: x.Driver.code || '',
+          number: x.Driver.permanentNumber || '', team: c ? c.name : '', teamId: c ? c.constructorId : '',
+          points: x.points, wins: x.wins };
       });
       done();
     });
@@ -91,7 +94,7 @@ var Extras = (function () {
       var table = d && d.MRData && d.MRData.StandingsTable;
       var list = table && table.StandingsLists && table.StandingsLists[0];
       if (list && list.ConstructorStandings) out.teams = list.ConstructorStandings.filter(function (x) { return x && x.Constructor; }).map(function (x) {
-        return { pos: x.position, name: x.Constructor.name, points: x.points, wins: x.wins };
+        return { pos: x.position, name: x.Constructor.name, teamId: x.Constructor.constructorId, points: x.points, wins: x.wins };
       });
       done();
     });
@@ -119,6 +122,7 @@ var Extras = (function () {
       var rows = entries.map(function (e) {
         return {
           pos: stat(e, ['rank']), team: e.team && (e.team.shortDisplayName || e.team.displayName),
+          logo: e.team && e.team.logos && e.team.logos[0] && e.team.logos[0].href,
           played: stat(e, ['gamesPlayed', 'GP']), won: stat(e, ['wins', 'W']), drawn: stat(e, ['ties', 'D']),
           lost: stat(e, ['losses', 'L']), gd: stat(e, ['pointDifferential', 'GD']), points: stat(e, ['points', 'P'])
         };
@@ -140,10 +144,14 @@ var Extras = (function () {
         var comp = ev.competitions && ev.competitions[0] || {};
         var side = function (where) {
           var c = (comp.competitors || []).filter(function (x) { return x.homeAway === where; })[0] || {};
-          return { name: c.team ? (c.team.shortDisplayName || c.team.displayName) : '?', score: c.score };
+          var t = c.team || {};
+          return { name: t.shortDisplayName || t.displayName || '?', abbr: t.abbreviation || '', score: c.score,
+            logo: t.logo || (t.logos && t.logos[0] && t.logos[0].href), color: t.color ? '#' + t.color : null,
+            winner: !!c.winner, record: c.records && c.records[0] && c.records[0].summary };
         };
         var type = ev.status && ev.status.type || {};
-        return { start: new Date(ev.date), state: type.state, detail: type.shortDetail || type.detail || '', away: side('away'), home: side('home') };
+        return { start: new Date(ev.date), state: type.state, detail: type.shortDetail || type.detail || '', away: side('away'), home: side('home'),
+          week: ev.week && ev.week.number };
       }).sort(function (a, b) { return a.start - b.start; }));
     });
   }
@@ -157,18 +165,27 @@ var Extras = (function () {
         { name: 'Practice 1', start: new Date(now - 26 * h) }, { name: 'Sprint qualifying', start: new Date(now - 22 * h) },
         { name: 'Sprint', start: new Date(now + 2 * h) }, { name: 'Qualifying', start: new Date(now + 6 * h) },
         { name: 'Race', start: new Date(now + 26 * h) }] },
-      drivers: [{ pos: 1, name: 'Demo Driver', team: 'Demo Racing', points: 300, wins: 8 }, { pos: 2, name: 'Second Driver', team: 'Other Team', points: 280, wins: 5 }],
-      teams: [{ pos: 1, name: 'Demo Racing', points: 520, wins: 10 }]
+      drivers: [{ pos: 1, name: 'Lando Norris', first: 'Lando', last: 'Norris', code: 'NOR', number: '4', team: 'McLaren', teamId: 'mclaren', points: 357, wins: 7 },
+        { pos: 2, name: 'Oscar Piastri', first: 'Oscar', last: 'Piastri', code: 'PIA', number: '81', team: 'McLaren', teamId: 'mclaren', points: 356, wins: 7 },
+        { pos: 3, name: 'Max Verstappen', first: 'Max', last: 'Verstappen', code: 'VER', number: '1', team: 'Red Bull', teamId: 'red_bull', points: 321, wins: 5 },
+        { pos: 4, name: 'George Russell', first: 'George', last: 'Russell', code: 'RUS', number: '63', team: 'Mercedes', teamId: 'mercedes', points: 258, wins: 2 },
+        { pos: 5, name: 'Charles Leclerc', first: 'Charles', last: 'Leclerc', code: 'LEC', number: '16', team: 'Ferrari', teamId: 'ferrari', points: 210, wins: 0 }],
+      teams: [{ pos: 1, name: 'McLaren', teamId: 'mclaren', points: 713, wins: 14 }, { pos: 2, name: 'Mercedes', teamId: 'mercedes', points: 356, wins: 2 },
+        { pos: 3, name: 'Red Bull', teamId: 'red_bull', points: 346, wins: 5 }, { pos: 4, name: 'Ferrari', teamId: 'ferrari', points: 334, wins: 0 }]
     };
   }
   function demoPL() {
-    return [{ pos: 1, team: 'Arsenal', played: 10, won: 8, drawn: 1, lost: 1, gd: 15, points: 25 },
-      { pos: 2, team: 'Liverpool', played: 10, won: 7, drawn: 2, lost: 1, gd: 12, points: 23 }];
+    var names = ['Arsenal', 'Man City', 'Liverpool', 'Chelsea', 'Spurs', 'Newcastle', 'Aston Villa', 'Brighton', 'Man United', 'Bournemouth',
+      'Fulham', 'Brentford', 'Crystal Palace', 'Everton', 'West Ham', 'Nottm Forest', 'Leeds', 'Sunderland', 'Burnley', 'Wolves'];
+    return names.map(function (n, i) {
+      return { pos: i + 1, team: n, played: 9, won: Math.max(0, 7 - Math.floor(i / 3)), drawn: i % 3, lost: Math.floor(i / 4), gd: 14 - i * 1.5 | 0, points: 22 - i };
+    });
   }
   function demoNFL() {
     var now = Date.now();
-    return [{ start: new Date(now - 3 * 3600000), state: 'post', detail: 'Final', away: { name: 'Chiefs', score: '24' }, home: { name: 'Bills', score: '21' } },
-      { start: new Date(now + 26 * 3600000), state: 'pre', detail: 'Sun 6:00 PM', away: { name: 'Eagles', score: '0' }, home: { name: 'Cowboys', score: '0' } }];
+    return [{ start: new Date(now - 3 * 3600000), state: 'post', detail: 'Final', week: 8, away: { name: 'Chiefs', abbr: 'KC', score: '24', winner: true, record: '6-1', color: '#e31837' }, home: { name: 'Bills', abbr: 'BUF', score: '21', record: '5-2', color: '#00338d' } },
+      { start: new Date(now - 3600000), state: 'in', detail: 'Q3 5:12', week: 8, away: { name: 'Eagles', abbr: 'PHI', score: '17', record: '5-2', color: '#004c54' }, home: { name: 'Cowboys', abbr: 'DAL', score: '14', record: '3-4', color: '#041e42' } },
+      { start: new Date(now + 26 * 3600000), state: 'pre', detail: 'Sun 6:00 PM', week: 8, away: { name: 'Packers', abbr: 'GB', score: '0', record: '4-2', color: '#203731' }, home: { name: 'Bears', abbr: 'CHI', score: '0', record: '3-3', color: '#0b162a' } }];
   }
 
   return { weather: weather, f1: f1, premierLeague: premierLeague, nfl: nfl };
