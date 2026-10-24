@@ -25,3 +25,12 @@ if [ -n "$TV_IP" ]; then
   "$TIZEN" install -n "$WGT" -t "$TARGET"
   echo "Installed on $TARGET. Look for 'TV Hub' in your TV's Apps."
 fi
+
+# Keep a copy of the signing certificate: future updates must be signed with the same one,
+# otherwise the TV makes you uninstall TV Hub first (losing your shows and settings).
+DATA="${TIZEN_DATA:-$HOME/tizen-studio-data}"
+if [ -d "$DATA/keystore" ] && command -v zip >/dev/null; then
+  (cd "$DATA" && zip -qr "$HERE/tv-hub-certificate-backup.zip" keystore profile)
+  echo "Certificate backed up to $HERE/tv-hub-certificate-backup.zip"
+  echo "Email it to yourself or save it to cloud storage, with the certificate password."
+fi

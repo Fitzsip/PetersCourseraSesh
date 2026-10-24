@@ -68,7 +68,7 @@ var Platform = (function () {
     }
   }
 
-  // Lists apps installed on the TV: [{appId, name, iconPath}]
+  // Lists apps installed on the TV: cb([{appId, name, iconPath}], errorMessage)
   function getInstalledApps(cb) {
     if (!hasTizen) {
       cb([
@@ -84,11 +84,35 @@ var Platform = (function () {
         cb(list.filter(function (a) { return a.show !== false && a.name; })
           .map(function (a) { return { appId: a.id, name: a.name, iconPath: a.iconPath }; })
           .sort(function (a, b) { return a.name.localeCompare(b.name); }));
-      }, function () { cb([]); });
+      }, function (err) { cb([], (err && err.message) || 'The TV wouldn’t list its apps'); });
     } catch (e) {
-      cb([]);
+      cb([], e.message);
     }
   }
+
+  // The TV's scanned channel list, loaded once and reused (it can hold hundreds of
+  // satellite channels, so asking for it per tile is slow on older TVs).
+  var channelList = null;   // { at, list: [ChannelInfo] }
+  var channelWaiters = null;
+  function loadChannels(cb) {
+    if (!hasTuner) return cb(null);
+    if (channelList && Date.now() - channelList.at < 30 * 60 * 1000) return cb(channelList.list);
+    if (channelWaiters) return channelWaiters.push(cb);
+    channelWaiters = [cb];
+    function done(list) {
+      if (list) channelList = { at: Date.now(), list: list };
+      var w = channelWaiters;
+      channelWaiters = null;
+      w.forEach(function (f) { f(list || (channelList && channelList.list) || null); });
+    }
+    try {
+      tizen.tvchannel.getChannelList(done, function () { done(null); }, 'ALL', 0, 2000);
+    } catch (e) {
+      done(null);
+    }
+  }
+
+  function sameChannel(info, ch) { return info.major === ch.major && info.minor === (ch.minor || 0); }
 
   // Lists channels the TV has scanned: [{name, major, minor}]
   function getTvChannels(cb) {
@@ -101,15 +125,11 @@ var Platform = (function () {
       ]);
       return;
     }
-    try {
-      tizen.tvchannel.getChannelList(function (list) {
-        cb(list.map(function (c) {
-          return { name: c.channelName || ('Channel ' + c.major), major: c.major, minor: c.minor };
-        }));
-      }, function () { cb([]); }, 'ALL', 0, 2000);
-    } catch (e) {
-      cb([]);
-    }
+    loadChannels(function (list) {
+      cb((list || []).map(function (c) {
+        return { name: c.channelName || ('Channel ' + c.major), major: c.major, minor: c.minor };
+      }));
+    });
   }
 
   function showTvWindow(rect, cb) {
@@ -129,66 +149,81 @@ var Platform = (function () {
     tvWindowVisible = false;
   }
 
-  // Make sure the TV window is showing the tuner (not HDMI etc.)
-  function selectTunerSource() {
-    if (!hasWindow || !tizen.systeminfo) return;
+  // Make sure the TV window shows the tuner (not HDMI etc.) before tuning, then call next().
+  function withTunerSource(next) {
+    if (!hasWindow || !tizen.systeminfo) return next();
     try {
+      var cur = tizen.tvwindow.getSource('MAIN');
+      if (cur && cur.type === 'TV') return next();
       tizen.systeminfo.getPropertyValue('VIDEOSOURCE', function (src) {
         var all = (src.connected || []).concat(src.disconnected || []);
         var tv = all.filter(function (s) { return s.type === 'TV'; })[0];
-        if (tv) tizen.tvwindow.setSource(tv, function () {}, function () {}, 'MAIN');
-      });
-    } catch (e) {}
+        if (!tv) return next();
+        tizen.tvwindow.setSource(tv, next, next, 'MAIN');
+      }, next);
+    } catch (e) {
+      next();
+    }
   }
 
   /*
-   * Tune to a channel. callbacks: {ok(), noSignal(), program(title), fail(msg)}
-   * Falls back to opening the TV's own live-TV viewer when tuning isn't permitted.
+   * Tune to a satellite channel. callbacks: {ok(), noSignal(), program(title), fail(msg, noTuner)}
+   * noTuner is true when this TV doesn't let apps tune at all (the caller may then offer the
+   * TV's own viewer). Nothing here ever leaves the app on its own.
    */
-  function tune(channel, callbacks, fallbackAppId) {
+  function tune(channel, callbacks) {
     callbacks = callbacks || {};
+    function fail(msg, noTuner) { callbacks.fail && callbacks.fail(msg, !!noTuner); }
     if (!hasTuner) {
-      if (hasTizen) {
-        launchApp(fallbackAppId, callbacks.fail);
-      } else {
-        callbacks.ok && callbacks.ok();
-        callbacks.program && callbacks.program('Demo programme on ' + channel.name);
-      }
+      if (hasTizen) return fail('This TV doesn’t let apps change channel', true);
+      callbacks.ok && callbacks.ok();
+      callbacks.program && callbacks.program('Demo programme on ' + channel.name);
       return;
     }
-    selectTunerSource();
-    try {
-      tizen.tvchannel.tune({ major: channel.major, minor: channel.minor || 0 }, {
-        onsuccess: function () { callbacks.ok && callbacks.ok(); },
-        onnosignal: function () { callbacks.noSignal && callbacks.noSignal(); },
-        onprograminforeceived: function (p) { callbacks.program && callbacks.program(p && p.title); }
-      }, function (err) {
-        // Tuning refused (e.g. missing privilege): hand over to the TV's own viewer.
-        launchApp(fallbackAppId, callbacks.fail);
-      }, 'MAIN');
-    } catch (e) {
-      launchApp(fallbackAppId, callbacks.fail);
-    }
+    loadChannels(function (list) {
+      if (list && !list.some(function (c) { return sameChannel(c, channel); })) {
+        return fail('Channel ' + channel.major + ' isn’t in the TV’s channel list');
+      }
+      withTunerSource(function () {
+        try {
+          tizen.tvchannel.tune({ major: channel.major, minor: channel.minor || 0 }, {
+            onsuccess: function () { callbacks.ok && callbacks.ok(); },
+            onnosignal: function () { callbacks.noSignal && callbacks.noSignal(); },
+            onprograminforeceived: function (p) { callbacks.program && callbacks.program(p && p.title); }
+          }, function (err) {
+            fail((err && err.message) || 'The TV refused to change channel', err && err.name === 'SecurityError');
+          }, 'MAIN');
+        } catch (e) {
+          fail(e.message, e.name === 'SecurityError');
+        }
+      });
+    });
   }
 
-  // Now / next for one channel: cb({now, next}) — titles may be undefined.
+  // Now / next for one satellite channel: cb({now, next}) — titles may be undefined.
+  // Cached for a minute per channel.
+  var nowNextCache = {};
   function getNowNext(channel, cb) {
     if (!hasTuner) {
       if (!hasTizen) cb({ now: 'Evening News', next: 'Quiz Night' });
       else cb({});
       return;
     }
-    try {
-      tizen.tvchannel.getChannelList(function (list) {
-        var info = list.filter(function (c) { return c.major === channel.major && c.minor === (channel.minor || 0); })[0];
-        if (!info) { cb({}); return; }
+    var key = channel.major + '-' + (channel.minor || 0);
+    var hit = nowNextCache[key];
+    if (hit && Date.now() - hit.at < 60000) return cb(hit.data);
+    function done(data) { nowNextCache[key] = { at: Date.now(), data: data }; cb(data); }
+    loadChannels(function (list) {
+      var info = (list || []).filter(function (c) { return sameChannel(c, channel); })[0];
+      if (!info) return done({});
+      try {
         tizen.tvchannel.getProgramList(info, tizen.time.getCurrentDateTime(), function (progs) {
-          cb({ now: progs[0] && progs[0].title, next: progs[1] && progs[1].title });
-        }, function () { cb({}); }, 3);
-      }, function () { cb({}); }, 'ALL');
-    } catch (e) {
-      cb({});
-    }
+          done({ now: progs[0] && progs[0].title, next: progs[1] && progs[1].title });
+        }, function () { done({}); }, 3);
+      } catch (e) {
+        done({});
+      }
+    });
   }
 
   // GET a URL as text. cb(err, text). On the TV, the app's config.xml allows these requests.
@@ -218,8 +253,8 @@ var Platform = (function () {
    */
   function resolveApps(apps, cb) {
     if (!hasTizen) return cb(false);
-    getInstalledApps(function (installed) {
-      if (!installed.length) return cb(false);
+    getInstalledApps(function (installed, err) {
+      if (!installed.length) return cb(false, err);
       var ids = installed.map(function (a) { return a.appId; });
       var changed = false;
       apps.forEach(function (app) {

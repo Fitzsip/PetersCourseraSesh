@@ -47,11 +47,11 @@ body.demo { background: #000; }
 
 .hero { display: flex; justify-content: space-between; height: 330px; }
 .hero-info { width: 1000px; padding-top: 22px; height: 330px; overflow: hidden; }
-.eyebrow { font-size: 22px; letter-spacing: 3px; text-transform: uppercase; color: var(--accent); }
+.eyebrow { font-size: 24px; letter-spacing: 3px; text-transform: uppercase; color: var(--accent); }
 .hero-info h1 { font-size: 64px; font-weight: 700; margin: 6px 0 12px; line-height: 1.05; max-height: 140px; overflow: hidden; }
 .now { font-size: 32px; }
 .next { font-size: 24px; color: var(--muted); margin-top: 8px; max-height: 96px; overflow: hidden; }
-.hero-hint { font-size: 22px; color: var(--muted); margin-top: 28px; }
+.hero-hint { font-size: 26px; color: #c9d1e8; margin-top: 28px; }
 
 /* The preview is a transparent window; its huge shadow paints the page background
    everywhere else, so the TV video plane is only visible inside this box. */
@@ -75,8 +75,8 @@ body.demo .preview-fallback, body.demo .watch-fallback { display: flex; }
 
 /* Rows scroll up under the hero as you move down. */
 .rows-viewport { height: 614px; overflow: hidden; margin: 0 -96px; padding: 0 96px; }
-.rows { padding-top: 4px; transition: transform 0.25s ease; }
-.row-title { font-size: 26px; color: var(--muted); margin: 14px 0 12px; }
+.rows { padding-top: 4px; transition: transform 0.25s ease; will-change: transform; }
+.row-title { font-size: 28px; color: #c9d1e8; margin: 14px 0 12px; }
 
 .tiles { display: flex; height: 170px; transition: transform 0.2s ease; }
 
@@ -91,12 +91,12 @@ body.demo .preview-fallback, body.demo .watch-fallback { display: flex; }
   box-shadow: 0 6px 18px rgba(0,0,0,0.4);
 }
 .tile .name { font-size: 34px; font-weight: 800; letter-spacing: -0.5px; }
-.tile .sub { font-size: 20px; opacity: 0.8; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile .sub { font-size: 24px; opacity: 0.9; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tile .key { position: absolute; top: 14px; right: 14px; width: 22px; height: 22px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.7); }
 
 .tile.channel { background: var(--bg-2); width: 280px; }
 .tile.channel .num { position: absolute; top: 14px; left: 20px; font-size: 26px; color: var(--accent); font-weight: 700; }
-.tile.channel .live { position: absolute; top: 16px; right: 16px; font-size: 16px; background: var(--red); padding: 2px 10px; border-radius: 6px; font-weight: 700; }
+.tile.channel .live { position: absolute; top: 16px; right: 16px; font-size: 19px; background: rgba(255,255,255,0.18); padding: 2px 10px; border-radius: 6px; font-weight: 700; }
 
 .tools { display: flex; margin-top: 22px; height: 70px; }
 .btn {
@@ -109,7 +109,7 @@ body.demo .preview-fallback, body.demo .watch-fallback { display: flex; }
 .focusable.focused { transform: scale(1.08); box-shadow: 0 0 0 5px var(--focus), 0 16px 40px rgba(0,0,0,0.6); z-index: 2; }
 .btn.focused { transform: scale(1.05); background: var(--text); color: var(--bg); }
 
-.hotkeys { display: flex; font-size: 20px; color: var(--muted); margin-top: 14px; }
+.hotkeys { display: flex; font-size: 24px; color: #c9d1e8; margin-top: 14px; }
 .hotkeys span { display: inline-flex; align-items: center; }
 .dot { display: inline-block; width: 20px; height: 20px; border-radius: 50%; }
 .dot.red { background: var(--red); } .dot.green { background: var(--green); }
@@ -138,14 +138,14 @@ body.demo .preview-fallback, body.demo .watch-fallback { display: flex; }
 }
 .panel h2 { font-size: 44px; margin-bottom: 20px; }
 .scroll { flex: 1; overflow: hidden; position: relative; }
-.panel-hint { font-size: 20px; color: var(--muted); margin-top: 16px; }
+.panel-hint { font-size: 24px; color: var(--muted); margin-top: 16px; }
 
 .section-title { font-size: 24px; color: var(--accent); letter-spacing: 2px; text-transform: uppercase; margin: 26px 0 10px; }
 .srow { display: flex; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
 .srow .label { flex: 1; font-size: 28px; }
-.srow .label small { display: block; font-size: 18px; color: var(--muted); }
+.srow .label small { display: block; font-size: 21px; color: var(--muted); }
 .srow .label.off { opacity: 0.45; }
-.chip { font-size: 20px; padding: 10px 20px; border-radius: 24px; background: var(--bg-2); color: var(--text); border: none; font-family: inherit; white-space: nowrap; }
+.chip { font-size: 23px; padding: 10px 20px; border-radius: 24px; background: var(--bg-2); color: var(--text); border: none; font-family: inherit; white-space: nowrap; }
 .chip.focused { background: var(--text); color: var(--bg); transform: scale(1.05); }
 .chip.on { box-shadow: inset 0 0 0 2px var(--accent); }
 .swatch { width: 28px; height: 28px; border-radius: 8px; flex: 0 0 auto; }
@@ -198,10 +198,10 @@ input.field.focused { border-color: var(--text); }
 .tile.pic > * { position: relative; }
 .tile .name.small { font-size: 26px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tile .src {
-  position: absolute; top: 14px; left: 16px; font-size: 16px; font-weight: 700;
+  position: absolute; top: 14px; left: 16px; font-size: 19px; font-weight: 700;
   padding: 3px 10px; border-radius: 6px; color: #fff;
 }
-.tile .flag { position: absolute; top: 14px; right: 14px; font-size: 16px; font-weight: 800; padding: 3px 10px; border-radius: 6px; background: var(--red); color: #fff; }
+.tile .flag { position: absolute; top: 14px; right: 14px; font-size: 19px; font-weight: 800; padding: 3px 10px; border-radius: 6px; background: var(--red); color: #fff; }
 .tile .flag.new { background: #f5a623; color: #000; }
 .tile .bar { width: 100%; height: 5px; margin-top: 8px; }
 .tile.wide { width: 360px; }
@@ -219,3 +219,8 @@ input.field.wide { width: 900px; font-size: 30px; }
 .thumb { width: 54px; height: 76px; border-radius: 6px; background: #232b45 center / cover no-repeat; flex: 0 0 auto; }
 
 .hero-info h1.long { font-size: 46px; max-height: 110px; }
+
+.row-note { font-size: 20px; color: var(--muted); margin-left: 14px; }
+.chip.confirm { background: var(--red); color: #fff; }
+.digits small { display: block; font-size: 36px; font-weight: 700; letter-spacing: 0; color: var(--muted); }
+.tile .sub.warn { color: #ffcf7a; }

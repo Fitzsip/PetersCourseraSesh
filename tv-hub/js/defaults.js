@@ -6,35 +6,28 @@
  * name when the ID is missing or wrong, so new apps work without knowing their ID.
  */
 var TVHUB_DEFAULTS = {
-  version: 2,
+  version: 3,
 
   apps: [
     { id: 'netflix', name: 'Netflix',     appId: '3201907018807', match: '^netflix',        color: '#e50914', text: '#ffffff', hotkey: 'red' },
     { id: 'disney',  name: 'Disney+',     appId: '3201901017640', match: '^disney',         color: '#113ccf', text: '#ffffff', hotkey: 'blue' },
     { id: 'prime',   name: 'Prime Video', appId: '3201910019365', match: 'prime video',     color: '#00a8e1', text: '#0f171e', hotkey: 'green' },
-    { id: 'now',     name: 'NOW',         appId: '',              match: '^now( tv)?$|^now\\b', color: '#14d3b4', text: '#0a0a0a', hotkey: null },
+    { id: 'now',     name: 'NOW',         appId: '',              match: '^now( tv)?$',     color: '#14d3b4', text: '#0a0a0a', hotkey: null },
     { id: 'youtube', name: 'YouTube',     appId: '111299001912',  match: '^youtube$',       color: '#ff0000', text: '#ffffff', hotkey: 'yellow' },
-    { id: 'rte',     name: 'RTÉ Player',  appId: '',              match: 'rt[eé] ?player',  color: '#00857c', text: '#ffffff', hotkey: null },
-    { id: 'virgin',  name: 'Virgin Media Player', appId: '',      match: 'virgin media',    color: '#c4002b', text: '#ffffff', hotkey: null },
+    { id: 'rte',     name: 'RTÉ Player',  appId: '',              match: '^rt[eé] ?player', color: '#00857c', text: '#ffffff', hotkey: null },
+    { id: 'virgin',  name: 'Virgin Media Player', appId: '',      match: '^virgin media play', color: '#c4002b', text: '#ffffff', hotkey: null },
     { id: 'appletv', name: 'Apple TV',    appId: '3201807016597', match: '^apple tv',       color: '#1d1d1f', text: '#ffffff', hotkey: null, hidden: true },
     { id: 'spotify', name: 'Spotify',     appId: '3201606009684', match: '^spotify',        color: '#1db954', text: '#000000', hotkey: null, hidden: true }
   ],
 
-  // Live channels row. Satellite channels have a "major" channel number (what you'd type on
-  // the remote); use Settings > Import channels from TV to replace these with the real list.
-  // "player" channels are streamed through an app (RTÉ Player, Virgin Media Player) and show
-  // what's on now from the online TV guide.
-  channels: [
-    { name: 'RTÉ One',          kind: 'player', guide: 'rte-one' },
-    { name: 'RTÉ2',             kind: 'player', guide: 'rte2' },
-    { name: 'Virgin Media One', kind: 'player', guide: 'vm-one' },
-    { name: 'Virgin Media Two', kind: 'player', guide: 'vm-two' },
-    { name: 'BBC One',   major: 101, minor: 0 },
-    { name: 'BBC Two',   major: 102, minor: 0 },
-    { name: 'ITV1',      major: 103, minor: 0 },
-    { name: 'Channel 4', major: 104, minor: 0 },
-    { name: 'Channel 5', major: 105, minor: 0 }
-  ],
+  // Your satellite channels: { name, major, minor } where "major" is the number you'd type on
+  // the remote. Empty to start with: the first run asks you to import them from the TV, because
+  // channel numbers depend on how the TV was tuned.
+  channels: [],
+
+  // Channels watched through the player apps, shown in the "On now" row with what's live.
+  // Keys from playerChannels below; add or remove them in Settings.
+  online: ['rte-one', 'rte2', 'vm-one', 'vm-two'],
 
   // Channels available inside the player apps, with where their TV guide comes from.
   playerChannels: {
@@ -68,7 +61,7 @@ var TVHUB_DEFAULTS = {
   shows: [],
 
   options: {
-    smartOrder: true,          // put the apps you use most first
+    smartOrder: false,         // put the apps you use most first
     livePreview: true,         // show the live channel behind the home screen
     // Used only when the TV doesn't let this app tune channels itself.
     tvViewerAppId: 'org.tizen.tv-viewer'

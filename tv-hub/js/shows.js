@@ -22,10 +22,10 @@ var Shows = (function () {
     return ((show.webChannel || show.network) || {}).name || '';
   }
 
-  // cb(list of { id, name, year, network, image })
+  // cb(list of { id, name, year, network, image }, error) — error is set if TVmaze couldn't be reached.
   function search(query, cb) {
     getJson(API + '/search/shows?q=' + encodeURIComponent(query), function (err, data) {
-      if (err || !data) return cb(Platform.isTv ? [] : demoSearch(query));
+      if (err || !data) return Platform.isTv ? cb([], err || new Error('No data')) : cb(demoSearch(query));
       cb(data.map(function (r) {
         var s = r.show;
         return {
@@ -43,9 +43,33 @@ var Shows = (function () {
     return { season: e.season, number: e.number, name: e.name, airstamp: e.airstamp };
   }
 
+  // Lookups run one at a time with a short gap, to stay well inside TVmaze's rate limit
+  // (about 20 requests per 10 seconds) however many shows you follow.
+  var queue = [];
+  var waiting = {};  // tvmazeId -> [callbacks] for lookups queued or in flight
+  var busy = false;
+  function pump() {
+    if (busy || !queue.length) return;
+    busy = true;
+    var show = queue.shift();
+    fetchInfo(show, function () {
+      var cbs = waiting[show.tvmazeId] || [];
+      delete waiting[show.tvmazeId];
+      cbs.forEach(function (f) { if (f) f(show); });
+      setTimeout(function () { busy = false; pump(); }, 600);
+    });
+  }
+
   // Fills show.info (poster, summary, latest/next episode). cb(show) when done.
   function refresh(show, cb) {
     if (show.info && Date.now() - show.info.at < REFRESH) return cb && cb(show);
+    if (waiting[show.tvmazeId]) return waiting[show.tvmazeId].push(cb);
+    waiting[show.tvmazeId] = [cb];
+    queue.push(show);
+    pump();
+  }
+
+  function fetchInfo(show, cb) {
     var url = API + '/shows/' + show.tvmazeId + '?embed%5B%5D=nextepisode&embed%5B%5D=previousepisode';
     getJson(url, function (err, s) {
       if (!err && s) {
@@ -63,7 +87,7 @@ var Shows = (function () {
       } else if (!show.info && !Platform.isTv) {
         show.info = demoInfo(show);
       }
-      cb && cb(show);
+      cb();
     });
   }
 

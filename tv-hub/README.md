@@ -8,16 +8,14 @@ It's an ordinary Samsung (Tizen) app that you install with Samsung's own **Devel
 
 | | |
 |---|---|
-| **My shows** | The shows you're following, with posters and a **NEW EPISODE** flag when one came out in the last week, or the date of the next one. Press OK and it opens the right app. Shows with new episodes come first. |
-| **Apps row** | Big tiles for Netflix, Disney+, Prime Video, NOW, YouTube, RTÉ Player and Virgin Media Player. Add any app installed on the TV from a list, then hide or reorder tiles. |
-| **Most-used first** | Apps you open often move to the front automatically. You can turn this off. |
+| **On now** | The first row. It shows live Sky Sports events, what's on RTÉ One, RTÉ2, Virgin Media One and Two right now, with a progress bar and what's next, and your last satellite channel. Live sport is tagged **LIVE** and comes first. |
+| **My shows** | The shows you're following, with posters and a **NEW EPISODE** flag when one came out in the last week, or the date of the next one. Press OK and it opens the right app. Shows with new episodes come first, then your own order. |
+| **Your apps** | Big tiles for Netflix, Disney+, Prime Video, NOW, YouTube, RTÉ Player and Virgin Media Player. Add any app installed on the TV, and hide or reorder tiles. |
 | **Colour buttons** | Red, green, yellow and blue on the remote open an app straight away, from the home screen or while you watch TV. You choose which app goes on each button. |
-| **Live channels row** | Your satellite channels and **online channels** (RTÉ One, RTÉ2, Virgin Media One and Two, plus RTÉjr, RTÉ News, Virgin Media Three and More if you add them). Online channels show what's on now with a progress bar and what's next, and OK opens RTÉ Player or Virgin Media Player. A tile tagged **LAST** marks the satellite channel you watched most recently. |
-| **Sport row** | What's on right now on each Sky Sports channel, with a picture, the times and a progress bar. Live events are tagged **LIVE** and come first. OK opens NOW. |
-| **Live preview** | Highlight a channel and it plays in the preview window on the home screen. Press OK to watch it full screen. |
-| **Type a number** | Type `102` on the remote from anywhere in TV Hub and it jumps to that channel. `1` to `9` also open your 1st to 9th channels. |
-| **CH ▲▼** | Flicks through your channels while you watch. |
-| **Settings** | Everything is set up with the remote: show or hide apps, assign buttons, import channels from the TV, add a channel by number, and reset. |
+| **Satellite TV** | Your free-to-air channels. Highlight one and it plays in the preview window; press OK to watch full screen. CH ▲▼ flicks through them. |
+| **Sky Sports on NOW** | What's on right now on each Sky Sports channel, with a picture and the times. It also flags a live event coming up next, e.g. "Live at 16:30". OK opens NOW. |
+| **Type a number** | Type `102` on the remote and it jumps to that satellite channel. The number box shows the channel's name before it switches. `1` to `9` also open your 1st to 9th satellite channels. |
+| **Settings** | Everything is set up with the remote: show, hide and reorder apps; assign colour buttons; choose channels; add or remove online channels and Sport channels. Remove and Reset ask you to press OK twice. |
 
 ## Try it on your computer first
 
@@ -63,12 +61,22 @@ You need a Windows, Mac or Linux computer on the same Wi-Fi or network as the TV
 7. On the TV, **TV Hub** now appears in Apps.
    1. Move it to the **first position** of the bottom app bar: highlight it, press Down, choose *Move*.
    2. Optional: turn on *Settings → General → Smart Features → Autorun Last App* (the name varies by model). The TV then opens TV Hub at power-on if TV Hub was the last thing you used.
+8. **Back up your certificate before you hand the computer back.** This matters if you don't have your own computer:
+   - **Why:** updating TV Hub later must use the *same* certificate. With a different one, the TV makes you uninstall TV Hub first, which wipes your shows, channels and settings.
+   - **How:** `./build.sh` does this for you. It saves `tv-hub-certificate-backup.zip` next to this README.
+   - **Without the script:** zip the `tizen-studio-data/keystore` and `tizen-studio-data/profile` folders yourself. They're in your home folder, or `C:\tizen-studio-data` on Windows.
+   - **Then:** email the zip to yourself, or put it in Google Drive or iCloud, and keep a note of the certificate password.
+   - **Next time:** on a borrowed computer, install Tizen Studio, unzip the backup into the same places, then build as usual.
 
 ## First-time setup (on the TV)
 
 1. Install **NOW**, **RTÉ Player** and **Virgin Media Player** from Samsung's app store if you haven't already. TV Hub finds them by name.
-2. Open **Settings → Import channels from TV** and tick the satellite channels you want. If the TV doesn't share its list, use **Add by number**.
-3. Check each app tile opens. If one doesn't, remove it and use **+ Add an installed app**. That list shows the exact app IDs on *your* TV.
+2. In the **Satellite TV** row, choose **+ Add your satellite channels** and tick the ones you watch. They come from the TV's own channel scan, so the numbers are right for your TV. If the TV doesn't share its list, use **Settings → Add by number**.
+3. Check each app tile opens. If one doesn't, or opens the wrong thing:
+   1. Go to **Settings → Apps → Change app** on that tile.
+   2. Pick the right app from the list of apps installed on your TV.
+
+   This keeps the tile's links to My shows, On now and Sport. Don't remove the tile and add the app again.
 4. Choose which app goes on each colour button.
 5. Add your shows: highlight **+ Add a show**, type the name with the on-screen keyboard, pick the right result, then choose which app you watch it on. TV Hub suggests one.
 
@@ -81,14 +89,20 @@ You need a Windows, Mac or Linux computer on the same Wi-Fi or network as the TV
   - **RTÉ:** tvireland.ie
   - **Sky Sports:** Sky's own TV-guide service (the Irish versions of the channels)
 
-  None of them is an official API, so one could change without warning. If that happens, the tile just shows the channel name and still opens the app.
+  None of them is an official API, so one could change without warning.
+  - **If one breaks:** its tiles say **"Listings unavailable"**, and OK still opens the app.
+  - **Retries:** TV Hub tries again every 10 minutes, not constantly.
+  - **Fixing it:** needs an update to TV Hub, which needs a computer.
 - **Sport listings show what Sky is broadcasting.** What you can actually watch depends on your NOW membership.
 
 - **Samsung's Home button still opens Samsung's own menu.** Only a jailbreak can replace that, so TV Hub works as your "first app" instead. Putting it in the first slot of the app bar makes it one press away.
 - **Live TV inside the app.** Older Samsungs normally allow apps to tune channels and show the picture (the `tv.channel` and `tv.window` permissions). If yours doesn't:
   - **The install fails with a "privilege" error:** delete the two `tv.channel` / `tv.window` lines in `config.xml` and install again.
-  - **Live TV still won't play in the app:** pressing a channel opens the TV's own live-TV screen instead. If that doesn't open either, find the correct app ID in Settings → *Add an installed app* and put it in `tvViewerAppId` in `js/defaults.js`.
-- Your settings are stored on the TV. They survive reinstalls of the same app but not a factory reset.
+  - **Live TV still won't play in the app:** pressing OK on a channel opens the TV's own live-TV screen and tells you which channel to choose. Highlighting a channel never leaves TV Hub. If the TV's live-TV screen doesn't open, use the remote's **Source** button and choose **TV**.
+- **Coming back after watching Netflix and the rest:** press **Home** on the remote, then **TV Hub**. TV Hub remembers which tile you were on.
+- **Where your settings are kept:** on the TV.
+  - They survive updates signed with the same certificate (see install step 8).
+  - They don't survive an uninstall or a factory reset.
 - To change the default apps or channels, edit `js/defaults.js`.
 
 ## Files

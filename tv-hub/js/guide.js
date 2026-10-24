@@ -8,18 +8,20 @@
  *   sky       - Sky's EPG service (JSON, many channels per request), used for Sky Sports
  *
  * A programme is { title, start: Date, stop: Date, image, desc }.
+ * All "days" are the TV's local day, which is Irish time (the same as UK time) at home.
  */
 var Guide = (function () {
-  var cache = {};    // "source|date|id" -> { at: ms, data } where data is { channelId: [programmes] }
-  var pending = {};  // same key -> [callbacks] while a request is in flight
+  var cache = {};    // request URL -> { at: ms, data } ; data null = the request failed
+  var pending = {};  // request URL -> [callbacks] while a request is in flight
   var HOUR = 3600 * 1000;
+  var RETRY_AFTER_FAILURE = 10 * 60 * 1000;
+  var DAY = 24 * HOUR;
 
   function pad(n) { return (n < 10 ? '0' : '') + n; }
   function ymd(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
-  function ymdUtc(d) { return '' + d.getUTCFullYear() + pad(d.getUTCMonth() + 1) + pad(d.getUTCDate()); }
   function addDays(d, n) { var c = new Date(d.getTime()); c.setDate(c.getDate() + n); return c; }
 
-  // "9.30pm" on a given day -> Date (TV's local time, which is Irish time at home)
+  // "9.30pm" on a given day -> Date
   function parseClock(day, text) {
     var m = /(\d{1,2})[.:](\d{2})\s*(am|pm)/i.exec(text || '');
     if (!m) return null;
@@ -28,17 +30,17 @@ var Guide = (function () {
     return new Date(day.getFullYear(), day.getMonth(), day.getDate(), h, parseInt(m[2], 10));
   }
 
-  // Programmes in a list run back to back: fill missing stop times and roll past midnight.
+  // Programmes in a list run back to back: roll later ones past midnight, fill missing stop times.
   function chain(list) {
-    for (var i = 0; i < list.length; i++) {
-      var p = list[i], prev = list[i - 1];
-      if (prev && p.start < prev.start) p.start = addDays(p.start, 1);
-      if (prev && !prev.stop) prev.stop = p.start;
+    for (var i = 1; i < list.length; i++) {
+      while (list[i].start < list[i - 1].start) {
+        var shift = list[i].stop ? list[i].stop - list[i].start : 0;
+        list[i].start = addDays(list[i].start, 1);
+        if (list[i].stop) list[i].stop = new Date(list[i].start.getTime() + shift);
+      }
     }
-    var last = list[list.length - 1];
-    if (last && !last.stop) last.stop = new Date(last.start.getTime() + 30 * 60000);
     for (i = 0; i < list.length; i++) {
-      if (list[i].stop <= list[i].start) list[i].stop = addDays(list[i].stop, 1);
+      if (!list[i].stop) list[i].stop = list[i + 1] ? list[i + 1].start : new Date(list[i].start.getTime() + 30 * 60000);
     }
     return list;
   }
@@ -60,21 +62,28 @@ var Guide = (function () {
           var list = [];
           for (var i = 0; i < items.length; i++) {
             var info = items[i];
-            var start = parseClock(day, info.getAttribute('data-time'));
+            // data-time is "9.00pm - 10.00pm"; the end time is the real one (data-minutes only
+            // counts the part of a programme that falls inside this day).
+            var parts = (info.getAttribute('data-time') || '').split('-');
+            var start = parseClock(day, parts[0]);
             if (!start) continue;
+            var stop = parseClock(day, parts[1]);
+            if (stop && stop <= start) stop = addDays(stop, 1);
             var h2 = info.querySelector('h2');
             list.push({
               title: h2 ? h2.textContent.trim() : '',
-              start: start,
-              mins: parseInt((info.querySelector('.time') || info).getAttribute('data-minutes'), 10) || 0,
+              start: start, stop: stop,
               image: info.getAttribute('data-image') || null,
               desc: info.getAttribute('data-description') || ''
             });
           }
-          chain(list).forEach(function (p) {
-            if (p.mins) p.stop = new Date(p.start.getTime() + p.mins * 60000);
-          });
-          out[rows[r].getAttribute('data-channel')] = list;
+          // Each day's page starts with the programme that began the evening before
+          // (e.g. "11.05pm - 12.05am"): move it back a day.
+          if (list.length > 1 && list[0].start > list[1].start) {
+            list[0].start = addDays(list[0].start, -1);
+            if (list[0].stop) list[0].stop = addDays(list[0].stop, -1);
+          }
+          out[rows[r].getAttribute('data-channel')] = chain(list);
         }
         return out;
       }
@@ -112,8 +121,9 @@ var Guide = (function () {
     sky: {
       perDay: true,
       headers: { 'X-SkyOTT-Territory': 'GB' },
+      // Sky's schedule days are UK/Irish local days.
       url: function (day, id, ids) {
-        return 'https://awk.epgsky.com/hawk/linear/schedule/' + ymdUtc(day) + '/' + ids.join(',');
+        return 'https://awk.epgsky.com/hawk/linear/schedule/' + ymd(day).replace(/-/g, '') + '/' + ids.join(',');
       },
       parse: function (text) {
         var out = {};
@@ -138,24 +148,42 @@ var Guide = (function () {
   // All Sky channel IDs we ask about, so one request covers the whole Sport row.
   var skyIds = (TVHUB_DEFAULTS.sportChannels || []).map(function (c) { return c.sid; });
 
+  function hasProgrammes(data) {
+    for (var k in data) if (data[k] && data[k].length) return true;
+    return false;
+  }
+
+  // Drop cached days older than two days, so a TV left on for weeks doesn't keep growing.
+  function prune() {
+    var now = Date.now();
+    for (var url in cache) if (now - cache[url].at > 2 * DAY) delete cache[url];
+  }
+
+  // cb(data) where data is { channelId: [programmes] }, or null if unavailable.
   function fetchDay(source, day, id, cb) {
     var src = sources[source];
-    var key = source + '|' + ymd(day) + (src.perDay ? '' : '|' + id);
-    var hit = cache[key];
-    if (hit && Date.now() - hit.at < HOUR) return cb(hit.data);
-    if (pending[key]) return pending[key].push(cb);
-    pending[key] = [cb];
     var url = src.url(day, id, skyIds);
+    var hit = cache[url];
+    if (hit) {
+      var age = Date.now() - hit.at;
+      if (hit.data ? age < HOUR : age < RETRY_AFTER_FAILURE) return cb(hit.data || hit.last || null);
+    }
+    if (pending[url]) return pending[url].push(cb);
+    pending[url] = [cb];
+    prune();
     Platform.getText(url, src.headers, function (err, text) {
       var data = null;
       if (!err) {
         try { data = src.parse(text, day, id); } catch (e) { data = null; }
       }
-      if (data) cache[key] = { at: Date.now(), data: data };
-      else if (hit) data = hit.data; // keep showing older listings if a refresh fails
-      var cbs = pending[key];
-      delete pending[key];
-      cbs.forEach(function (f) { f(data); });
+      // A page that parses to nothing means the site changed: treat it as a failure.
+      if (data && !hasProgrammes(data)) data = null;
+      var last = hit && (hit.data || hit.last);
+      cache[url] = { at: Date.now(), data: data, last: data ? null : last };
+      var cbs = pending[url];
+      delete pending[url];
+      // If a refresh fails, keep showing the older listings we already had.
+      cbs.forEach(function (f) { f(data || last || null); });
     });
   }
 
@@ -166,18 +194,20 @@ var Guide = (function () {
     return null;
   }
 
-  // cb({ now, next }) for a channel. now/next are programmes or null.
+  // cb({ now, next, unavailable }) for a channel. now/next are programmes or null;
+  // unavailable is true when the listings couldn't be loaded at all.
   function nowNext(source, id, cb) {
     var now = new Date();
     fetchDay(source, now, id, function (today) {
       var found = today && today[id] && pick(today[id], now);
       if (found) return cb(found);
-      // Late at night the current programme may be on yesterday's listings.
+      // Just after midnight the current programme may only be on yesterday's listings.
       fetchDay(source, addDays(now, -1), id, function (yday) {
         var merged = ((yday && yday[id]) || []).concat((today && today[id]) || []);
         found = pick(merged, now);
         if (found) return cb(found);
-        cb(Platform.isTv ? { now: null, next: null } : demo(id));
+        if (!Platform.isTv) return cb(demo(id));
+        cb({ now: null, next: null, unavailable: !today && !yday });
       });
     });
   }

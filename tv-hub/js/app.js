@@ -12,6 +12,7 @@
   var PLAYER = TVHUB_DEFAULTS.playerChannels;
   var SPORT = TVHUB_DEFAULTS.sportChannels;
   var SKY_COLOUR = '#003f8c';
+  var MINUTE = 60000, HOUR = 60 * MINUTE;
 
   function $(id) { return document.getElementById(id); }
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
@@ -21,7 +22,10 @@
     if (text != null) e.textContent = text;
     return e;
   }
-  function bgImage(e, url) { if (url) e.style.backgroundImage = 'url("' + url + '")'; }
+  // Image URLs come from web listings, so escape them before putting them in CSS.
+  function setImage(e, url) {
+    e.style.backgroundImage = url ? 'url("' + String(url).replace(/["\\\n\r]/g, encodeURIComponent) + '")' : '';
+  }
   function trim(s, n) { return s && s.length > n ? s.slice(0, n - 1).replace(/\s+\S*$/, '') + '…' : (s || ''); }
 
   // ---------------------------------------------------------------- state
@@ -31,36 +35,54 @@
   function fresh() {
     var d = clone(TVHUB_DEFAULTS);
     return {
-      version: d.version, apps: d.apps, channels: d.channels, shows: d.shows,
-      sportHidden: [], options: d.options, usage: {}, lastChannel: 0
+      version: d.version, apps: d.apps, channels: d.channels, online: d.online, shows: d.shows,
+      sportHidden: [], options: d.options, usage: {}, lastKey: null
     };
   }
 
   function load() {
     var saved = null;
     try { saved = JSON.parse(localStorage.getItem(STORE_KEY)); } catch (e) {}
-    if (!saved) return fresh();
+    if (!saved || typeof saved !== 'object') return fresh();
     var opts = clone(TVHUB_DEFAULTS.options);
     for (var k in saved.options) opts[k] = saved.options[k];
     saved.options = opts;
     saved.usage = saved.usage || {};
-    if ((saved.version || 1) < TVHUB_DEFAULTS.version) migrate(saved);
+    migrate(saved);
     return saved;
   }
 
-  // Bring a setup saved by an older version up to date without losing anything.
+  // Bring a setup saved by an older version up to date, one version at a time, without losing anything.
   function migrate(s) {
     var d = clone(TVHUB_DEFAULTS);
-    d.apps.forEach(function (app, i) {
-      var mine = s.apps.filter(function (a) { return a.id === app.id; })[0];
-      if (mine) { if (!mine.match) mine.match = app.match; }
-      else s.apps.splice(Math.min(i, s.apps.length), 0, app);
-    });
-    var players = d.channels.filter(function (c) { return c.kind === 'player'; });
-    s.channels = players.concat(s.channels);
-    s.lastChannel = (s.lastChannel || 0) + players.length;
-    s.shows = s.shows || [];
-    s.sportHidden = s.sportHidden || [];
+    var v = s.version || 1;
+    if (!Array.isArray(s.apps)) s.apps = d.apps;
+    if (!Array.isArray(s.channels)) s.channels = [];
+    if (v < 2) {
+      // Version 2 added NOW, RTÉ Player and Virgin Media Player, My shows and Sport.
+      d.apps.forEach(function (app, i) {
+        var mine = s.apps.filter(function (a) { return a.id === app.id; })[0];
+        if (!mine) s.apps.splice(Math.min(i, s.apps.length), 0, app);
+      });
+      s.shows = s.shows || [];
+      s.sportHidden = s.sportHidden || [];
+    }
+    if (v < 3) {
+      // Version 3 keeps online channels in their own list and remembers the last channel by
+      // its number instead of its position.
+      var last = s.channels[s.lastChannel || 0];
+      var players = s.channels.filter(function (c) { return c.kind === 'player'; });
+      s.online = v < 2 ? d.online : players.map(function (c) { return c.guide; });
+      s.channels = s.channels.filter(function (c) { return c.kind !== 'player'; });
+      s.lastKey = last && last.kind !== 'player' ? chKey(last) : null;
+      delete s.lastChannel;
+      s.options.smartOrder = false;
+      // Tighter name patterns for finding apps on the TV.
+      s.apps.forEach(function (a) {
+        var def = d.apps.filter(function (x) { return x.id === a.id; })[0];
+        if (def) a.match = def.match;
+      });
+    }
     s.version = d.version;
   }
 
@@ -69,6 +91,7 @@
   }
 
   function appById(id) { return state.apps.filter(function (a) { return a.id === id; })[0]; }
+  function isBuiltIn(app) { return TVHUB_DEFAULTS.apps.some(function (a) { return a.id === app.id; }); }
 
   function visibleApps() {
     var apps = state.apps.filter(function (a) { return !a.hidden; });
@@ -86,30 +109,25 @@
     return state.apps.filter(function (a) { return a.hotkey === colour && !a.hidden; })[0];
   }
 
-  function isTuner(ch) { return ch && ch.kind !== 'player'; }
+  function chKey(c) { return c.major + '-' + (c.minor || 0); }
   function channelLabel(c) { return c.minor ? c.major + '-' + c.minor : String(c.major); }
-  function playerDef(ch) { return PLAYER[ch.guide] || {}; }
-
-  // Index of the next satellite channel from `from` in direction `dir` (wraps), or -1.
-  function stepTuner(from, dir) {
-    var n = state.channels.length;
-    for (var k = 1; k <= n; k++) {
-      var i = (((from + dir * k) % n) + n) % n;
-      if (isTuner(state.channels[i])) return i;
-    }
+  function channelIndex(key) {
+    for (var i = 0; i < state.channels.length; i++) if (chKey(state.channels[i]) === key) return i;
     return -1;
   }
-  function lastTuner() {
-    var i = state.lastChannel;
-    return isTuner(state.channels[i]) ? i : stepTuner(-1, 1);
+  function lastIndex() {
+    var i = channelIndex(state.lastKey);
+    return i !== -1 ? i : (state.channels.length ? 0 : -1);
   }
 
   // ---------------------------------------------------------------- navigation
 
-  // A screen's focusable items live in `.nav-row` containers. UP/DOWN moves between rows,
-  // LEFT/RIGHT within a row. Each screen remembers where focus was.
-  function Nav(root) {
+  // A screen's focusable items live in `.nav-row` containers. LEFT/RIGHT moves within a row.
+  // UP/DOWN moves between rows: on the home screen to the tile nearest on screen, in lists
+  // (settings, pickers) to the start of the row.
+  function Nav(root, mode) {
     this.root = root;
+    this.mode = mode || 'nearest';
     this.r = 0;
     this.c = 0;
   }
@@ -122,6 +140,10 @@
   Nav.prototype.current = function () {
     var row = this.rows()[this.r];
     return row ? this.items(row)[this.c] : null;
+  };
+  Nav.prototype.currentKey = function () {
+    var cur = this.current();
+    return cur ? cur.getAttribute('data-key') : null;
   };
   Nav.prototype.focus = function (r, c) {
     var rows = this.rows();
@@ -137,17 +159,42 @@
     scrollIntoView(cur);
     if (cur.onfocusitem) cur.onfocusitem();
   };
+  // Focus the item with this data-key if it's still there (e.g. after the screen is rebuilt).
+  Nav.prototype.focusKey = function (key) {
+    var rows = this.rows();
+    for (var r = 0; key && r < rows.length; r++) {
+      var items = this.items(rows[r]);
+      for (var c = 0; c < items.length; c++) {
+        if (items[c].getAttribute('data-key') === key) return this.focus(r, c);
+      }
+    }
+    this.refresh();
+  };
   Nav.prototype.refresh = function () { this.focus(this.r, this.c); };
   Nav.prototype.move = function (action) {
-    if (action === 'UP') this.focus(this.r - 1, this.c);
-    else if (action === 'DOWN') this.focus(this.r + 1, this.c);
-    else if (action === 'LEFT') this.focus(this.r, this.c - 1);
-    else if (action === 'RIGHT') this.focus(this.r, this.c + 1);
+    if (action === 'LEFT') return this.focus(this.r, this.c - 1);
+    if (action === 'RIGHT') return this.focus(this.r, this.c + 1);
+    var r = this.r + (action === 'UP' ? -1 : action === 'DOWN' ? 1 : 0);
+    if (r === this.r) return;
+    var rows = this.rows();
+    if (r < 0 || r >= rows.length) return;
+    if (this.mode === 'first') return this.focus(r, 0);
+    // Pick the item in the new row whose centre is closest to the current one.
+    var cur = this.current();
+    var x = cur ? centreX(cur) : 0;
+    var items = this.items(rows[r]);
+    var best = 0, bestDist = Infinity;
+    for (var i = 0; i < items.length; i++) {
+      var d = Math.abs(centreX(items[i]) - x);
+      if (d < bestDist) { best = i; bestDist = d; }
+    }
+    this.focus(r, best);
   };
   Nav.prototype.select = function () {
     var cur = this.current();
     if (cur && cur.onselect) cur.onselect();
   };
+  function centreX(e) { var b = e.getBoundingClientRect(); return b.left + b.width / 2; }
 
   // Keeps the focused item on screen: tile rows slide sideways, the home rows and
   // settings panels scroll vertically.
@@ -161,11 +208,10 @@
     }
     if (row.parentNode && row.parentNode.id === 'rows') {
       var title = row.previousElementSibling;
+      // The focused row sits at the top, with the rows below it in view.
       var top = (title && title.classList.contains('row-title') ? title : row).offsetTop - row.parentNode.offsetTop;
-      var bottom = row.offsetTop - row.parentNode.offsetTop + row.offsetHeight + 24;
-      var h = row.parentNode.parentNode.clientHeight;
-      if (top < homeScroll) homeScroll = top;
-      else if (bottom > homeScroll + h) homeScroll = bottom - h;
+      var maxScroll = Math.max(0, row.parentNode.scrollHeight - row.parentNode.parentNode.clientHeight);
+      homeScroll = Math.min(top, maxScroll);
       row.parentNode.style.transform = 'translateY(' + (-homeScroll) + 'px)';
     }
     var scroller = item.closest ? item.closest('.scroll') : null;
@@ -187,6 +233,7 @@
   function show(name) {
     var prev = current;
     current = name;
+    clearTimeout(previewTimer);
     ['home', 'watch'].concat(OVERLAYS).forEach(function (s) {
       var on = s === name || (s === 'home' && OVERLAYS.indexOf(name) !== -1);
       $(s).classList.toggle('active', on);
@@ -196,7 +243,7 @@
 
   // ---------------------------------------------------------------- hero (top half of home)
 
-  // o: { eyebrow, title, line1, line2, hint, progress (0-1 or null), art: {image, color, label} | null }
+  // o: { eyebrow, title, line1, line2, hint, progress (0-1 or null), warn, art: {image, color, label} | null }
   // art null = show the live satellite picture in the preview box.
   function hero(o) {
     $('hero-eyebrow').textContent = o.eyebrow || '';
@@ -212,39 +259,188 @@
     art.classList.toggle('hidden', !o.art);
     if (o.art) {
       art.style.backgroundColor = o.art.color || '';
-      art.style.backgroundImage = o.art.image ? 'url("' + o.art.image + '")' : '';
+      setImage(art, o.art.image);
       art.classList.toggle('has-image', !!o.art.image);
       art.firstChild.textContent = o.art.label || '';
     }
   }
 
   function untilText(p) { return p ? 'until ' + Guide.clock(p.stop) : ''; }
+  var UNAVAILABLE = 'Listings unavailable right now — OK still opens the app';
+
+  // ---------------------------------------------------------------- live data
+
+  // Latest listings, shared by every tile that shows them.
+  var sportNow = {};   // sport key  -> { now, next, unavailable }
+  var onlineNow = {};  // player key -> { now, next, unavailable }
+  // Tiles register a painter per data key; painters only update their own tile.
+  var painters = {};
+  function onPaint(key, fn) { (painters[key] = painters[key] || []).push(fn); }
+  function paint(key) { (painters[key] || []).forEach(function (f) { f(); }); }
+
+  function isLiveEvent(p) { return !!p && /\blive\b/i.test(p.title); }
+  function visibleSport() {
+    return SPORT.filter(function (c) { return state.sportHidden.indexOf(c.key) === -1; });
+  }
+  function liveSport() {
+    return visibleSport().filter(function (c) { return isLiveEvent((sportNow[c.key] || {}).now); });
+  }
+
+  // Fetch (or re-read from the guide cache) everything the home screen shows. Results only
+  // repaint tiles; the "On now" row is rebuilt separately, and never while you're in it.
+  function refreshData() {
+    state.online.forEach(function (k) {
+      var def = PLAYER[k];
+      if (!def) return;
+      Guide.nowNext(def.source, def.id, function (nn) { onlineNow[k] = nn; paint('online-' + k); });
+    });
+    var left = visibleSport().length;
+    visibleSport().forEach(function (c) {
+      Guide.nowNext('sky', c.sid, function (nn) {
+        sportNow[c.key] = nn;
+        paint('sport-' + c.key);
+        if (--left === 0) scheduleOnNow();
+      });
+    });
+    state.channels.forEach(function (ch) { paint('sat-' + chKey(ch)); });
+  }
 
   // ---------------------------------------------------------------- home
 
-  var homeNav = new Nav($('home'));
-  var updaters = [];   // refresh "now on" info in tiles every minute
-  var sportNow = {};   // sport key -> latest { now, next }
+  var homeNav = new Nav($('home'), 'nearest');
 
+  // Rebuild the home screen, keeping focus on the same tile if it's still there.
   function renderHome() {
-    updaters = [];
+    var key = homeNav.currentKey();
+    painters = {};
+    renderOnNow();
     renderShows();
     renderApps();
     renderChannels();
     renderSport();
     renderTools();
     renderHotkeys();
-    homeNav.refresh();
+    if (key) homeNav.focusKey(key);
+    else homeNav.focus(firstRow(), 0);
+    refreshData();
+  }
+
+  // The landing row: what's on now, else your shows, else your apps.
+  function firstRow() {
+    var rows = homeNav.rows();
+    var want = ['row-onnow', state.shows.length ? 'row-shows' : '', 'row-apps'];
+    for (var w = 0; w < want.length; w++) {
+      for (var i = 0; i < rows.length; i++) if (rows[i].id === want[w]) return i;
+    }
+    return 0;
+  }
+
+  function tile(cls, key) {
+    var t = el('div', 'tile focusable ' + cls);
+    t.setAttribute('data-key', key);
+    return t;
+  }
+
+  // -- On now: live sport, then what's on RTÉ / Virgin Media, then your last satellite channel
+
+  var onNowShown = '';
+  function onNowSignature() {
+    return liveSport().map(function (c) { return c.key; }).join() + '|' + state.online.join();
+  }
+
+  function renderOnNow() {
+    var row = $('row-onnow');
+    row.innerHTML = '';
+    liveSport().forEach(function (c) { row.appendChild(sportTile(c, 'onnow-sport-' + c.key)); });
+    state.online.forEach(function (k) { if (PLAYER[k]) row.appendChild(onlineTile(k)); });
+    var li = lastIndex();
+    if (li !== -1) row.appendChild(satelliteTile(state.channels[li], 'onnow-sat', true));
+    onNowShown = onNowSignature();
+    var empty = !row.firstChild;
+    row.classList.toggle('hidden', empty);
+    row.previousElementSibling.classList.toggle('hidden', empty);
+  }
+
+  // Rebuild "On now" when live sport starts or ends. Never mid-navigation: wait until the
+  // remote has been idle for a few seconds. Focus stays on the same tile.
+  var onNowTimer = null;
+  var lastKeyAt = 0;
+  function scheduleOnNow(delay) {
+    clearTimeout(onNowTimer);
+    onNowTimer = setTimeout(function () {
+      if (current !== 'home' || onNowSignature() === onNowShown) return;
+      var idle = Date.now() - lastKeyAt;
+      if (idle < 3000) return scheduleOnNow(3000 - idle);
+      renderHome();
+    }, delay || 0);
+  }
+
+  function onlineTile(k) {
+    var def = PLAYER[k];
+    var app = appById(def.app) || {};
+    var t = tile('pic wide', 'online-' + k);
+    t.style.backgroundColor = app.color || '';
+    var src = el('div', 'src', def.name);
+    src.style.background = app.color || '#555';
+    t.appendChild(src);
+    var name = el('div', 'name small', def.name);
+    var sub = el('div', 'sub', 'Loading what’s on…');
+    var bar = el('div', 'bar');
+    bar.appendChild(el('i'));
+    t.appendChild(name);
+    t.appendChild(sub);
+    t.appendChild(bar);
+    var how = 'OK opens ' + (app.name || 'the player') + ' → Live → ' + def.name;
+    function draw() {
+      var nn = onlineNow[k];
+      if (!nn) return;
+      if (nn.now) {
+        name.textContent = nn.now.title;
+        sub.textContent = untilText(nn.now) + (nn.next ? ' · then ' + nn.next.title : '');
+        sub.classList.remove('warn');
+        bar.firstChild.style.width = Math.round(Guide.progress(nn.now) * 100) + '%';
+        setImage(t, nn.now.image);
+      } else {
+        name.textContent = def.name;
+        sub.textContent = nn.unavailable ? 'Listings unavailable' : 'Nothing listed right now';
+        sub.classList.add('warn');
+        setImage(t, null);
+      }
+      if (t.classList.contains('focused')) t.onfocusitem();
+    }
+    onPaint('online-' + k, draw);
+    t.onselect = function () { openPlayerChannel(k); };
+    t.onfocusitem = function () {
+      var nn = onlineNow[k];
+      hero({
+        eyebrow: 'Live on ' + def.name, title: nn && nn.now ? nn.now.title : def.name,
+        line1: !nn ? 'Loading what’s on…' : nn.now ? Guide.clock(nn.now.start) + ' – ' + Guide.clock(nn.now.stop)
+          : nn.unavailable ? UNAVAILABLE : 'Nothing listed right now',
+        progress: nn && nn.now ? Guide.progress(nn.now) : null,
+        line2: nn && nn.next ? 'Next at ' + Guide.clock(nn.next.start) + ': ' + nn.next.title : trim(nn && nn.now && nn.now.desc, 160),
+        hint: how,
+        art: { image: nn && nn.now && nn.now.image, color: app.color, label: def.name }
+      });
+    };
+    draw();
+    return t;
+  }
+
+  function openPlayerChannel(k) {
+    var def = PLAYER[k];
+    var app = appById(def.app);
+    if (!app) return toast('Add ' + def.name + '’s app in Settings first');
+    openApp(app, 'Opening ' + app.name + ' — choose Live, then ' + def.name, 1500);
   }
 
   // -- My shows
 
   var showTried = {};
+  // New episodes first, then the order you set in Settings.
   function sortedShows() {
     var order = state.shows.slice();
     return state.shows.slice().sort(function (a, b) {
-      var n = (Shows.isNew(b) ? 1 : 0) - (Shows.isNew(a) ? 1 : 0);
-      return n || (b.lastOpened || 0) - (a.lastOpened || 0) || order.indexOf(a) - order.indexOf(b);
+      return (Shows.isNew(b) ? 1 : 0) - (Shows.isNew(a) ? 1 : 0) || order.indexOf(a) - order.indexOf(b);
     });
   }
 
@@ -253,9 +449,9 @@
     row.innerHTML = '';
     sortedShows().forEach(function (s) {
       var app = appById(s.app) || {};
-      var t = el('div', 'tile show focusable');
+      var t = tile('show', 'show-' + s.tvmazeId);
       var poster = el('div', 'poster', s.info && s.info.poster ? '' : s.name.charAt(0));
-      bgImage(poster, s.info && s.info.poster);
+      setImage(poster, s.info && s.info.poster);
       var body = el('div', 'body');
       var src = el('div', 'src', app.name || 'Choose app');
       src.style.background = app.color || '#555';
@@ -267,16 +463,16 @@
       t.appendChild(poster);
       t.appendChild(body);
       t.onselect = function () { openShow(s); };
-      t.onfocusitem = t.heroRefresh = function () { heroShow(s); };
+      t.onfocusitem = function () { heroShow(s); };
       row.appendChild(t);
 
-      var stale = !s.info || Date.now() - s.info.at > 6 * 3600 * 1000;
-      if (stale && Date.now() - (showTried[s.tvmazeId] || 0) > 10 * 60 * 1000) {
+      var stale = !s.info || Date.now() - s.info.at > 6 * HOUR;
+      if (stale && Date.now() - (showTried[s.tvmazeId] || 0) > 10 * MINUTE) {
         showTried[s.tvmazeId] = Date.now();
         Shows.refresh(s, function () { save(); scheduleRender(); });
       }
     });
-    var add = el('div', 'tile add focusable');
+    var add = tile('add', 'show-add');
     add.appendChild(el('div', 'name', '+ Add a show'));
     add.onselect = function () { show('search'); };
     add.onfocusitem = function () {
@@ -306,7 +502,6 @@
   }
 
   function openShow(s) {
-    s.lastOpened = Date.now();
     var app = appById(s.app);
     if (!app) { toast('Choose which app ' + s.name + ' is on in Settings'); return; }
     openApp(app);
@@ -318,7 +513,7 @@
     var row = $('row-apps');
     row.innerHTML = '';
     visibleApps().forEach(function (app) {
-      var t = el('div', 'tile focusable');
+      var t = tile('', 'app-' + app.id);
       t.style.background = app.color;
       t.style.color = app.text || '#fff';
       t.appendChild(el('div', 'name', app.name));
@@ -328,7 +523,8 @@
         hero({
           eyebrow: 'App', title: app.name,
           line1: app.hotkey ? 'Shortcut: the ' + app.hotkey + ' button on your remote' : '',
-          line2: app.appId ? '' : 'Not found on this TV yet — add it in Settings',
+          line2: app.appId ? 'To come back here afterwards, press Home on the remote, then TV Hub.'
+            : 'Not found on this TV yet — open Settings › Apps › Change app',
           hint: 'Press OK to open', art: { color: app.color, label: app.name }
         });
       };
@@ -347,163 +543,116 @@
       s.appendChild(document.createTextNode(app.name));
       hk.appendChild(s);
     });
-    hk.appendChild(el('span', null, '0–9  jump to channel'));
+    if (state.channels.length) hk.appendChild(el('span', null, '0–9  channel number'));
   }
 
-  // -- Live channels (satellite + player apps)
+  // -- Satellite TV
 
   function renderChannels() {
     var row = $('row-channels');
     row.innerHTML = '';
-    var last = lastTuner();
+    var li = lastIndex();
     state.channels.forEach(function (ch, i) {
-      row.appendChild(isTuner(ch) ? tunerTile(ch, i, i === last) : playerTile(ch, i));
+      row.appendChild(satelliteTile(ch, 'sat-' + chKey(ch), i === li));
     });
+    var add = tile('add', 'sat-add');
+    add.appendChild(el('div', 'name', state.channels.length ? '+ More channels' : '+ Add your satellite channels'));
+    add.onselect = function () { openChannelPicker('home'); };
+    add.onfocusitem = function () {
+      hero({
+        eyebrow: 'Satellite TV', title: state.channels.length ? 'Add more channels' : 'Set up your channels',
+        line1: 'Pick the free-to-air channels you watch from the list your TV has scanned.',
+        hint: 'Press OK to choose channels', art: { color: '#232b45', label: '+' }
+      });
+    };
+    row.appendChild(add);
   }
 
-  function tunerTile(ch, i, isLast) {
-    var t = el('div', 'tile channel focusable');
+  function satelliteTile(ch, key, isLast) {
+    var t = tile('channel', key);
     t.appendChild(el('div', 'num', channelLabel(ch)));
-    if (isLast) t.appendChild(el('div', 'live', 'LAST'));
+    if (isLast) t.appendChild(el('div', 'live', key === 'onnow-sat' ? 'SATELLITE' : 'LAST'));
     t.appendChild(el('div', 'name', ch.name));
     var sub = el('div', 'sub', '');
     t.appendChild(sub);
-    t.onselect = function () { watchChannel(i); };
-    t.onfocusitem = function () { previewChannel(i); };
-    Platform.getNowNext(ch, function (nn) { if (nn.now) sub.textContent = 'Now: ' + nn.now; });
-    return t;
-  }
-
-  function playerTile(ch, i) {
-    var def = playerDef(ch);
-    var app = appById(def.app) || {};
-    var t = el('div', 'tile pic wide focusable');
-    t.style.backgroundColor = app.color || '';
-    var src = el('div', 'src', app.name || '');
-    src.style.background = app.color || '#555';
-    t.appendChild(src);
-    t.appendChild(el('div', 'name small', ch.name));
-    var sub = el('div', 'sub', 'Live on ' + (app.name || 'the player'));
-    var bar = el('div', 'bar');
-    bar.appendChild(el('i'));
-    t.appendChild(sub);
-    t.appendChild(bar);
-    var latest = null;
-    function update() {
-      Guide.nowNext(def.source, def.id, function (nn) {
-        latest = nn;
-        if (nn.now) {
-          sub.textContent = 'Now: ' + nn.now.title;
-          bar.firstChild.style.width = Math.round(Guide.progress(nn.now) * 100) + '%';
-          bgImage(t, nn.now.image);
-        }
-        if (t.classList.contains('focused')) t.heroRefresh();
-      });
+    function draw() {
+      Platform.getNowNext(ch, function (nn) { sub.textContent = nn.now ? 'Now: ' + nn.now : ''; });
     }
-    update();
-    updaters.push(update);
-    t.onselect = function () { openPlayerChannel(ch); };
-    t.onfocusitem = t.heroRefresh = function () {
-      var nn = latest || {};
-      hero({
-        eyebrow: 'Live on ' + (app.name || 'the player'), title: ch.name,
-        line1: nn.now ? 'Now: ' + nn.now.title + '  ·  ' + untilText(nn.now) : 'Loading what’s on…',
-        progress: nn.now ? Guide.progress(nn.now) : null,
-        line2: nn.next ? 'Next at ' + Guide.clock(nn.next.start) + ': ' + nn.next.title : '',
-        hint: 'Press OK to open ' + (app.name || 'the app'),
-        art: { image: nn.now && nn.now.image, color: app.color, label: ch.name }
-      });
-    };
+    onPaint('sat-' + chKey(ch), draw);
+    t.onselect = function () { watchChannel(channelIndex(chKey(ch))); };
+    t.onfocusitem = function () { previewChannel(ch, key); };
     return t;
   }
 
-  function openPlayerChannel(ch) {
-    var app = appById(playerDef(ch).app);
-    if (!app) return toast('Add the player app in Settings first');
-    openApp(app, 'Opening ' + app.name + ' — pick ' + ch.name + ' under Live');
-  }
-
-  // -- Sport (Sky Sports on NOW)
-
-  function isLiveEvent(p) { return !!p && /\blive\b/i.test(p.title); }
-
-  // Shown sport channels, live events first, then in list order.
-  function sportOrder() {
-    return SPORT.filter(function (c) { return state.sportHidden.indexOf(c.key) === -1; }).sort(function (a, b) {
-      var la = isLiveEvent((sportNow[a.key] || {}).now), lb = isLiveEvent((sportNow[b.key] || {}).now);
-      return (lb ? 1 : 0) - (la ? 1 : 0) || SPORT.indexOf(a) - SPORT.indexOf(b);
-    });
-  }
-  function orderKey(list) { return list.map(function (c) { return c.key; }).join(); }
+  // -- Sport (every Sky Sports channel, in a fixed order)
 
   function renderSport() {
     var row = $('row-sport');
     row.innerHTML = '';
-    var chans = sportOrder();
-    var rendered = orderKey(chans);
+    var chans = visibleSport();
     $('sport-title').classList.toggle('hidden', !chans.length);
     row.classList.toggle('hidden', !chans.length);
-    var app = appById(TVHUB_DEFAULTS.sportApp) || {};
-    var pending = chans.length;
-    chans.forEach(function (c) {
-      var t = el('div', 'tile pic wide focusable');
-      t.style.backgroundColor = SKY_COLOUR;
-      var src = el('div', 'src', c.short);
-      src.style.background = SKY_COLOUR;
-      t.appendChild(src);
-      var flag = el('div', 'flag hidden', 'LIVE');
-      t.appendChild(flag);
-      var name = el('div', 'name small', c.name);
-      var sub = el('div', 'sub', '');
-      var bar = el('div', 'bar');
-      bar.appendChild(el('i'));
-      t.appendChild(name);
-      t.appendChild(sub);
-      t.appendChild(bar);
-      function fill(nn) {
-        if (!nn || !nn.now) return;
-        name.textContent = nn.now.title;
-        sub.textContent = c.short + '  ·  ' + untilText(nn.now);
-        bar.firstChild.style.width = Math.round(Guide.progress(nn.now) * 100) + '%';
-        flag.classList.toggle('hidden', !isLiveEvent(nn.now));
-        bgImage(t, nn.now.image);
-      }
-      function update(first) {
-        Guide.nowNext('sky', c.sid, function (nn) {
-          sportNow[c.key] = nn;
-          fill(nn);
-          if (t.classList.contains('focused')) t.heroRefresh();
-          // Once everything has loaded, re-sort so live events come first (unless you're in this row).
-          if (first && --pending === 0 && orderKey(sportOrder()) !== rendered) resortSport();
-        });
-      }
-      fill(sportNow[c.key]);
-      update(true);
-      updaters.push(function () { update(false); });
-      t.onselect = function () {
-        if (!app.id) return toast('Add the NOW app in Settings first');
-        openApp(app, 'Opening NOW — choose ' + c.name);
-      };
-      t.onfocusitem = t.heroRefresh = function () {
-        var nn = sportNow[c.key] || {};
-        hero({
-          eyebrow: c.name + ' · on NOW', title: nn.now ? nn.now.title : c.name,
-          line1: nn.now ? Guide.clock(nn.now.start) + ' – ' + Guide.clock(nn.now.stop) + (isLiveEvent(nn.now) ? '  ·  LIVE' : '') : 'Loading what’s on…',
-          progress: nn.now ? Guide.progress(nn.now) : null,
-          line2: nn.next ? 'Next at ' + Guide.clock(nn.next.start) + ': ' + nn.next.title : trim(nn.now && nn.now.desc, 160),
-          hint: 'Press OK to open NOW',
-          art: { image: nn.now && nn.now.image, color: SKY_COLOUR, label: c.name }
-        });
-      };
-      row.appendChild(t);
-    });
+    chans.forEach(function (c) { row.appendChild(sportTile(c, 'sport-' + c.key)); });
   }
 
-  function resortSport() {
-    var cur = homeNav.current();
-    if (cur && cur.parentNode.id === 'row-sport') return;
-    renderSport();
-    homeNav.refresh();
+  function sportTile(c, key) {
+    var t = tile('pic wide', key);
+    t.style.backgroundColor = SKY_COLOUR;
+    var src = el('div', 'src', c.short);
+    src.style.background = SKY_COLOUR;
+    t.appendChild(src);
+    var flag = el('div', 'flag hidden', 'LIVE');
+    t.appendChild(flag);
+    var name = el('div', 'name small', c.name);
+    var sub = el('div', 'sub', 'Loading what’s on…');
+    var bar = el('div', 'bar');
+    bar.appendChild(el('i'));
+    t.appendChild(name);
+    t.appendChild(sub);
+    t.appendChild(bar);
+    function draw() {
+      var nn = sportNow[c.key];
+      if (!nn) return;
+      if (nn.now) {
+        name.textContent = nn.now.title;
+        // Flag an upcoming live event, e.g. "Live at 16:30: Arsenal v Spurs".
+        sub.textContent = !isLiveEvent(nn.now) && isLiveEvent(nn.next)
+          ? 'Live at ' + Guide.clock(nn.next.start) + ': ' + nn.next.title.replace(/^live:?\s*/i, '')
+          : c.short + ' · ' + untilText(nn.now);
+        sub.classList.remove('warn');
+        bar.firstChild.style.width = Math.round(Guide.progress(nn.now) * 100) + '%';
+        flag.classList.toggle('hidden', !isLiveEvent(nn.now));
+        setImage(t, nn.now.image);
+      } else {
+        name.textContent = c.name;
+        sub.textContent = nn.unavailable ? 'Listings unavailable' : 'Nothing listed right now';
+        sub.classList.add('warn');
+        flag.classList.add('hidden');
+        setImage(t, null);
+      }
+      if (t.classList.contains('focused')) t.onfocusitem();
+    }
+    onPaint('sport-' + c.key, draw);
+    t.onselect = function () {
+      var app = appById(TVHUB_DEFAULTS.sportApp);
+      if (!app) return toast('Add the NOW app in Settings first');
+      openApp(app, 'Opening NOW — choose ' + c.name, 1500);
+    };
+    t.onfocusitem = function () {
+      var nn = sportNow[c.key];
+      hero({
+        eyebrow: c.name + ' · on NOW', title: nn && nn.now ? nn.now.title : c.name,
+        line1: !nn ? 'Loading what’s on…' : nn.now
+          ? Guide.clock(nn.now.start) + ' – ' + Guide.clock(nn.now.stop) + (isLiveEvent(nn.now) ? '  ·  LIVE' : '')
+          : nn.unavailable ? UNAVAILABLE : 'Nothing listed right now',
+        progress: nn && nn.now ? Guide.progress(nn.now) : null,
+        line2: nn && nn.next ? 'Next at ' + Guide.clock(nn.next.start) + ': ' + nn.next.title : trim(nn && nn.now && nn.now.desc, 160),
+        hint: 'OK opens NOW → ' + c.name,
+        art: { image: nn && nn.now && nn.now.image, color: SKY_COLOUR, label: c.name }
+      });
+    };
+    draw();
+    return t;
   }
 
   // -- Tools
@@ -512,14 +661,22 @@
     var tools = $('row-tools');
     tools.innerHTML = '';
     [
-      ['Watch live TV', function () { watchChannel(lastTuner()); }],
-      ['Add a show', function () { show('search'); }],
-      ['Settings', function () { show('settings'); }],
-      ['Exit', function () { Platform.exit(); }]
+      ['watch', 'Watch satellite TV', function () { watchChannel(lastIndex()); },
+        { eyebrow: 'Satellite TV', title: 'Watch full screen', line1: 'Opens your last channel. CH ▲▼ changes channel, BACK comes home.' }],
+      ['add', 'Add a show', function () { show('search'); },
+        { eyebrow: 'My shows', title: 'Add a show', line1: 'Search for a show and choose which app you watch it on.' }],
+      ['settings', 'Settings', function () { show('settings'); },
+        { eyebrow: 'Settings', title: 'Settings', line1: 'Apps, colour buttons, channels, shows and sport.' }]
     ].forEach(function (b) {
-      var btn = el('button', 'btn focusable', b[0]);
-      btn.onselect = b[1];
-      btn.onfocusitem = function () { previewChannel(lastTuner()); };
+      var btn = el('button', 'btn focusable', b[1]);
+      btn.setAttribute('data-key', 'tool-' + b[0]);
+      btn.onselect = b[2];
+      btn.onfocusitem = function () {
+        var o = b[3];
+        o.hint = 'Press OK';
+        o.art = { color: '#232b45', label: b[1] };
+        hero(o);
+      };
       tools.appendChild(btn);
     });
   }
@@ -539,8 +696,9 @@
     key: function (a) {
       if (a === 'ENTER') return homeNav.select();
       if (a === 'BACK') {
-        // First BACK returns to the first tile, second sends the app to the background.
-        if (homeNav.r !== 0 || homeNav.c !== 0) return homeNav.focus(0, 0);
+        // First BACK returns to the first row, second sends the app to the background.
+        var first = firstRow();
+        if (homeNav.r !== first || homeNav.c !== 0) return homeNav.focus(first, 0);
         Platform.hideTvWindow();
         return Platform.hide();
       }
@@ -548,96 +706,108 @@
     }
   };
 
-  function openApp(app, message) {
+  // Open another app. A message shown for `delay` ms first gives time to read instructions.
+  function openApp(app, message, delay) {
+    clearTimeout(previewTimer);
     if (!app.appId) {
-      toast(app.name + ' wasn’t found on this TV — add it in Settings › Add an installed app');
+      toast(app.name + ' wasn’t found on this TV — open Settings › Apps › Change app');
       return;
     }
     state.usage[app.id] = (state.usage[app.id] || 0) + 1;
     save();
-    Platform.hideTvWindow();
-    toast(message || 'Opening ' + app.name + '…');
-    Platform.launchApp(app.appId, function (msg) {
-      toast(app.name + ': ' + msg + ' — check it in Settings');
-      showPreview();
-    });
+    toast(message || 'Opening ' + app.name + '…', delay ? delay + 2000 : 0);
+    setTimeout(function () {
+      Platform.hideTvWindow();
+      Platform.launchApp(app.appId, function (msg) {
+        toast(app.name + ': ' + msg + ' — check it in Settings › Apps');
+        showPreview();
+      });
+    }, delay || 0);
   }
 
   // ---------------------------------------------------------------- live satellite TV
 
-  var tunedKey = null; // "major-minor" of what the tuner is on, so we don't retune needlessly
+  var tunedKey = null; // channel the tuner is on, so we don't retune needlessly
   var previewTimer = null;
 
-  function heroTuner(ch) {
-    var o = {
-      eyebrow: 'Live TV · satellite', title: channelLabel(ch) + '  ' + ch.name,
-      hint: 'Press OK to watch, or type a channel number', art: null
-    };
-    hero(o);
+  function heroTuner(ch, tileKey, warning) {
+    hero({
+      eyebrow: 'Satellite TV', title: channelLabel(ch) + '  ' + ch.name,
+      line2: warning || '',
+      hint: 'Press OK to watch full screen · CH ▲▼ to change channel', art: null
+    });
     $('preview-fallback').firstChild.textContent = ch.name;
+    if (warning) return;
     Platform.getNowNext(ch, function (nn) {
+      if (homeNav.currentKey() !== tileKey) return; // focus moved on meanwhile
       if (nn.now) $('hero-line1').textContent = 'Now: ' + nn.now;
       if (nn.next) $('hero-line2').textContent = 'Next: ' + nn.next;
     });
   }
 
-  function tuneTo(i, cb) {
-    var ch = state.channels[i];
-    if (!isTuner(ch)) return;
-    var key = ch.major + '-' + (ch.minor || 0);
-    if (key === tunedKey) { cb && cb(true); return; }
-    tunedKey = key;
+  // callbacks: { ok(), fail(msg, noTuner) }
+  function tuneTo(ch, callbacks) {
+    callbacks = callbacks || {};
+    if (chKey(ch) === tunedKey) return callbacks.ok && callbacks.ok();
+    tunedKey = chKey(ch);
     Platform.tune(ch, {
-      ok: function () { cb && cb(true); },
+      ok: function () { callbacks.ok && callbacks.ok(); },
       noSignal: function () { toast('No signal on ' + ch.name + ' — check the satellite dish'); },
       program: function (title) {
         if (title && current === 'watch') $('banner-now').textContent = 'Now: ' + title;
       },
-      fail: function (msg) { tunedKey = null; toast('Could not tune: ' + msg); cb && cb(false); }
-    }, state.options.tvViewerAppId);
+      fail: function (msg, noTuner) { tunedKey = null; callbacks.fail && callbacks.fail(msg, noTuner); }
+    });
   }
+
+  function previewOn() { return state.options.livePreview && Platform.canTune; }
 
   function showPreview() {
-    var i = lastTuner();
-    if (!state.options.livePreview || !Platform.canTune) {
-      document.body.classList.toggle('no-preview', Platform.isTv);
-    } else {
-      var box = $('preview').getBoundingClientRect();
-      Platform.showTvWindow({ x: Math.round(box.left), y: Math.round(box.top), w: Math.round(box.width), h: Math.round(box.height) });
-      if (i !== -1) tuneTo(i);
-    }
-    if (i !== -1) $('preview-fallback').firstChild.textContent = state.channels[i].name;
+    document.body.classList.toggle('no-preview', Platform.isTv && !previewOn());
+    var i = lastIndex();
+    $('preview-fallback').firstChild.textContent = i !== -1 ? state.channels[i].name : '';
+    if (!previewOn()) return;
+    var box = $('preview').getBoundingClientRect();
+    Platform.showTvWindow({ x: Math.round(box.left), y: Math.round(box.top), w: Math.round(box.width), h: Math.round(box.height) });
+    if (i !== -1) tuneTo(state.channels[i], { fail: function () {} });
   }
 
-  // Focusing a satellite channel previews it after a short pause (so scrolling past doesn't retune).
-  function previewChannel(i) {
-    var ch = state.channels[i];
-    if (!isTuner(ch)) return;
-    heroTuner(ch);
+  // Focusing a satellite channel previews it after a short pause (so scrolling past doesn't
+  // retune). A failed preview only shows a note; it never leaves the app.
+  function previewChannel(ch, tileKey) {
+    heroTuner(ch, tileKey);
     clearTimeout(previewTimer);
-    if (!state.options.livePreview || !Platform.canTune) return;
-    previewTimer = setTimeout(function () { tuneTo(i); }, 700);
+    if (!previewOn()) return;
+    previewTimer = setTimeout(function () {
+      if (current !== 'home' || homeNav.currentKey() !== tileKey) return;
+      tuneTo(ch, { fail: function (msg) { heroTuner(ch, tileKey, 'Can’t show this channel: ' + msg); } });
+    }, 700);
   }
 
   function watchChannel(i) {
-    if (i === -1 || !state.channels.length) { toast('No satellite channels yet — add some in Settings'); return; }
+    clearTimeout(previewTimer);
     var ch = state.channels[i];
-    if (!isTuner(ch)) return openPlayerChannel(ch);
-    state.lastChannel = i;
+    if (!ch) { toast('No satellite channels yet — choose “Add your satellite channels”'); return; }
+    state.lastKey = chKey(ch);
     save();
-    if (!Platform.canTune && Platform.isTv) {
-      // The TV won't let us tune: open its built-in viewer instead.
-      tunedKey = null;
-      tuneTo(i);
-      return;
-    }
-    tuneTo(i, function (ok) { if (ok !== false && current !== 'watch') show('watch'); });
-    if (current === 'watch') updateBanner();
+    tuneTo(ch, {
+      ok: function () { if (current !== 'watch') show('watch'); else updateBanner(); },
+      fail: function (msg, noTuner) {
+        if (!noTuner) return toast('Couldn’t tune ' + ch.name + ': ' + msg);
+        // This TV doesn't let apps change channel: hand over to its own live TV, and say which channel.
+        toast('Opening the TV’s own live TV — choose ' + ch.name + ' (' + channelLabel(ch) + ')', 4000);
+        Platform.hideTvWindow();
+        Platform.launchApp(state.options.tvViewerAppId, function () {
+          toast('Use the remote’s Source button and choose TV, then ' + channelLabel(ch));
+        });
+      }
+    });
   }
 
   var bannerTimer = null;
   function updateBanner() {
-    var ch = state.channels[state.lastChannel];
+    var ch = state.channels[lastIndex()];
+    if (!ch) return;
     $('banner-num').textContent = channelLabel(ch);
     $('banner-name').textContent = ch.name;
     $('banner-now').textContent = '';
@@ -651,6 +821,12 @@
     bannerTimer = setTimeout(function () { b.classList.add('faded'); }, 5000);
   }
 
+  function stepChannel(dir) {
+    var n = state.channels.length;
+    if (!n) return;
+    watchChannel((((lastIndex() + dir) % n) + n) % n);
+  }
+
   screens.watch = {
     enter: function () {
       Platform.showTvWindow({ x: 0, y: 0, w: 1920, h: 1080 });
@@ -658,45 +834,51 @@
     },
     key: function (a) {
       if (a === 'BACK') return show('home');
-      if (a === 'CH_UP' || a === 'UP') return watchChannel(stepTuner(state.lastChannel, 1));
-      if (a === 'CH_DOWN' || a === 'DOWN') return watchChannel(stepTuner(state.lastChannel, -1));
+      if (a === 'CH_UP' || a === 'UP') return stepChannel(1);
+      if (a === 'CH_DOWN' || a === 'DOWN') return stepChannel(-1);
       updateBanner(); // any other key: show what's on
     }
   };
 
-  // Typing a channel number on the remote jumps straight to it.
+  // Typing a channel number on the remote jumps straight to it; the box shows where it'll go.
   var digitBuf = '';
   var digitTimer = null;
+  function channelForNumber(num) {
+    for (var i = 0; i < state.channels.length; i++) if (state.channels[i].major === num) return i;
+    // A single digit 1-9 that isn't a channel number picks your nth satellite channel.
+    if (num >= 1 && num <= 9 && num <= state.channels.length) return num - 1;
+    return -1;
+  }
   function onDigit(d) {
     digitBuf = (digitBuf + d).slice(-4);
+    var num = parseInt(digitBuf, 10);
+    var idx = channelForNumber(num);
     var box = $('digits');
     box.textContent = digitBuf;
+    box.appendChild(el('small', null, idx !== -1 ? state.channels[idx].name : ''));
     box.classList.remove('hidden');
     clearTimeout(digitTimer);
     digitTimer = setTimeout(function () {
       box.classList.add('hidden');
-      var num = parseInt(digitBuf, 10);
       digitBuf = '';
-      var idx = -1;
-      state.channels.forEach(function (c, i) { if (isTuner(c) && c.major === num && idx === -1) idx = i; });
-      if (idx === -1 && num >= 1 && num <= state.channels.length && num < 100) idx = num - 1; // 1-9 = position in the row
       if (idx !== -1) return watchChannel(idx);
-      // Not in the list yet: if the TV has scanned it, add it and watch.
+      // Not in your list: if the TV has scanned it, add it and watch.
       Platform.getTvChannels(function (all) {
         var found = all.filter(function (c) { return c.major === num; })[0];
-        if (!found) return toast('Channel ' + num + ' isn’t in your list');
+        if (!found) return toast('Channel ' + num + ' isn’t on this TV');
         state.channels.push({ name: found.name, major: found.major, minor: found.minor || 0 });
         toast(found.name + ' added to your channels');
         renderHome();
         watchChannel(state.channels.length - 1);
       });
-    }, 1500);
+    }, idx !== -1 && String(state.channels[idx].major) === digitBuf ? 1000 : 1500);
   }
 
   // ---------------------------------------------------------------- add a show
 
-  var searchNav = new Nav($('search'));
+  var searchNav = new Nav($('search'), 'first');
   var searchInput = $('search-input');
+  var searchToken = 0;
 
   function runSearch() {
     var q = searchInput.value.trim();
@@ -704,13 +886,16 @@
     var body = $('search-body');
     body.innerHTML = '';
     body.appendChild(el('div', 'label', 'Searching…'));
-    Shows.search(q, function (results) {
+    var token = ++searchToken;
+    Shows.search(q, function (results, err) {
+      if (token !== searchToken) return; // an older search answered late
       body.innerHTML = '';
-      if (!results.length) body.appendChild(el('div', 'label', 'No shows found — check the spelling'));
+      if (err) body.appendChild(el('div', 'label', 'Couldn’t reach the show database — check the TV’s internet connection and try again'));
+      else if (!results.length) body.appendChild(el('div', 'label', 'No shows found — check the spelling'));
       results.slice(0, 12).forEach(function (r) {
         var row = el('div', 'srow nav-row');
         var th = el('div', 'thumb');
-        bgImage(th, r.image);
+        setImage(th, r.image);
         row.appendChild(th);
         var label = el('div', 'label', r.name + (r.year ? ' (' + r.year + ')' : ''));
         label.appendChild(el('small', null, r.network || ''));
@@ -719,14 +904,14 @@
         row.appendChild(chip(have ? '✓ Added' : 'Add', function () { if (!have) chooseAppFor(r); }, have ? 'on' : ''));
         body.appendChild(row);
       });
-      searchNav.focus(1, 0);
+      if (current === 'search') searchNav.focus(results.length ? 1 : 0, 0);
     });
   }
 
   function chooseAppFor(r) {
     var guess = Shows.guessApp(r.network);
-    var apps = state.apps.slice().sort(function (a, b) {
-      return (b.id === guess ? 1 : 0) - (a.id === guess ? 1 : 0) || (a.hidden ? 1 : 0) - (b.hidden ? 1 : 0);
+    var apps = state.apps.filter(function (a) { return !a.hidden || a.id === guess; }).sort(function (a, b) {
+      return (b.id === guess ? 1 : 0) - (a.id === guess ? 1 : 0);
     });
     openPicker({
       title: 'Where do you watch ' + r.name + '?',
@@ -740,11 +925,12 @@
             select: function () {
               var s = { tvmazeId: r.id, name: r.name, app: app.id, added: Date.now() };
               state.shows.unshift(s);
+              showTried[s.tvmazeId] = Date.now();
               save();
               Shows.refresh(s, function () { save(); scheduleRender(); });
               toast(r.name + ' added — it opens in ' + app.name);
-              homeNav.r = 0; homeNav.c = 0;
               show('home');
+              homeNav.focusKey('show-' + s.tvmazeId);
               return true;
             }
           };
@@ -782,11 +968,24 @@
 
   // ---------------------------------------------------------------- settings
 
-  var settingsNav = new Nav($('settings'));
+  var settingsNav = new Nav($('settings'), 'first');
 
   function chip(text, fn, extra) {
     var b = el('button', 'chip focusable' + (extra ? ' ' + extra : ''), text);
     b.onselect = fn;
+    return b;
+  }
+
+  // A chip that needs two presses: the first turns it red and asks again.
+  function confirmChip(text, fn) {
+    var armed = false, timer = null;
+    var b = chip(text, function () {
+      if (armed) { clearTimeout(timer); return fn(); }
+      armed = true;
+      b.textContent = 'Press OK again to confirm';
+      b.classList.add('confirm');
+      timer = setTimeout(function () { armed = false; b.textContent = text; b.classList.remove('confirm'); }, 3000);
+    });
     return b;
   }
 
@@ -811,69 +1010,60 @@
       row.appendChild(label);
       var app = appById(s.app);
       row.appendChild(chip('Opens in: ' + (app ? app.name : '?'), function () {
-        var idx = state.apps.indexOf(appById(s.app));
-        s.app = state.apps[(idx + 1) % state.apps.length].id;
+        var choices = state.apps.filter(function (a) { return !a.hidden; });
+        if (!choices.length) return toast('Show an app first');
+        var idx = choices.indexOf(appById(s.app));
+        s.app = choices[(idx + 1) % choices.length].id;
         changed();
       }));
       row.appendChild(chip('▲', function () { changed(moveItem(state.shows, i, -1)); }));
       row.appendChild(chip('▼', function () { changed(moveItem(state.shows, i, 1)); }));
-      row.appendChild(chip('Remove', function () { state.shows.splice(i, 1); changed(); }));
+      row.appendChild(confirmChip('Remove', function () { state.shows.splice(i, 1); changed(); toast(s.name + ' removed'); }));
       body.appendChild(row);
     });
     var addShow = el('div', 'srow nav-row');
     addShow.appendChild(chip('+ Add a show', function () { show('search'); }));
     body.appendChild(addShow);
 
-    section(body, 'Apps on your home screen');
+    section(body, 'Apps');
     state.apps.forEach(function (app, i) {
       var row = el('div', 'srow nav-row');
       var sw = el('div', 'swatch'); sw.style.background = app.color;
       row.appendChild(sw);
       var label = el('div', 'label' + (app.hidden ? ' off' : ''), app.name);
-      label.appendChild(el('small', null, app.appId ? 'ID ' + app.appId : 'Not found on this TV — use “Add an installed app”'));
+      label.appendChild(el('small', null, app.appId ? 'Found on this TV' : 'Not found on this TV yet — use Change app'));
       row.appendChild(label);
       row.appendChild(chip(app.hidden ? 'Hidden' : 'Shown', function () { app.hidden = !app.hidden; changed(); }, app.hidden ? '' : 'on'));
       row.appendChild(chip('Button: ' + (app.hotkey || 'none'), function () {
         var next = HOTKEYS[(HOTKEYS.indexOf(app.hotkey) + 1)] || null; // cycles red→green→yellow→blue→none
+        var had = next && appForHotkey(next);
         if (next) state.apps.forEach(function (o) { if (o.hotkey === next) o.hotkey = null; });
         app.hotkey = next;
+        if (had && had !== app) toast('The ' + next + ' button now opens ' + app.name + ' instead of ' + had.name);
         changed();
       }));
+      row.appendChild(chip('Change app', function () { openChangeApp(app); }));
       row.appendChild(chip('▲', function () { changed(moveItem(state.apps, i, -1)); }));
       row.appendChild(chip('▼', function () { changed(moveItem(state.apps, i, 1)); }));
-      row.appendChild(chip('Remove', function () { state.apps.splice(i, 1); changed(); }));
+      // Built-in apps are linked to My shows, On now and Sport, so they're hidden rather than removed.
+      if (!isBuiltIn(app)) row.appendChild(confirmChip('Remove', function () { state.apps.splice(i, 1); changed(); }));
       body.appendChild(row);
     });
     var addRow = el('div', 'srow nav-row');
     addRow.appendChild(chip('+ Add an installed app', openAppPicker));
     body.appendChild(addRow);
 
-    section(body, 'Live channels');
+    section(body, 'Satellite channels');
     state.channels.forEach(function (ch, i) {
       var row = el('div', 'srow nav-row');
-      var label;
-      if (isTuner(ch)) {
-        label = el('div', 'label', channelLabel(ch) + '   ' + ch.name);
-        label.appendChild(el('small', null, 'Satellite'));
-      } else {
-        var app = appById(playerDef(ch).app);
-        label = el('div', 'label', ch.name);
-        label.appendChild(el('small', null, 'Online, via ' + (app ? app.name : 'player app')));
-      }
-      row.appendChild(label);
+      row.appendChild(el('div', 'label', channelLabel(ch) + '   ' + ch.name));
       row.appendChild(chip('▲', function () { changed(moveItem(state.channels, i, -1)); }));
       row.appendChild(chip('▼', function () { changed(moveItem(state.channels, i, 1)); }));
-      row.appendChild(chip('Remove', function () {
-        state.channels.splice(i, 1);
-        if (state.lastChannel >= state.channels.length) state.lastChannel = 0;
-        changed();
-      }));
+      row.appendChild(confirmChip('Remove', function () { state.channels.splice(i, 1); changed(); }));
       body.appendChild(row);
     });
-
     var chRow = el('div', 'srow nav-row');
-    chRow.appendChild(chip('Import channels from TV', openChannelPicker));
-    chRow.appendChild(chip('Add online channels (RTÉ, Virgin Media)', openPlayerPicker));
+    chRow.appendChild(chip('Choose channels from the TV’s list', function () { openChannelPicker('settings'); }));
     body.appendChild(chRow);
 
     var manual = el('div', 'srow nav-row');
@@ -887,11 +1077,30 @@
     manual.appendChild(chip('Add', function () {
       var n = parseInt(num.value, 10);
       if (!n) return toast('Enter a channel number first');
+      if (channelIndex(n + '-0') !== -1) return toast('Channel ' + n + ' is already in your list');
       state.channels.push({ name: name.value.trim() || ('Channel ' + n), major: n, minor: 0 });
       changed();
       toast('Added channel ' + n);
     }));
     body.appendChild(manual);
+
+    section(body, 'Online channels (in “On now”)');
+    state.online.forEach(function (k, i) {
+      var def = PLAYER[k];
+      if (!def) return;
+      var app = appById(def.app);
+      var row = el('div', 'srow nav-row');
+      var label = el('div', 'label', def.name);
+      label.appendChild(el('small', null, 'Opens ' + (app ? app.name : 'its player app')));
+      row.appendChild(label);
+      row.appendChild(chip('▲', function () { changed(moveItem(state.online, i, -1)); }));
+      row.appendChild(chip('▼', function () { changed(moveItem(state.online, i, 1)); }));
+      row.appendChild(confirmChip('Remove', function () { state.online.splice(i, 1); changed(); }));
+      body.appendChild(row);
+    });
+    var onRow = el('div', 'srow nav-row');
+    onRow.appendChild(chip('+ Add online channels (RTÉ, Virgin Media)', openPlayerPicker));
+    body.appendChild(onRow);
 
     section(body, 'Sport row (Sky Sports on NOW)');
     SPORT.forEach(function (c) {
@@ -914,13 +1123,16 @@
     opts.appendChild(chip('Live preview: ' + (state.options.livePreview ? 'On' : 'Off'),
       function () { state.options.livePreview = !state.options.livePreview; if (!state.options.livePreview) Platform.hideTvWindow(); changed(); },
       state.options.livePreview ? 'on' : ''));
-    opts.appendChild(chip('Reset everything', function () {
+    body.appendChild(opts);
+    var reset = el('div', 'srow nav-row');
+    reset.appendChild(el('div', 'label', 'Start again (removes your shows and channels)'));
+    reset.appendChild(confirmChip('Reset everything', function () {
       try { localStorage.removeItem(STORE_KEY); } catch (e) {}
       state = load();
       changed();
       toast('Back to the original setup');
     }));
-    body.appendChild(opts);
+    body.appendChild(reset);
   }
 
   // Re-render after a change, keeping focus in place (or following a moved item).
@@ -953,7 +1165,7 @@
 
   // ---------------------------------------------------------------- picker
 
-  var pickerNav = new Nav($('picker'));
+  var pickerNav = new Nav($('picker'), 'first');
   var picker = null;
 
   // cfg: { title, hint, back: screen to return to, items(): [{ label, chip, on, select() -> true to close }] }
@@ -970,7 +1182,7 @@
     var body = $('picker-body');
     body.innerHTML = '';
     var items = picker.items();
-    if (!items.length) body.appendChild(el('div', 'label', 'Nothing found on this TV.'));
+    if (!items.length) body.appendChild(el('div', 'label', picker.empty || 'Nothing found on this TV.'));
     items.forEach(function (it) {
       var row = el('div', 'srow nav-row');
       row.appendChild(el('div', 'label', it.label));
@@ -985,7 +1197,7 @@
   }
 
   screens.picker = {
-    enter: function () { pickerNav.refresh(); },
+    enter: function () { Platform.hideTvWindow(); pickerNav.refresh(); },
     key: function (a) {
       if (a === 'BACK') return show(picker.back || 'settings');
       if (a === 'ENTER') return pickerNav.select();
@@ -994,9 +1206,9 @@
   };
 
   // Toggle-style picker: each item is added or removed.
-  function togglePicker(title, list, label, isOn, toggle) {
+  function togglePicker(title, list, label, isOn, toggle, back) {
     openPicker({
-      title: title, back: 'settings',
+      title: title, back: back || 'settings',
       items: function () {
         return list.map(function (x) {
           var on = isOn(x);
@@ -1006,14 +1218,58 @@
     });
   }
 
-  function openAppPicker() {
+  function withInstalledApps(cb) {
     toast('Looking for apps…');
-    Platform.getInstalledApps(function (list) {
+    Platform.getInstalledApps(function (list, err) {
+      if (err) return toast('The TV wouldn’t list its apps (' + err + ')');
+      cb(list);
+    });
+  }
+
+  // Point an app tile at a different installed app, keeping its links to shows, On now and Sport.
+  function openChangeApp(app) {
+    withInstalledApps(function (list) {
+      openPicker({
+        title: 'Which installed app is “' + app.name + '”?',
+        hint: 'OK to choose · BACK to go back',
+        items: function () {
+          return list.map(function (a) {
+            return {
+              label: a.name, chip: a.appId === app.appId ? '✓ Current' : 'Choose', on: a.appId === app.appId,
+              select: function () {
+                app.appId = a.appId;
+                app.hidden = false;
+                save();
+                toast(app.name + ' now opens “' + a.name + '”');
+                show('settings');
+                return true;
+              }
+            };
+          });
+        }
+      });
+    });
+  }
+
+  function openAppPicker() {
+    withInstalledApps(function (list) {
       function find(a) { return state.apps.filter(function (x) { return x.appId === a.appId; })[0]; }
+      // A built-in tile (e.g. NOW) that matches this app's name and isn't linked yet.
+      function builtInFor(a) {
+        return state.apps.filter(function (x) {
+          return isBuiltIn(x) && !x.appId && x.match && new RegExp(x.match, 'i').test(a.name);
+        })[0];
+      }
       togglePicker('Add an installed app', list, function (a) { return a.name; }, function (a) { return !!find(a); }, function (a) {
         var existing = find(a);
-        if (existing) state.apps.splice(state.apps.indexOf(existing), 1);
-        else state.apps.push({
+        if (existing) {
+          if (isBuiltIn(existing)) existing.hidden = !existing.hidden;
+          else state.apps.splice(state.apps.indexOf(existing), 1);
+          return;
+        }
+        var linked = builtInFor(a);
+        if (linked) { linked.appId = a.appId; linked.hidden = false; return; }
+        state.apps.push({
           id: 'app-' + a.appId, name: a.name, appId: a.appId,
           color: PALETTE[state.apps.length % PALETTE.length], text: '#ffffff', hotkey: null
         });
@@ -1021,56 +1277,43 @@
     });
   }
 
-  function openChannelPicker() {
+  function openChannelPicker(back) {
     Platform.getTvChannels(function (list) {
       if (!list.length && Platform.isTv) {
-        toast('This TV didn’t share its channel list — use “Add by number” instead');
+        toast('This TV didn’t share its channel list — use Settings › Add by number');
         return;
-      }
-      function idx(c) {
-        for (var i = 0; i < state.channels.length; i++) {
-          var s = state.channels[i];
-          if (isTuner(s) && s.major === c.major && (s.minor || 0) === (c.minor || 0)) return i;
-        }
-        return -1;
       }
       togglePicker('Choose your satellite channels', list,
         function (c) { return channelLabel(c) + '   ' + c.name; },
-        function (c) { return idx(c) !== -1; },
+        function (c) { return channelIndex(chKey(c)) !== -1; },
         function (c) {
-          var i = idx(c);
+          var i = channelIndex(chKey(c));
           if (i !== -1) state.channels.splice(i, 1);
           else state.channels.push({ name: c.name, major: c.major, minor: c.minor || 0 });
-          if (state.lastChannel >= state.channels.length) state.lastChannel = 0;
-        });
+        }, back);
     });
   }
 
   function openPlayerPicker() {
-    var keys = Object.keys(PLAYER);
-    function idx(k) {
-      for (var i = 0; i < state.channels.length; i++) if (state.channels[i].guide === k) return i;
-      return -1;
-    }
-    togglePicker('Online channels', keys,
+    togglePicker('Online channels', Object.keys(PLAYER),
       function (k) { var app = appById(PLAYER[k].app); return PLAYER[k].name + '   ·   ' + (app ? app.name : ''); },
-      function (k) { return idx(k) !== -1; },
+      function (k) { return state.online.indexOf(k) !== -1; },
       function (k) {
-        var i = idx(k);
-        if (i !== -1) state.channels.splice(i, 1);
-        else state.channels.push({ name: PLAYER[k].name, kind: 'player', guide: k });
+        var i = state.online.indexOf(k);
+        if (i !== -1) state.online.splice(i, 1);
+        else state.online.push(k);
       });
   }
 
   // ---------------------------------------------------------------- global bits
 
   var toastTimer = null;
-  function toast(msg) {
+  function toast(msg, ms) {
     var t = $('toast');
     t.textContent = msg;
     t.classList.remove('hidden');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(function () { t.classList.add('hidden'); }, 3500);
+    toastTimer = setTimeout(function () { t.classList.add('hidden'); }, ms || 3500);
   }
 
   function tickClock() {
@@ -1082,10 +1325,13 @@
     $('date').textContent = days[now.getDay()] + ' ' + now.getDate() + ' ' + months[now.getMonth()];
   }
 
-  // Every minute: move progress bars on, and pick up the next programme when one ends.
-  function tickGuide() {
+  // Every minute: progress bars move on and finished programmes give way to the next.
+  // Every hour: rebuild the screen so show alerts and orderings stay current on a TV left on for days.
+  var lastFullRender = Date.now();
+  function tick() {
     if (current !== 'home' || document.hidden) return;
-    updaters.forEach(function (u) { u(); });
+    if (Date.now() - lastFullRender > HOUR) { lastFullRender = Date.now(); renderHome(); }
+    else refreshData();
   }
 
   function getScale() {
@@ -1098,6 +1344,7 @@
   document.addEventListener('keydown', function (e) {
     var a = Platform.actionFor(e);
     if (!a) return;
+    lastKeyAt = Date.now();
     var typing = document.activeElement && document.activeElement.tagName === 'INPUT';
     if (typing && e.keyCode === 8) return; // Backspace deletes text (keyboard in demo mode)
     if (!typing) e.preventDefault();
@@ -1113,17 +1360,15 @@
         return;
       }
       if (a.indexOf('DIGIT_') === 0) return onDigit(a.slice(6));
-      if (current === 'home' && (a === 'CH_UP' || a === 'CH_DOWN')) {
-        return watchChannel(stepTuner(state.lastChannel, a === 'CH_UP' ? 1 : -1));
-      }
+      if (current === 'home' && (a === 'CH_UP' || a === 'CH_DOWN')) return stepChannel(a === 'CH_UP' ? 1 : -1);
     }
     if (typing && a.indexOf('DIGIT_') === 0) return;
     if (screens[current]) screens[current].key(a);
   });
 
-  // Coming back from Netflix etc.: refresh everything and put the live preview back.
+  // Coming back from Netflix etc.: refresh everything (keeping your place) and put the live preview back.
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden) { Platform.hideTvWindow(); tunedKey = null; }
+    if (document.hidden) { clearTimeout(previewTimer); Platform.hideTvWindow(); tunedKey = null; }
     else if (current === 'home') { renderHome(); showPreview(); }
     else if (current === 'watch') screens.watch.enter();
   });
@@ -1141,9 +1386,8 @@
   fitStage();
   tickClock();
   setInterval(tickClock, 15000);
-  setInterval(tickGuide, 60000);
+  setInterval(tick, MINUTE);
   renderHome();
-  homeNav.focus(0, 0);
   showPreview();
   // Find NOW, RTÉ Player etc. on this TV by name if their IDs aren't known yet.
   Platform.resolveApps(state.apps, function (changedIds) {
