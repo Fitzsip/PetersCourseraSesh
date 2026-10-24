@@ -271,3 +271,5 @@ input.field.wide { width: 900px; font-size: 30px; }
 .amb-artist { font-size: 30px; color: #c9d1e8; margin-top: 6px; }
 .amb-sport { font-size: 32px; color: #ffcf7a; margin-top: 40px; }
 input.field.focused, input.field.wide.focused { transform: none; }
+.brand { display: flex; align-items: center; }
+.brand-logo { margin-right: 14px; flex: 0 0 auto; }
