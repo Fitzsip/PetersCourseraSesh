@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets"
+        id="http://fitzsip.local/tvhub" version="1.0.0" viewmodes="maximized">
+    <tizen:application id="TvHub00001.TVHub" package="TvHub00001" required_version="4.0"/>
+    <name>TV Hub</name>
+    <description>One home screen for all your streaming apps and live satellite channels.</description>
+    <author>Peter</author>
+    <content src="index.html"/>
+    <icon src="icon.png"/>
+    <feature name="http://tizen.org/feature/screen.size.all"/>
+
+    <!-- Launch Netflix, Disney+, Prime Video etc. -->
+    <tizen:privilege name="http://tizen.org/privilege/application.launch"/>
+    <!-- Register colour / number / channel keys on the remote -->
+    <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
+    <!-- Tune and show satellite channels inside the app.
+         If the TV refuses to install the app because of a privilege error,
+         delete these two lines: Live TV will then open the TV's own viewer instead. -->
+    <tizen:privilege name="http://tizen.org/privilege/tv.channel"/>
+    <tizen:privilege name="http://tizen.org/privilege/tv.window"/>
+
+    <tizen:setting screen-orientation="landscape" context-menu="disable"
+                   background-support="disable" encryption="disable"
+                   install-location="auto" hwkey-event="enable"/>
+    <tizen:profile name="tv-samsung"/>
+</widget>

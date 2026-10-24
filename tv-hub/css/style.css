@@ -1,0 +1,176 @@
+/* Designed for a 1920x1080 TV screen. In a desktop browser the stage is scaled to fit. */
+:root {
+  --bg: #0b0e1a;
+  --bg-2: #141a2e;
+  --panel: #161c31;
+  --text: #f2f4fa;
+  --muted: #9aa3bd;
+  --accent: #7aa2ff;
+  --focus: #ffffff;
+  --red: #e53935; --green: #43a047; --yellow: #fdd835; --blue: #1e88e5;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* Transparent so the TV's live picture can show through the preview "hole". */
+html, body {
+  width: 100%; height: 100%;
+  background: transparent;
+  overflow: hidden;
+  font-family: "SamsungOne", "Samsung Sans", "Helvetica Neue", Arial, sans-serif;
+  color: var(--text);
+}
+body.demo { background: #000; }
+
+#stage {
+  position: absolute; left: 0; top: 0;
+  width: 1920px; height: 1080px;
+  transform-origin: 0 0;
+  overflow: hidden;
+}
+
+.screen { position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: none; }
+.screen.active { display: block; }
+.overlay { background: rgba(5, 7, 15, 0.82); z-index: 10; }
+.hidden { display: none !important; }
+.layer { position: relative; z-index: 1; }
+
+/* ---------- Home ---------- */
+#home { padding: 40px 96px 0; overflow: hidden; }
+
+.topbar { display: flex; justify-content: space-between; align-items: flex-start; height: 96px; }
+.topbar-right { display: flex; flex-direction: column; align-items: flex-end; }
+.clock { font-size: 56px; font-weight: 300; letter-spacing: 1px; }
+.date { font-size: 24px; color: var(--muted); }
+.brand { font-size: 30px; font-weight: 700; color: var(--muted); letter-spacing: 2px; }
+.badge { font-size: 18px; background: #f5a623; color: #000; padding: 4px 12px; border-radius: 20px; margin-left: 12px; letter-spacing: 0; }
+
+.hero { display: flex; justify-content: space-between; height: 330px; }
+.hero-info { width: 900px; padding-top: 22px; }
+.eyebrow { font-size: 22px; letter-spacing: 3px; text-transform: uppercase; color: var(--accent); }
+.hero-info h1 { font-size: 72px; font-weight: 700; margin: 8px 0 16px; }
+.now { font-size: 32px; }
+.next { font-size: 26px; color: var(--muted); margin-top: 8px; }
+.hero-hint { font-size: 22px; color: var(--muted); margin-top: 28px; }
+
+/* The preview is a transparent window; its huge shadow paints the page background
+   everywhere else, so the TV video plane is only visible inside this box. */
+.preview {
+  position: relative; z-index: 0;
+  width: 560px; height: 315px;
+  border-radius: 18px;
+  box-shadow: 0 0 0 4000px var(--bg);
+  outline: 3px solid rgba(255,255,255,0.12);
+}
+body.no-preview .preview { background: var(--bg-2); }
+
+.preview-fallback, .watch-fallback {
+  position: absolute; top: 0; right: 0; bottom: 0; left: 0; display: none;
+  align-items: center; justify-content: center;
+  background: radial-gradient(circle at 30% 30%, #3b4f8f, #121730 70%);
+  border-radius: inherit;
+  font-size: 44px; font-weight: 700; color: rgba(255,255,255,0.85);
+}
+body.demo .preview-fallback, body.demo .watch-fallback { display: flex; }
+
+.rows { margin-top: 0; }
+.row-title { font-size: 26px; color: var(--muted); margin: 14px 0 12px; }
+
+.tiles { display: flex; height: 170px; transition: transform 0.2s ease; }
+
+.tile {
+  flex: 0 0 auto;
+  width: 300px; height: 160px;
+  border-radius: 16px;
+  display: flex; flex-direction: column; justify-content: flex-end;
+  padding: 18px 20px;
+  position: relative;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.4);
+}
+.tile .name { font-size: 34px; font-weight: 800; letter-spacing: -0.5px; }
+.tile .sub { font-size: 20px; opacity: 0.8; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tile .key { position: absolute; top: 14px; right: 14px; width: 22px; height: 22px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.7); }
+
+.tile.channel { background: var(--bg-2); width: 280px; }
+.tile.channel .num { position: absolute; top: 14px; left: 20px; font-size: 26px; color: var(--accent); font-weight: 700; }
+.tile.channel .live { position: absolute; top: 16px; right: 16px; font-size: 16px; background: var(--red); padding: 2px 10px; border-radius: 6px; font-weight: 700; }
+
+.tools { display: flex; margin-top: 22px; height: 70px; }
+.btn {
+  font-size: 24px; padding: 14px 30px; border-radius: 40px;
+  background: var(--bg-2); color: var(--text);
+  border: none; font-family: inherit;
+  transition: transform 0.15s ease;
+}
+
+.focusable.focused { transform: scale(1.08); box-shadow: 0 0 0 5px var(--focus), 0 16px 40px rgba(0,0,0,0.6); z-index: 2; }
+.btn.focused { transform: scale(1.05); background: var(--text); color: var(--bg); }
+
+.hotkeys { display: flex; font-size: 20px; color: var(--muted); margin-top: 14px; }
+.hotkeys span { display: inline-flex; align-items: center; }
+.dot { display: inline-block; width: 20px; height: 20px; border-radius: 50%; }
+.dot.red { background: var(--red); } .dot.green { background: var(--green); }
+.dot.yellow { background: var(--yellow); } .dot.blue { background: var(--blue); }
+
+/* ---------- Watch ---------- */
+#watch { background: transparent; }
+.watch-fallback { border-radius: 0; font-size: 80px; }
+.banner {
+  position: absolute; left: 96px; right: 96px; bottom: 60px;
+  display: flex; align-items: center;
+  background: rgba(10, 13, 26, 0.88); border-radius: 22px; padding: 26px 40px;
+  transition: opacity 0.4s ease;
+}
+.banner.faded { opacity: 0; }
+.banner-num { font-size: 64px; font-weight: 800; color: var(--accent); min-width: 140px; }
+.banner-name { font-size: 42px; font-weight: 700; }
+.banner-now { font-size: 26px; color: var(--muted); margin-top: 4px; }
+.banner-hint { margin-left: auto; font-size: 22px; color: var(--muted); }
+
+/* ---------- Panels ---------- */
+.panel {
+  position: absolute; left: 260px; right: 260px; top: 70px; bottom: 70px;
+  background: var(--panel); border-radius: 26px; padding: 44px 56px;
+  display: flex; flex-direction: column;
+}
+.panel h2 { font-size: 44px; margin-bottom: 20px; }
+.scroll { flex: 1; overflow: hidden; position: relative; }
+.panel-hint { font-size: 20px; color: var(--muted); margin-top: 16px; }
+
+.section-title { font-size: 24px; color: var(--accent); letter-spacing: 2px; text-transform: uppercase; margin: 26px 0 10px; }
+.srow { display: flex; align-items: center; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.srow .label { flex: 1; font-size: 28px; }
+.srow .label small { display: block; font-size: 18px; color: var(--muted); }
+.srow .label.off { opacity: 0.45; }
+.chip { font-size: 20px; padding: 10px 20px; border-radius: 24px; background: var(--bg-2); color: var(--text); border: none; font-family: inherit; white-space: nowrap; }
+.chip.focused { background: var(--text); color: var(--bg); transform: scale(1.05); }
+.chip.on { box-shadow: inset 0 0 0 2px var(--accent); }
+.swatch { width: 28px; height: 28px; border-radius: 8px; flex: 0 0 auto; }
+input.field {
+  font-size: 24px; padding: 10px 16px; border-radius: 10px; border: 2px solid #33405f;
+  background: #0d1222; color: var(--text); font-family: inherit; width: 220px;
+}
+input.field.focused { border-color: var(--text); }
+
+/* ---------- Misc ---------- */
+.digits {
+  position: absolute; top: 60px; right: 96px; z-index: 20;
+  font-size: 96px; font-weight: 800; color: var(--text);
+  background: rgba(10, 13, 26, 0.9); padding: 10px 40px; border-radius: 20px;
+  letter-spacing: 8px;
+}
+.toast {
+  position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); z-index: 30;
+  font-size: 26px; background: rgba(20, 26, 46, 0.95); padding: 18px 36px; border-radius: 40px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+
+/* Spacing between items (flex `gap` isn't supported by older TV browsers). */
+.tiles > * + * { margin-left: 28px; }
+.tools > * + * { margin-left: 20px; }
+.hotkeys > * + * { margin-left: 40px; }
+.hotkeys .dot { margin-right: 10px; }
+.banner > * + * { margin-left: 36px; }
+.srow > * + * { margin-left: 14px; }
+.banner .banner-hint { margin-left: auto; }
