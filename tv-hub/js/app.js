@@ -11,6 +11,7 @@
   var PALETTE = ['#e50914', '#113ccf', '#00a8e1', '#ff0000', '#8e24aa', '#00897b', '#f4511e', '#3949ab', '#6d4c41'];
   var PLAYER = TVHUB_DEFAULTS.playerChannels;
   var SPORT = TVHUB_DEFAULTS.sportChannels;
+  var SPORTS = TVHUB_DEFAULTS.sports;
   var SKY_COLOUR = '#003f8c';
   var MINUTE = 60000, HOUR = 60 * MINUTE;
 
@@ -32,11 +33,15 @@
 
   var state = load();
 
+  function defaultSportHidden() {
+    return SPORT.filter(function (c) { return c.hidden; }).map(function (c) { return c.key; });
+  }
+
   function fresh() {
     var d = clone(TVHUB_DEFAULTS);
     return {
       version: d.version, apps: d.apps, channels: d.channels, online: d.online, shows: d.shows,
-      sportHidden: [], options: d.options, usage: {}, lastKey: null
+      sportHidden: defaultSportHidden(), mySports: d.mySports, options: d.options, usage: {}, lastKey: null
     };
   }
 
@@ -49,6 +54,10 @@
     saved.options = opts;
     saved.usage = saved.usage || {};
     migrate(saved);
+    // Whatever was saved, every list must exist or the screens can't be drawn.
+    var d = TVHUB_DEFAULTS;
+    var lists = { apps: d.apps, channels: [], online: d.online, shows: [], sportHidden: defaultSportHidden(), mySports: d.mySports };
+    for (var key in lists) if (!Array.isArray(saved[key])) saved[key] = clone(lists[key]);
     return saved;
   }
 
@@ -76,12 +85,16 @@
       s.channels = s.channels.filter(function (c) { return c.kind !== 'player'; });
       s.lastKey = last && last.kind !== 'player' ? chKey(last) : null;
       delete s.lastChannel;
-      s.options.smartOrder = false;
       // Tighter name patterns for finding apps on the TV.
       s.apps.forEach(function (a) {
         var def = d.apps.filter(function (x) { return x.id === a.id; })[0];
         if (def) a.match = def.match;
       });
+    }
+    if (v < 4) {
+      // Version 4 adds "My sports" and starts the less-watched Sky Sports channels hidden.
+      s.mySports = d.mySports;
+      s.sportHidden = defaultSportHidden();
     }
     s.version = d.version;
   }
@@ -133,7 +146,7 @@
   }
   Nav.prototype.rows = function () {
     return Array.prototype.filter.call(this.root.querySelectorAll('.nav-row'), function (row) {
-      return row.offsetParent !== null && row.querySelector('.focusable');
+      return !row.classList.contains('hidden') && row.querySelector('.focusable');
     });
   };
   Nav.prototype.items = function (row) { return row ? row.querySelectorAll('.focusable') : []; };
@@ -234,6 +247,7 @@
     var prev = current;
     current = name;
     clearTimeout(previewTimer);
+    cancelLaunch();
     ['home', 'watch'].concat(OVERLAYS).forEach(function (s) {
       var on = s === name || (s === 'home' && OVERLAYS.indexOf(name) !== -1);
       $(s).classList.toggle('active', on);
@@ -271,8 +285,9 @@
   // ---------------------------------------------------------------- live data
 
   // Latest listings, shared by every tile that shows them.
-  var sportNow = {};   // sport key  -> { now, next, unavailable }
-  var onlineNow = {};  // player key -> { now, next, unavailable }
+  var sportNow = {};      // sport channel key -> { now, next, unavailable }
+  var onlineNow = {};     // player key -> { now, next, unavailable }
+  var sportEvents = null; // live and upcoming events for the sports you follow (null until loaded)
   // Tiles register a painter per data key; painters only update their own tile.
   var painters = {};
   function onPaint(key, fn) { (painters[key] = painters[key] || []).push(fn); }
@@ -282,25 +297,70 @@
   function visibleSport() {
     return SPORT.filter(function (c) { return state.sportHidden.indexOf(c.key) === -1; });
   }
-  function liveSport() {
-    return visibleSport().filter(function (c) { return isLiveEvent((sportNow[c.key] || {}).now); });
+  var SID_CHANNEL = {};
+  SPORT.forEach(function (c) { SID_CHANNEL[c.sid] = c; });
+
+  // The followed sport a programme belongs to, or null. Only live coverage counts.
+  function followedSport(title) {
+    if (!/\blive\b/i.test(title)) return null;
+    for (var i = 0; i < SPORTS.length; i++) {
+      var sp = SPORTS[i];
+      if (state.mySports.indexOf(sp.key) === -1) continue;
+      if (new RegExp(sp.match, 'i').test(title) && !(sp.not && new RegExp(sp.not, 'i').test(title))) return sp;
+    }
+    return null;
+  }
+
+  function hash(str) {
+    var h = 0;
+    for (var i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
+    return (h >>> 0).toString(36);
+  }
+
+  // Live and upcoming events for the sports you follow, once each even when two channels
+  // show them (e.g. Sky Sports Premier League and Main Event).
+  function buildEvents(list) {
+    var now = Date.now(), byKey = {}, out = [];
+    list.forEach(function (p) {
+      if (p.stop <= now) return;
+      var sport = followedSport(p.title);
+      if (!sport) return;
+      var title = p.title.replace(/^\s*live:?\s*/i, '');
+      var id = title.toLowerCase() + '|' + p.start.getTime();
+      var ch = SID_CHANNEL[p.sid];
+      var e = byKey[id];
+      if (e) {
+        if (e.channels.indexOf(ch) === -1) e.channels.push(ch);
+        if (!e.image) e.image = p.image;
+        return;
+      }
+      e = byKey[id] = { key: 'ev-' + hash(id), title: title, start: p.start, stop: p.stop,
+        image: p.image, desc: p.desc, sport: sport, channels: [ch] };
+      out.push(e);
+    });
+    return out;
+  }
+
+  function liveEvents() {
+    var now = Date.now();
+    return (sportEvents || []).filter(function (e) { return e.start <= now && now < e.stop; });
   }
 
   // Fetch (or re-read from the guide cache) everything the home screen shows. Results only
-  // repaint tiles; the "On now" row is rebuilt separately, and never while you're in it.
+  // repaint tiles; rows whose set of tiles changes are rebuilt separately (scheduleRebuild).
   function refreshData() {
     state.online.forEach(function (k) {
       var def = PLAYER[k];
       if (!def) return;
       Guide.nowNext(def.source, def.id, function (nn) { onlineNow[k] = nn; paint('online-' + k); });
     });
-    var left = visibleSport().length;
     visibleSport().forEach(function (c) {
-      Guide.nowNext('sky', c.sid, function (nn) {
-        sportNow[c.key] = nn;
-        paint('sport-' + c.key);
-        if (--left === 0) scheduleOnNow();
-      });
+      Guide.nowNext('sky', c.sid, function (nn) { sportNow[c.key] = nn; paint('sport-' + c.key); });
+    });
+    Guide.skySchedule(SPORT.map(function (c) { return c.sid; }), 3, function (list) {
+      sportEvents = buildEvents(list);
+      paint('events');
+      scheduleRebuild();
     });
     state.channels.forEach(function (ch) { paint('sat-' + chKey(ch)); });
   }
@@ -320,6 +380,7 @@
     renderSport();
     renderTools();
     renderHotkeys();
+    shownSignature = signature();
     if (key) homeNav.focusKey(key);
     else homeNav.focus(firstRow(), 0);
     refreshData();
@@ -341,36 +402,49 @@
     return t;
   }
 
-  // -- On now: live sport, then what's on RTÉ / Virgin Media, then your last satellite channel
+  // -- On now: RTÉ / Virgin Media in your order (always first, so nothing pushes them aside),
+  //    then up to two live events for the sports you follow, then your last satellite channel.
 
-  var onNowShown = '';
-  function onNowSignature() {
-    return liveSport().map(function (c) { return c.key; }).join() + '|' + state.online.join();
+  // What the rebuildable rows (On now, My sport) contain; they're rebuilt when this changes.
+  var shownSignature = '';
+  function signature() {
+    var keys = function (list) { return list.map(function (e) { return e.key; }).join(); };
+    return state.online.join() + '|' + keys(liveEvents()) + '|' + keys((sportEvents || []).slice(0, 12));
   }
 
   function renderOnNow() {
     var row = $('row-onnow');
     row.innerHTML = '';
-    liveSport().forEach(function (c) { row.appendChild(sportTile(c, 'onnow-sport-' + c.key)); });
     state.online.forEach(function (k) { if (PLAYER[k]) row.appendChild(onlineTile(k)); });
+    var live = liveEvents();
+    live.slice(0, 2).forEach(function (e) { row.appendChild(eventTile(e, 'onnow-')); });
+    if (live.length > 2) {
+      var more = tile('add', 'onnow-more');
+      more.appendChild(el('div', 'name', '+' + (live.length - 2) + ' more live'));
+      more.onselect = function () { homeNav.focusKey('sport-' + live[0].key); };
+      more.onfocusitem = function () {
+        hero({ eyebrow: 'My sport', title: (live.length - 2) + ' more live events', line1: 'They’re all in the My sport row.',
+          hint: 'Press OK to go there', art: { color: SKY_COLOUR, label: 'LIVE' } });
+      };
+      row.appendChild(more);
+    }
     var li = lastIndex();
     if (li !== -1) row.appendChild(satelliteTile(state.channels[li], 'onnow-sat', true));
-    onNowShown = onNowSignature();
     var empty = !row.firstChild;
     row.classList.toggle('hidden', empty);
     row.previousElementSibling.classList.toggle('hidden', empty);
   }
 
-  // Rebuild "On now" when live sport starts or ends. Never mid-navigation: wait until the
-  // remote has been idle for a few seconds. Focus stays on the same tile.
-  var onNowTimer = null;
+  // Rebuild when live sport starts or ends, or upcoming events change. Never mid-navigation:
+  // wait until the remote has been idle for a few seconds. Focus stays on the same tile.
+  var rebuildTimer = null;
   var lastKeyAt = 0;
-  function scheduleOnNow(delay) {
-    clearTimeout(onNowTimer);
-    onNowTimer = setTimeout(function () {
-      if (current !== 'home' || onNowSignature() === onNowShown) return;
+  function scheduleRebuild(delay) {
+    clearTimeout(rebuildTimer);
+    rebuildTimer = setTimeout(function () {
+      if (current !== 'home' || signature() === shownSignature) return;
       var idle = Date.now() - lastKeyAt;
-      if (idle < 3000) return scheduleOnNow(3000 - idle);
+      if (idle < 3000) return scheduleRebuild(3000 - idle);
       renderHome();
     }, delay || 0);
   }
@@ -380,7 +454,7 @@
     var app = appById(def.app) || {};
     var t = tile('pic wide', 'online-' + k);
     t.style.backgroundColor = app.color || '';
-    var src = el('div', 'src', def.name);
+    var src = el('div', 'src', app.name || 'Player');
     src.style.background = app.color || '#555';
     t.appendChild(src);
     var name = el('div', 'name small', def.name);
@@ -395,13 +469,11 @@
       var nn = onlineNow[k];
       if (!nn) return;
       if (nn.now) {
-        name.textContent = nn.now.title;
-        sub.textContent = untilText(nn.now) + (nn.next ? ' · then ' + nn.next.title : '');
+        sub.textContent = nn.now.title + ' · ' + untilText(nn.now);
         sub.classList.remove('warn');
         bar.firstChild.style.width = Math.round(Guide.progress(nn.now) * 100) + '%';
         setImage(t, nn.now.image);
       } else {
-        name.textContent = def.name;
         sub.textContent = nn.unavailable ? 'Listings unavailable' : 'Nothing listed right now';
         sub.classList.add('warn');
         setImage(t, null);
@@ -469,7 +541,7 @@
       var stale = !s.info || Date.now() - s.info.at > 6 * HOUR;
       if (stale && Date.now() - (showTried[s.tvmazeId] || 0) > 10 * MINUTE) {
         showTried[s.tvmazeId] = Date.now();
-        Shows.refresh(s, function () { save(); scheduleRender(); });
+        Shows.refresh(s, function () { save(); scheduleShowsRender(); });
       }
     });
     var add = tile('add', 'show-add');
@@ -584,15 +656,66 @@
     return t;
   }
 
-  // -- Sport (every Sky Sports channel, in a fixed order)
+  // -- My sport: live and upcoming events for the sports you follow, then your Sky Sports channels
 
   function renderSport() {
     var row = $('row-sport');
     row.innerHTML = '';
-    var chans = visibleSport();
-    $('sport-title').classList.toggle('hidden', !chans.length);
-    row.classList.toggle('hidden', !chans.length);
-    chans.forEach(function (c) { row.appendChild(sportTile(c, 'sport-' + c.key)); });
+    (sportEvents || []).slice(0, 12).forEach(function (e) { row.appendChild(eventTile(e, 'sport-')); });
+    visibleSport().forEach(function (c) { row.appendChild(sportTile(c, 'sport-' + c.key)); });
+    var names = SPORTS.filter(function (sp) { return state.mySports.indexOf(sp.key) !== -1; }).map(function (sp) { return sp.name; });
+    $('sport-note').textContent = names.length ? names.join(' · ') + ' — live and coming up on Sky Sports' : 'choose your sports in Settings';
+    var empty = !row.firstChild;
+    $('sport-title').classList.toggle('hidden', empty);
+    row.classList.toggle('hidden', empty);
+  }
+
+  function eventTile(e, prefix) {
+    var t = tile('pic wide', prefix + e.key);
+    t.style.backgroundColor = SKY_COLOUR;
+    setImage(t, e.image);
+    var src = el('div', 'src', e.channels.map(function (c) { return c.short; }).join(' · '));
+    src.style.background = SKY_COLOUR;
+    t.appendChild(src);
+    var flag = el('div', 'flag');
+    t.appendChild(flag);
+    t.appendChild(el('div', 'name small', e.title));
+    var sub = el('div', 'sub', '');
+    var bar = el('div', 'bar');
+    bar.appendChild(el('i'));
+    t.appendChild(sub);
+    t.appendChild(bar);
+    function isLive() { var now = Date.now(); return e.start <= now && now < e.stop; }
+    function draw() {
+      var live = isLive();
+      flag.textContent = live ? 'LIVE' : Guide.when(e.start);
+      flag.classList.toggle('soon', !live);
+      sub.textContent = e.sport.name + (live ? ' · ' + untilText(e) : '');
+      bar.classList.toggle('hidden', !live);
+      bar.firstChild.style.width = Math.round(Guide.progress(e) * 100) + '%';
+    }
+    draw();
+    onPaint('events', draw);
+    var channel = e.channels[0];
+    t.onselect = function () {
+      var app = appById(TVHUB_DEFAULTS.sportApp);
+      if (!app) return toast('Add the NOW app in Settings first');
+      openApp(app, isLive() ? 'Opening NOW — choose ' + channel.name
+        : e.title + ' starts ' + Guide.when(e.start) + ' on ' + channel.name + '. Opening NOW…', 1500);
+    };
+    t.onfocusitem = function () {
+      var live = isLive();
+      hero({
+        eyebrow: e.sport.name + ' · ' + e.channels.map(function (c) { return c.name; }).join(' and '),
+        title: e.title,
+        line1: live ? 'LIVE now · until ' + Guide.clock(e.stop) : 'Starts ' + Guide.when(e.start) + ' · until ' + Guide.clock(e.stop),
+        progress: live ? Guide.progress(e) : null,
+        line2: trim(e.desc, 180),
+        hint: 'OK opens NOW → ' + channel.name,
+        art: { image: e.image, color: SKY_COLOUR, label: e.sport.name }
+      });
+    };
+    return t;
   }
 
   function sportTile(c, key) {
@@ -660,14 +783,16 @@
   function renderTools() {
     var tools = $('row-tools');
     tools.innerHTML = '';
-    [
+    var buttons = [
       ['watch', 'Watch satellite TV', function () { watchChannel(lastIndex()); },
         { eyebrow: 'Satellite TV', title: 'Watch full screen', line1: 'Opens your last channel. CH ▲▼ changes channel, BACK comes home.' }],
       ['add', 'Add a show', function () { show('search'); },
         { eyebrow: 'My shows', title: 'Add a show', line1: 'Search for a show and choose which app you watch it on.' }],
       ['settings', 'Settings', function () { show('settings'); },
-        { eyebrow: 'Settings', title: 'Settings', line1: 'Apps, colour buttons, channels, shows and sport.' }]
-    ].forEach(function (b) {
+        { eyebrow: 'Settings', title: 'Settings', line1: 'Apps, colour buttons, channels, shows and sport. The INFO button also opens Settings.' }]
+    ];
+    if (!state.channels.length) buttons.shift();
+    buttons.forEach(function (b) {
       var btn = el('button', 'btn focusable', b[1]);
       btn.setAttribute('data-key', 'tool-' + b[0]);
       btn.onselect = b[2];
@@ -681,10 +806,16 @@
     });
   }
 
-  var renderTimer = null;
-  function scheduleRender() {
-    clearTimeout(renderTimer);
-    renderTimer = setTimeout(function () { if (current === 'home') renderHome(); }, 400);
+  // After show lookups finish, redraw just the My shows row (once, when they've settled).
+  var showsTimer = null;
+  function scheduleShowsRender() {
+    clearTimeout(showsTimer);
+    showsTimer = setTimeout(function () {
+      if (current !== 'home') return;
+      var key = homeNav.currentKey();
+      renderShows();
+      if (key && key.indexOf('show-') === 0) homeNav.focusKey(key);
+    }, 800);
   }
 
   screens.home = {
@@ -706,23 +837,35 @@
     }
   };
 
-  // Open another app. A message shown for `delay` ms first gives time to read instructions.
+  // Open another app. A message shown for `delay` ms first gives time to read instructions;
+  // any other button during that time cancels it, and OK isn't counted twice.
+  var launchTimer = null;
   function openApp(app, message, delay) {
     clearTimeout(previewTimer);
+    if (launchTimer) return;
     if (!app.appId) {
       toast(app.name + ' wasn’t found on this TV — open Settings › Apps › Change app');
       return;
     }
     state.usage[app.id] = (state.usage[app.id] || 0) + 1;
+    var tip = '';
+    if ((state.launches = (state.launches || 0) + 1) <= 3) tip = '  ·  To come back: Home, then TV Hub';
     save();
-    toast(message || 'Opening ' + app.name + '…', delay ? delay + 2000 : 0);
-    setTimeout(function () {
+    toast((message || 'Opening ' + app.name + '…') + tip + (delay ? '  ·  any other button cancels' : ''), (delay || 0) + 3000);
+    launchTimer = setTimeout(function () {
+      launchTimer = null;
       Platform.hideTvWindow();
       Platform.launchApp(app.appId, function (msg) {
         toast(app.name + ': ' + msg + ' — check it in Settings › Apps');
-        showPreview();
+        if (current === 'home') showPreview();
       });
     }, delay || 0);
+  }
+  function cancelLaunch() {
+    if (!launchTimer) return false;
+    clearTimeout(launchTimer);
+    launchTimer = null;
+    return true;
   }
 
   // ---------------------------------------------------------------- live satellite TV
@@ -745,22 +888,34 @@
     });
   }
 
-  // callbacks: { ok(), fail(msg, noTuner) }
+  // callbacks: { ok(), fail(msg, noTuner) }. A second request for a channel that's still
+  // tuning waits for the same result.
+  var tuning = null; // { key, waiters: [callbacks] }
   function tuneTo(ch, callbacks) {
     callbacks = callbacks || {};
-    if (chKey(ch) === tunedKey) return callbacks.ok && callbacks.ok();
-    tunedKey = chKey(ch);
+    var key = chKey(ch);
+    if (key === tunedKey) return callbacks.ok && callbacks.ok();
+    if (tuning && tuning.key === key) return tuning.waiters.push(callbacks);
+    var job = tuning = { key: key, waiters: [callbacks] };
+    tunedKey = null;
+    function finish(ok, msg, noTuner) {
+      if (tuning === job) tuning = null;
+      if (ok) tunedKey = key;
+      job.waiters.forEach(function (w) {
+        if (ok) { if (w.ok) w.ok(); } else if (w.fail) w.fail(msg, noTuner);
+      });
+    }
     Platform.tune(ch, {
-      ok: function () { callbacks.ok && callbacks.ok(); },
+      ok: function () { finish(true); },
       noSignal: function () { toast('No signal on ' + ch.name + ' — check the satellite dish'); },
       program: function (title) {
         if (title && current === 'watch') $('banner-now').textContent = 'Now: ' + title;
       },
-      fail: function (msg, noTuner) { tunedKey = null; callbacks.fail && callbacks.fail(msg, noTuner); }
+      fail: function (msg, noTuner) { finish(false, msg, noTuner); }
     });
   }
 
-  function previewOn() { return state.options.livePreview && Platform.canTune; }
+  function previewOn() { return state.options.livePreview && Platform.canTune(); }
 
   function showPreview() {
     document.body.classList.toggle('no-preview', Platform.isTv && !previewOn());
@@ -780,12 +935,15 @@
     if (!previewOn()) return;
     previewTimer = setTimeout(function () {
       if (current !== 'home' || homeNav.currentKey() !== tileKey) return;
-      tuneTo(ch, { fail: function (msg) { heroTuner(ch, tileKey, 'Can’t show this channel: ' + msg); } });
+      tuneTo(ch, { fail: function (msg) {
+        if (current === 'home' && homeNav.currentKey() === tileKey) heroTuner(ch, tileKey, 'Can’t show this channel: ' + msg);
+      } });
     }, 700);
   }
 
   function watchChannel(i) {
     clearTimeout(previewTimer);
+    cancelLaunch();
     var ch = state.channels[i];
     if (!ch) { toast('No satellite channels yet — choose “Add your satellite channels”'); return; }
     state.lastKey = chKey(ch);
@@ -830,6 +988,8 @@
   screens.watch = {
     enter: function () {
       Platform.showTvWindow({ x: 0, y: 0, w: 1920, h: 1080 });
+      var ch = state.channels[lastIndex()];
+      if (ch) tuneTo(ch, { fail: function (msg) { toast('Couldn’t tune ' + ch.name + ': ' + msg); } });
       updateBanner();
     },
     key: function (a) {
@@ -904,7 +1064,8 @@
         row.appendChild(chip(have ? '✓ Added' : 'Add', function () { if (!have) chooseAppFor(r); }, have ? 'on' : ''));
         body.appendChild(row);
       });
-      if (current === 'search') searchNav.focus(results.length ? 1 : 0, 0);
+      // Don't pull focus out of the box if you've started typing again.
+      if (current === 'search' && document.activeElement !== searchInput) searchNav.focus(results.length ? 1 : 0, 0);
     });
   }
 
@@ -927,7 +1088,7 @@
               state.shows.unshift(s);
               showTried[s.tvmazeId] = Date.now();
               save();
-              Shows.refresh(s, function () { save(); scheduleRender(); });
+              Shows.refresh(s, function () { save(); scheduleShowsRender(); });
               toast(r.name + ' added — it opens in ' + app.name);
               show('home');
               homeNav.focusKey('show-' + s.tvmazeId);
@@ -943,6 +1104,7 @@
     enter: function (prev) {
       Platform.hideTvWindow();
       if (prev !== 'picker') {
+        searchToken++; // ignore answers to searches from a previous visit
         searchInput.value = '';
         $('search-body').innerHTML = '';
         searchNav.focus(0, 0);
@@ -958,7 +1120,7 @@
         if (a === 'BACK' || a === 'DOWN' || a === 'UP') { searchInput.blur(); if (a === 'BACK') return; }
         else return; // let the keyboard handle it
       }
-      if (a === 'BACK') return show('home');
+      if (a === 'BACK') { searchToken++; return show('home'); }
       if (a === 'ENTER') return searchNav.select();
       searchNav.move(a);
     }
@@ -1033,7 +1195,7 @@
       var label = el('div', 'label' + (app.hidden ? ' off' : ''), app.name);
       label.appendChild(el('small', null, app.appId ? 'Found on this TV' : 'Not found on this TV yet — use Change app'));
       row.appendChild(label);
-      row.appendChild(chip(app.hidden ? 'Hidden' : 'Shown', function () { app.hidden = !app.hidden; changed(); }, app.hidden ? '' : 'on'));
+      row.appendChild(chip(app.hidden ? 'Hidden' : '✓ Shown', function () { app.hidden = !app.hidden; changed(); }, app.hidden ? '' : 'on'));
       row.appendChild(chip('Button: ' + (app.hotkey || 'none'), function () {
         var next = HOTKEYS[(HOTKEYS.indexOf(app.hotkey) + 1)] || null; // cycles red→green→yellow→blue→none
         var had = next && appForHotkey(next);
@@ -1077,10 +1239,14 @@
     manual.appendChild(chip('Add', function () {
       var n = parseInt(num.value, 10);
       if (!n) return toast('Enter a channel number first');
-      if (channelIndex(n + '-0') !== -1) return toast('Channel ' + n + ' is already in your list');
-      state.channels.push({ name: name.value.trim() || ('Channel ' + n), major: n, minor: 0 });
-      changed();
-      toast('Added channel ' + n);
+      Platform.getTvChannels(function (all) {
+        var tv = all.filter(function (c) { return c.major === n; })[0];
+        var ch = { name: name.value.trim() || (tv && tv.name) || ('Channel ' + n), major: n, minor: tv ? tv.minor || 0 : 0 };
+        if (channelIndex(chKey(ch)) !== -1) return toast('Channel ' + n + ' is already in your list');
+        state.channels.push(ch);
+        changed();
+        toast('Added ' + ch.name);
+      });
     }));
     body.appendChild(manual);
 
@@ -1102,12 +1268,25 @@
     onRow.appendChild(chip('+ Add online channels (RTÉ, Virgin Media)', openPlayerPicker));
     body.appendChild(onRow);
 
-    section(body, 'Sport row (Sky Sports on NOW)');
+    section(body, 'My sports (live events in On now and My sport)');
+    var sportRow = null;
+    SPORTS.forEach(function (sp, i) {
+      if (i % 4 === 0) { sportRow = el('div', 'srow nav-row'); body.appendChild(sportRow); }
+      var on = state.mySports.indexOf(sp.key) !== -1;
+      sportRow.appendChild(chip((on ? '✓ ' : '') + sp.name, function () {
+        if (on) state.mySports.splice(state.mySports.indexOf(sp.key), 1);
+        else state.mySports.push(sp.key);
+        sportEvents = null; // rebuilt from the guide cache with the new choice
+        changed();
+      }, on ? 'on' : ''));
+    });
+
+    section(body, 'Sky Sports channels (in My sport)');
     SPORT.forEach(function (c) {
       var row = el('div', 'srow nav-row');
       var hidden = state.sportHidden.indexOf(c.key) !== -1;
       row.appendChild(el('div', 'label' + (hidden ? ' off' : ''), c.name));
-      row.appendChild(chip(hidden ? 'Hidden' : 'Shown', function () {
+      row.appendChild(chip(hidden ? 'Hidden' : '✓ Shown', function () {
         if (hidden) state.sportHidden.splice(state.sportHidden.indexOf(c.key), 1);
         else state.sportHidden.push(c.key);
         changed();
@@ -1186,12 +1365,15 @@
     items.forEach(function (it) {
       var row = el('div', 'srow nav-row');
       row.appendChild(el('div', 'label', it.label));
-      row.appendChild(chip(it.chip, function () {
-        if (it.select()) return;
+      var c = chip(it.chip, function () {
+        var res = it.select();
+        if (res === true) return;
         save();
+        if (res && res.chip) { c.textContent = res.chip; c.classList.toggle('on', !!res.on); return; }
         renderPicker();
         pickerNav.refresh();
-      }, it.on ? 'on' : ''));
+      }, it.on ? 'on' : '');
+      row.appendChild(c);
       body.appendChild(row);
     });
   }
@@ -1212,7 +1394,11 @@
       items: function () {
         return list.map(function (x) {
           var on = isOn(x);
-          return { label: label(x), chip: on ? '✓ Added' : 'Add', on: on, select: function () { toggle(x); } };
+          return { label: label(x), chip: on ? '✓ Added' : 'Add', on: on, select: function () {
+            toggle(x);
+            var now = isOn(x);
+            return { chip: now ? '✓ Added' : 'Add', on: now };
+          } };
         });
       }
     });
@@ -1283,6 +1469,7 @@
         toast('This TV didn’t share its channel list — use Settings › Add by number');
         return;
       }
+      list = list.slice().sort(function (a, b) { return a.major - b.major || (a.minor || 0) - (b.minor || 0); });
       togglePicker('Choose your satellite channels', list,
         function (c) { return channelLabel(c) + '   ' + c.name; },
         function (c) { return channelIndex(chKey(c)) !== -1; },
@@ -1330,7 +1517,7 @@
   var lastFullRender = Date.now();
   function tick() {
     if (current !== 'home' || document.hidden) return;
-    if (Date.now() - lastFullRender > HOUR) { lastFullRender = Date.now(); renderHome(); }
+    if (Date.now() - lastFullRender > HOUR && Date.now() - lastKeyAt > 10000) { lastFullRender = Date.now(); renderHome(); }
     else refreshData();
   }
 
@@ -1345,6 +1532,13 @@
     var a = Platform.actionFor(e);
     if (!a) return;
     lastKeyAt = Date.now();
+    // While an app is about to open, OK does nothing more and any other button cancels.
+    if (launchTimer) {
+      e.preventDefault();
+      if (a !== 'ENTER' && cancelLaunch()) toast('Cancelled');
+      return;
+    }
+    if (a === 'INFO' && current === 'home') return show('settings');
     var typing = document.activeElement && document.activeElement.tagName === 'INPUT';
     if (typing && e.keyCode === 8) return; // Backspace deletes text (keyboard in demo mode)
     if (!typing) e.preventDefault();
@@ -1368,7 +1562,7 @@
 
   // Coming back from Netflix etc.: refresh everything (keeping your place) and put the live preview back.
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden) { clearTimeout(previewTimer); Platform.hideTvWindow(); tunedKey = null; }
+    if (document.hidden) { clearTimeout(previewTimer); cancelLaunch(); Platform.hideTvWindow(); tunedKey = null; }
     else if (current === 'home') { renderHome(); showPreview(); }
     else if (current === 'watch') screens.watch.enter();
   });

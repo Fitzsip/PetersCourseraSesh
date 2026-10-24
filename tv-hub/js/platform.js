@@ -105,12 +105,23 @@ var Platform = (function () {
       channelWaiters = null;
       w.forEach(function (f) { f(list || (channelList && channelList.list) || null); });
     }
+    // Some firmware never answers; don't let every later tune wait forever.
+    var guard;
+    var finished = false;
+    function once(list) { if (finished) return; finished = true; clearTimeout(guard); done(list); }
+    guard = setTimeout(function () { once(null); }, 5000);
     try {
-      tizen.tvchannel.getChannelList(done, function () { done(null); }, 'ALL', 0, 2000);
+      tizen.tvchannel.getChannelList(once, function (err) { noteDenied(err); once(null); }, 'ALL', 0, 2000);
     } catch (e) {
-      done(null);
+      noteDenied(e);
+      once(null);
     }
   }
+
+  // If the TV refuses the tuner permissions, stop offering live preview for this session.
+  var tunerDenied = false;
+  function noteDenied(err) { if (err && err.name === 'SecurityError') tunerDenied = true; }
+  function canTune() { return hasTuner && !tunerDenied; }
 
   function sameChannel(info, ch) { return info.major === ch.major && info.minor === (ch.minor || 0); }
 
@@ -137,8 +148,8 @@ var Platform = (function () {
     var r = [rect.x + 'px', rect.y + 'px', rect.w + 'px', rect.h + 'px'];
     try {
       tizen.tvwindow.show(function () { tvWindowVisible = true; cb && cb(true); },
-        function () { cb && cb(false); }, r, 'MAIN');
-    } catch (e) { cb && cb(false); }
+        function (err) { noteDenied(err); cb && cb(false); }, r, 'MAIN');
+    } catch (e) { noteDenied(e); cb && cb(false); }
   }
 
   function hideTvWindow() {
@@ -155,12 +166,15 @@ var Platform = (function () {
     try {
       var cur = tizen.tvwindow.getSource('MAIN');
       if (cur && cur.type === 'TV') return next();
+      var called = false;
+      var go = function () { if (!called) { called = true; clearTimeout(guard); next(); } };
+      var guard = setTimeout(go, 3000);
       tizen.systeminfo.getPropertyValue('VIDEOSOURCE', function (src) {
         var all = (src.connected || []).concat(src.disconnected || []);
         var tv = all.filter(function (s) { return s.type === 'TV'; })[0];
-        if (!tv) return next();
-        tizen.tvwindow.setSource(tv, next, next, 'MAIN');
-      }, next);
+        if (!tv) return go();
+        tizen.tvwindow.setSource(tv, go, go, 'MAIN');
+      }, go);
     } catch (e) {
       next();
     }
@@ -174,7 +188,7 @@ var Platform = (function () {
   function tune(channel, callbacks) {
     callbacks = callbacks || {};
     function fail(msg, noTuner) { callbacks.fail && callbacks.fail(msg, !!noTuner); }
-    if (!hasTuner) {
+    if (!canTune()) {
       if (hasTizen) return fail('This TV doesn’t let apps change channel', true);
       callbacks.ok && callbacks.ok();
       callbacks.program && callbacks.program('Demo programme on ' + channel.name);
@@ -191,9 +205,11 @@ var Platform = (function () {
             onnosignal: function () { callbacks.noSignal && callbacks.noSignal(); },
             onprograminforeceived: function (p) { callbacks.program && callbacks.program(p && p.title); }
           }, function (err) {
+            noteDenied(err);
             fail((err && err.message) || 'The TV refused to change channel', err && err.name === 'SecurityError');
           }, 'MAIN');
         } catch (e) {
+          noteDenied(e);
           fail(e.message, e.name === 'SecurityError');
         }
       });
@@ -201,7 +217,7 @@ var Platform = (function () {
   }
 
   // Now / next for one satellite channel: cb({now, next}) — titles may be undefined.
-  // Cached for a minute per channel.
+  // Cached for five minutes per channel.
   var nowNextCache = {};
   function getNowNext(channel, cb) {
     if (!hasTuner) {
@@ -211,7 +227,7 @@ var Platform = (function () {
     }
     var key = channel.major + '-' + (channel.minor || 0);
     var hit = nowNextCache[key];
-    if (hit && Date.now() - hit.at < 60000) return cb(hit.data);
+    if (hit && Date.now() - hit.at < 5 * 60000) return cb(hit.data);
     function done(data) { nowNextCache[key] = { at: Date.now(), data: data }; cb(data); }
     loadChannels(function (list) {
       var info = (list || []).filter(function (c) { return sameChannel(c, channel); })[0];
@@ -282,7 +298,7 @@ var Platform = (function () {
 
   return {
     isTv: hasTizen,
-    canTune: hasTuner,
+    canTune: canTune,
     registerKeys: registerKeys,
     actionFor: actionFor,
     launchApp: launchApp,

@@ -6,7 +6,7 @@
  * name when the ID is missing or wrong, so new apps work without knowing their ID.
  */
 var TVHUB_DEFAULTS = {
-  version: 3,
+  version: 4,
 
   apps: [
     { id: 'netflix', name: 'Netflix',     appId: '3201907018807', match: '^netflix',        color: '#e50914', text: '#ffffff', hotkey: 'red' },
@@ -41,21 +41,38 @@ var TVHUB_DEFAULTS = {
     'vm-more':   { name: 'Virgin Media More',  app: 'virgin', source: 'virgin',    id: 'vm_more' }
   },
 
-  // Sport row: Sky Sports channels (watched through NOW). "sid" is Sky's channel ID in its
-  // TV guide; these are the Irish versions. Hide any you don't want in Settings.
+  // Sport: Sky Sports channels (watched through NOW). "sid" is Sky's channel ID in its TV guide;
+  // these are the Irish versions. Channels marked hidden start switched off in Settings.
   sportApp: 'now',
   sportChannels: [
     { key: 'ss-main',     name: 'Sky Sports Main Event',     short: 'Main Event',     sid: '1309' },
     { key: 'ss-pl',       name: 'Sky Sports Premier League', short: 'Premier League', sid: '1312' },
-    { key: 'ss-football', name: 'Sky Sports Football',       short: 'Football',       sid: '3840' },
     { key: 'ss-f1',       name: 'Sky Sports F1',             short: 'F1',             sid: '1306' },
-    { key: 'ss-action',   name: 'Sky Sports Action',         short: 'Action',         sid: '1333' },
-    { key: 'ss-golf',     name: 'Sky Sports Golf',           short: 'Golf',           sid: '1324' },
-    { key: 'ss-cricket',  name: 'Sky Sports Cricket',        short: 'Cricket',        sid: '1302' },
-    { key: 'ss-tennis',   name: 'Sky Sports Tennis',         short: 'Tennis',         sid: '1285' },
-    { key: 'ss-mix',      name: 'Sky Sports Mix',            short: 'Mix',            sid: '4091' },
-    { key: 'ss-news',     name: 'Sky Sports News',           short: 'News',           sid: '1319' }
+    { key: 'ss-action',   name: 'Sky Sports NFL',            short: 'NFL',            sid: '1333' },
+    { key: 'ss-football', name: 'Sky Sports Football',       short: 'Football',       sid: '3840', hidden: true },
+    { key: 'ss-golf',     name: 'Sky Sports Golf',           short: 'Golf',           sid: '1324', hidden: true },
+    { key: 'ss-cricket',  name: 'Sky Sports Cricket',        short: 'Cricket',        sid: '1302', hidden: true },
+    { key: 'ss-tennis',   name: 'Sky Sports Tennis',         short: 'Tennis',         sid: '1285', hidden: true },
+    { key: 'ss-mix',      name: 'Sky Sports Mix',            short: 'Mix',            sid: '4091', hidden: true },
+    { key: 'ss-news',     name: 'Sky Sports News',           short: 'News',           sid: '1319', hidden: true }
   ],
+
+  // Sports you follow. Live events matching these, on any Sky Sports channel, are listed in
+  // "My sport" (today and the next few days) and live ones also appear in "On now".
+  // "match" is tested against the programme title; "not" excludes look-alikes.
+  sports: [
+    { key: 'f1',      name: 'Formula 1',      match: '\\b(f1|formula 1|formula one|grand prix)\\b', not: 'f1 academy|formula 2|formula 3|motogp' },
+    { key: 'nfl',     name: 'NFL',            match: '\\bnfl\\b|super bowl' },
+    { key: 'pl',      name: 'Premier League', match: 'premier league', not: 'darts|netball|rugby|snooker' },
+    { key: 'efl',     name: 'EFL & other football', match: '\\befl\\b|championship|carabao|scottish premiership|la liga|serie a|bundesliga', not: 'darts|golf|snooker|rugby|open championship|world championship' },
+    { key: 'golf',    name: 'Golf',           match: 'golf|\\bpga\\b|ryder cup|the open' },
+    { key: 'cricket', name: 'Cricket',        match: 'cricket|test match|\\bt20\\b|the hundred|\\bashes\\b' },
+    { key: 'tennis',  name: 'Tennis',         match: 'tennis|\\batp\\b|\\bwta\\b' },
+    { key: 'rugby',   name: 'Rugby',          match: 'rugby' },
+    { key: 'boxing',  name: 'Boxing',         match: 'boxing|fight night' },
+    { key: 'darts',   name: 'Darts',          match: 'darts' }
+  ],
+  mySports: ['f1', 'nfl', 'pl'],
 
   // Shows you're following: [{ tvmazeId, name, app }]. Add them from the home screen.
   shows: [],

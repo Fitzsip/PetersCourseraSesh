@@ -46,16 +46,18 @@ var Shows = (function () {
   // Lookups run one at a time with a short gap, to stay well inside TVmaze's rate limit
   // (about 20 requests per 10 seconds) however many shows you follow.
   var queue = [];
-  var waiting = {};  // tvmazeId -> [callbacks] for lookups queued or in flight
+  var waiting = {};  // tvmazeId -> { shows: [copies to fill], cbs: [callbacks] } while queued or in flight
   var busy = false;
   function pump() {
     if (busy || !queue.length) return;
     busy = true;
     var show = queue.shift();
     fetchInfo(show, function () {
-      var cbs = waiting[show.tvmazeId] || [];
+      var w = waiting[show.tvmazeId] || { shows: [], cbs: [] };
       delete waiting[show.tvmazeId];
-      cbs.forEach(function (f) { if (f) f(show); });
+      // The same show may have been removed and added again meanwhile: fill every copy.
+      w.shows.forEach(function (copy) { if (copy !== show && show.info) copy.info = show.info; });
+      w.cbs.forEach(function (f) { if (f) f(show); });
       setTimeout(function () { busy = false; pump(); }, 600);
     });
   }
@@ -63,8 +65,9 @@ var Shows = (function () {
   // Fills show.info (poster, summary, latest/next episode). cb(show) when done.
   function refresh(show, cb) {
     if (show.info && Date.now() - show.info.at < REFRESH) return cb && cb(show);
-    if (waiting[show.tvmazeId]) return waiting[show.tvmazeId].push(cb);
-    waiting[show.tvmazeId] = [cb];
+    var w = waiting[show.tvmazeId];
+    if (w) { w.shows.push(show); w.cbs.push(cb); return; }
+    waiting[show.tvmazeId] = { shows: [show], cbs: [cb] };
     queue.push(show);
     pump();
   }

@@ -8,14 +8,14 @@ It's an ordinary Samsung (Tizen) app that you install with Samsung's own **Devel
 
 | | |
 |---|---|
-| **On now** | The first row. It shows live Sky Sports events, what's on RTÉ One, RTÉ2, Virgin Media One and Two right now, with a progress bar and what's next, and your last satellite channel. Live sport is tagged **LIVE** and comes first. |
+| **On now** | The first row. What's on RTÉ One, RTÉ2, Virgin Media One and Two right now, always first and in your order. Then up to two live events from the sports you follow (tagged **LIVE**), then your last satellite channel. |
 | **My shows** | The shows you're following, with posters and a **NEW EPISODE** flag when one came out in the last week, or the date of the next one. Press OK and it opens the right app. Shows with new episodes come first, then your own order. |
 | **Your apps** | Big tiles for Netflix, Disney+, Prime Video, NOW, YouTube, RTÉ Player and Virgin Media Player. Add any app installed on the TV, and hide or reorder tiles. |
 | **Colour buttons** | Red, green, yellow and blue on the remote open an app straight away, from the home screen or while you watch TV. You choose which app goes on each button. |
 | **Satellite TV** | Your free-to-air channels. Highlight one and it plays in the preview window; press OK to watch full screen. CH ▲▼ flicks through them. |
-| **Sky Sports on NOW** | What's on right now on each Sky Sports channel, with a picture and the times. It also flags a live event coming up next, e.g. "Live at 16:30". OK opens NOW. |
+| **My sport** | Live and upcoming events for the sports you follow, set to **F1, NFL and Premier League** to start with. They come from Sky's guide for the next few days, on whichever Sky Sports channel shows them, e.g. *LIVE · Premier League: Arsenal v Spurs · Main Event · Premier League* or *Sun 18:00 · NFL: Chiefs v Bills*. After them come tiles for your Sky Sports channels: Main Event, Premier League, F1 and NFL, with the others switched on in Settings. OK opens NOW. |
 | **Type a number** | Type `102` on the remote and it jumps to that satellite channel. The number box shows the channel's name before it switches. `1` to `9` also open your 1st to 9th satellite channels. |
-| **Settings** | Everything is set up with the remote: show, hide and reorder apps; assign colour buttons; choose channels; add or remove online channels and Sport channels. Remove and Reset ask you to press OK twice. |
+| **Settings** | The INFO button opens it. Everything is set up with the remote: the sports you follow, show, hide and reorder apps; assign colour buttons; choose channels; add or remove online channels and Sport channels. Remove and Reset ask you to press OK twice. |
 
 ## Try it on your computer first
 
@@ -29,9 +29,29 @@ Open `index.html` in Chrome. It starts in **demo mode** with fake channels and p
 | CH ▲ / CH ▼ | Page Up / Page Down |
 | Numbers | 0–9 |
 
-## Install it on the TV (one-off, about 30–45 minutes)
+## Install it from an Android phone (no computer needed)
 
-You need a Windows, Mac or Linux computer on the same Wi-Fi or network as the TV.
+[Apps2Samsung](https://github.com/Apps2Samsung/Apps2Samsung) is a free, open-source installer for Samsung TVs. Its Android app does what Tizen Studio does: it finds the TV, makes the Samsung certificate and installs the app.
+
+1. **Turn on Developer Mode on the TV.**
+   1. Open **Apps**.
+   2. Type `1 2 3 4 5` on the remote.
+   3. Switch it **On** and enter your **phone's** IP address. On Android it's in Settings → About phone → Status, or under your Wi-Fi network's details.
+   4. Turn the TV off at the wall and back on.
+2. **Install Apps2Samsung on the phone.** Take the `-android.apk` from its [releases page](https://github.com/Apps2Samsung/Apps2Samsung/releases), or add it through F-Droid or Obtainium as its README explains. Install it only from there.
+3. **Download TV Hub to the phone.** That's the file `tv-hub/dist/TVHub.wgt` from this repository. If it's out of date, rebuild it with `./make-wgt.sh`.
+4. **Install it.**
+   1. In Apps2Samsung, choose your TV.
+   2. Choose **your own package** and pick `TVHub.wgt`.
+   3. Sign in to your Samsung account when it asks; that's how it makes the certificate.
+   4. Install.
+5. **Back up from Apps2Samsung.** Use its **Backup** feature, and keep the file in Google Drive or email it to yourself. It holds the signing certificate, so you can update TV Hub later without losing your settings.
+
+Then carry on with **First-time setup** below. On iPhone, Apps2Samsung is a beta that needs a computer once to set up, so the computer method below may be simpler.
+
+## Or install it from a computer (one-off, about 30–45 minutes)
+
+You need a Windows, Mac or Linux computer on the same Wi-Fi or network as the TV. Apps2Samsung's desktop version also works and is quicker than these steps.
 
 1. **Find your computer's IP address.** On Windows, run `ipconfig`. On a Mac, go to System Settings → Network.
 2. **Turn on Developer Mode on the TV.**
@@ -117,5 +137,7 @@ tv-hub/
   js/guide.js      Online TV guide for RTÉ, Virgin Media and Sky Sports
   js/shows.js      "My shows" info from TVmaze
   js/app.js        Home screen, live TV, sport, shows, settings and navigation
-  build.sh         Package and install from the command line
+  build.sh         Package, sign and install with Tizen Studio from the command line
+  make-wgt.sh      Make the unsigned dist/TVHub.wgt for Apps2Samsung
+  dist/TVHub.wgt   The packaged app, ready to install
 ```

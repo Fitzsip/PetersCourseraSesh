@@ -14,7 +14,7 @@ var Guide = (function () {
   var cache = {};    // request URL -> { at: ms, data } ; data null = the request failed
   var pending = {};  // request URL -> [callbacks] while a request is in flight
   var HOUR = 3600 * 1000;
-  var RETRY_AFTER_FAILURE = 10 * 60 * 1000;
+  var RETRY_AFTER_FAILURE = 10 * 60 * 1000;  // doubles after each failure, up to an hour
   var DAY = 24 * HOUR;
 
   function pad(n) { return (n < 10 ? '0' : '') + n; }
@@ -159,6 +159,20 @@ var Guide = (function () {
     for (var url in cache) if (now - cache[url].at > 2 * DAY) delete cache[url];
   }
 
+  // Sky's guide is asked with the territory header iptv-org uses. If that request fails (for
+  // example because the TV blocks custom headers), try once without it and remember what worked.
+  var skipHeaders = false;
+  function request(src, url, cb) {
+    if (!src.headers || skipHeaders) return Platform.getText(url, null, cb);
+    Platform.getText(url, src.headers, function (err, text) {
+      if (!err) return cb(null, text);
+      Platform.getText(url, null, function (err2, text2) {
+        if (!err2) skipHeaders = true;
+        cb(err2, text2);
+      });
+    });
+  }
+
   // cb(data) where data is { channelId: [programmes] }, or null if unavailable.
   function fetchDay(source, day, id, cb) {
     var src = sources[source];
@@ -166,12 +180,13 @@ var Guide = (function () {
     var hit = cache[url];
     if (hit) {
       var age = Date.now() - hit.at;
-      if (hit.data ? age < HOUR : age < RETRY_AFTER_FAILURE) return cb(hit.data || hit.last || null);
+      var wait = Math.min(HOUR, RETRY_AFTER_FAILURE * Math.pow(2, (hit.fails || 1) - 1));
+      if (hit.data ? age < HOUR : age < wait) return cb(hit.data || hit.last || null);
     }
     if (pending[url]) return pending[url].push(cb);
     pending[url] = [cb];
     prune();
-    Platform.getText(url, src.headers, function (err, text) {
+    request(src, url, function (err, text) {
       var data = null;
       if (!err) {
         try { data = src.parse(text, day, id); } catch (e) { data = null; }
@@ -179,7 +194,7 @@ var Guide = (function () {
       // A page that parses to nothing means the site changed: treat it as a failure.
       if (data && !hasProgrammes(data)) data = null;
       var last = hit && (hit.data || hit.last);
-      cache[url] = { at: Date.now(), data: data, last: data ? null : last };
+      cache[url] = { at: Date.now(), data: data, last: data ? null : last, fails: data ? 0 : ((hit && hit.fails) || 0) + 1 };
       var cbs = pending[url];
       delete pending[url];
       // If a refresh fails, keep showing the older listings we already had.
@@ -198,14 +213,25 @@ var Guide = (function () {
   // unavailable is true when the listings couldn't be loaded at all.
   function nowNext(source, id, cb) {
     var now = new Date();
+    // The last programme of a day has its "next" on tomorrow's listings.
+    function withNext(found) {
+      if (found.next) return cb(found);
+      fetchDay(source, addDays(now, 1), id, function (tomorrow) {
+        var list = (tomorrow && tomorrow[id]) || [];
+        for (var i = 0; i < list.length; i++) {
+          if (list[i].start >= found.now.stop - 60000) { found.next = list[i]; break; }
+        }
+        cb(found);
+      });
+    }
     fetchDay(source, now, id, function (today) {
       var found = today && today[id] && pick(today[id], now);
-      if (found) return cb(found);
+      if (found) return withNext(found);
       // Just after midnight the current programme may only be on yesterday's listings.
       fetchDay(source, addDays(now, -1), id, function (yday) {
         var merged = ((yday && yday[id]) || []).concat((today && today[id]) || []);
         found = pick(merged, now);
-        if (found) return cb(found);
+        if (found) return withNext(found);
         if (!Platform.isTv) return cb(demo(id));
         cb({ now: null, next: null, unavailable: !today && !yday });
       });
@@ -225,13 +251,53 @@ var Guide = (function () {
     '1333': ['Live: NFL — Chiefs v Bills', 'NFL Redzone']
   };
   function demo(id) {
-    var titles = DEMO[id] || ['Live programme', 'Coming up next'];
+    var titles = DEMO[id] || ['Studio programme', 'Coming up next'];
     var start = new Date(Date.now() - 25 * 60000);
     var mid = new Date(Date.now() + 35 * 60000);
     return {
       now: { title: titles[0], start: start, stop: mid, image: null, desc: 'Demo listing — real listings appear on the TV.' },
       next: { title: titles[1], start: mid, stop: new Date(mid.getTime() + 3600000), image: null, desc: '' }
     };
+  }
+
+  /*
+   * Every programme on the given Sky channels from yesterday until `days` days ahead.
+   * cb([{ sid, title, start, stop, image, desc }]) sorted by start time.
+   */
+  function skySchedule(sids, days, cb) {
+    var now = new Date();
+    var left = days + 1, all = [];
+    for (var d = -1; d < days; d++) {
+      fetchDay('sky', addDays(now, d), null, function (data) {
+        sids.forEach(function (sid) {
+          ((data && data[sid]) || []).forEach(function (p) {
+            all.push({ sid: sid, title: p.title, start: p.start, stop: p.stop, image: p.image, desc: p.desc });
+          });
+        });
+        if (--left > 0) return;
+        if (!all.length && !Platform.isTv) all = demoEvents();
+        cb(all.sort(function (a, b) { return a.start - b.start; }));
+      });
+    }
+  }
+
+  function demoEvents() {
+    var h = 3600000, now = Date.now();
+    function ev(sid, title, fromNow, hours) {
+      var start = new Date(now + fromNow * h);
+      return { sid: sid, title: title, start: start, stop: new Date(start.getTime() + hours * h), image: null, desc: 'Demo listing.' };
+    }
+    return [
+      ev('1306', 'Live F1: Brazilian Grand Prix Qualifying', -0.5, 1.5),
+      ev('1309', 'Live F1: Brazilian Grand Prix Qualifying', -0.5, 1.5),
+      ev('1312', 'Live Premier League: Arsenal v Liverpool', 3, 2.25),
+      ev('1309', 'Live Premier League: Arsenal v Liverpool', 3, 2.25),
+      ev('1333', 'Live NFL: Kansas City Chiefs v Buffalo Bills', 26, 3.5),
+      ev('1306', 'Live F1: Brazilian Grand Prix', 27, 3),
+      ev('1312', 'Live Premier League: Man City v Spurs', 48, 2.25),
+      ev('1309', 'Live Premier League Darts', 5, 3),
+      ev('1324', 'Live DP World Tour Golf', -1, 4)
+    ];
   }
 
   function progress(p) {
@@ -242,5 +308,14 @@ var Guide = (function () {
 
   function clock(d) { return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
 
-  return { nowNext: nowNext, progress: progress, clock: clock, _sources: sources };
+  // "Today 16:30", "Tomorrow 20:00", "Sun 18:00"
+  function when(d) {
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var day = new Date(d.getTime()); day.setHours(0, 0, 0, 0);
+    var diff = Math.round((day - today) / DAY);
+    var name = diff === 0 ? 'Today' : diff === 1 ? 'Tomorrow' : ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()];
+    return name + ' ' + clock(d);
+  }
+
+  return { nowNext: nowNext, skySchedule: skySchedule, progress: progress, clock: clock, when: when, _sources: sources };
 })();
