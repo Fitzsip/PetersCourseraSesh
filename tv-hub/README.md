@@ -15,8 +15,8 @@ It's an ordinary Samsung (Tizen) app that you install with Samsung's own **Devel
 | **Satellite TV** | Your free-to-air channels. Highlight one and it plays in the preview window; press OK to watch full screen. CH ▲▼ flicks through them. |
 | **My sport** | Live and upcoming events for the sports you follow, set to **F1, NFL and Premier League** to start with. They come from Sky's guide for the next few days, on whichever Sky Sports channel shows them, e.g. *LIVE · Premier League: Arsenal v Spurs · Main Event · Premier League* or *Sun 18:00 · NFL: Chiefs v Bills*. After them come tiles for your Sky Sports channels: Main Event, Premier League, F1 and NFL, with the others switched on in Settings. OK opens NOW. |
 | **Type a number** | Type `102` on the remote and it jumps to that satellite channel. The number box shows the channel's name before it switches. `1` to `9` also open your 1st to 9th satellite channels. |
-| **Spotify** | Now playing, with album art and progress. Play/pause, skip, back and volume, plus your playlists and recently played, all from the TV remote. **Play on…** switches between the TV, your phone, an Echo or any other Spotify Connect device. A colour button can be set to play/pause. Needs Spotify Premium and a one-time phone set-up; see below. |
-| **Sport alerts** | A banner when an F1, NFL or Premier League event you follow goes live, and 10 minutes before. OK opens NOW. |
+| **Spotify** | Now playing, with album art and progress. The remote's ▶‖ button plays and pauses, and while something plays it also shows in On now. Play/pause, skip, back and volume, plus your playlists and recently played, all from the TV remote. **Play on…** switches between the TV, your phone, an Echo or any other Spotify Connect device. A colour button can be set to play/pause. Needs Spotify Premium and a one-time phone set-up; see below. |
+| **Sport alerts** | A banner when an F1, NFL or Premier League event you follow goes live, and 10 minutes before. Practice sessions are listed but don't alert. Alerts appear on the home screen or while watching satellite TV in TV Hub, not over other apps. OK opens NOW. |
 | **Stats** | At the end of My sport: **F1** standings and this race weekend's session times in Irish time, the **Premier League table**, and this week's **NFL** games with live scores. |
 | **Weather** | Now, today and tomorrow in the top bar, for the town you pick in Settings. |
 | **New episodes** | A show in My shows with an episode out today appears in On now, e.g. *NEW TONIGHT 21:00*. |
@@ -124,7 +124,11 @@ You need a Windows, Mac or Linux computer on the same Wi-Fi or network as the TV
 6. Your phone opens a page that **won't load**, with an address starting `127.0.0.1`. That's expected.
 7. Copy that whole address and paste it into the second box on the TV, again with Apps2Samsung's Remote. Then choose **Connect**.
 
-If Spotify says the user isn't registered, go to your app's **User Management** on developer.spotify.com and add your own name and Spotify email.
+**Tips:**
+- **If Apps2Samsung's Remote can't type into the TV:** Samsung's **SmartThings** app has a TV remote with a keyboard too.
+- **If you leave the set-up screen:** the same QR code stays until you connect, so it's safe to come back. Choose **New QR code** if it's been more than a few minutes.
+- **Signing in with your own account:** this works straight away, because you own the app.
+- **Using other Spotify accounts in the house:** add each one under **User Management** on developer.spotify.com. Spotify only allows a few.
 
 ## Good to know
 
@@ -137,6 +141,11 @@ If Spotify says the user isn't registered, go to your app's **User Management** 
   - **Premier League and NFL:** ESPN's public (unofficial) data feed.
   - If either changes, that screen says it couldn't load, and nothing else is affected.
 - **Weather** is from Open-Meteo, which is free and needs no account.
+- **The backup QR code** contains your app choices, channels, shows, sports, weather town and Spotify Client ID. It never contains your Spotify sign-in, but treat it like a list of your viewing habits.
+- **Security tip:**
+  - After installing or updating, you can switch the TV's **Developer Mode off** again: Apps → 1 2 3 4 5.
+  - Or give your phone a fixed address in your router, so no other device inherits Developer Mode access.
+  - Turn Developer Mode back on before the next update.
 - **The screensaver** hides the live TV picture, but the channel's sound may continue. Turn the screensaver off in Settings if that bothers you.
 
 - **Streaming apps don't share what you're watching.** Netflix, Disney+, Prime and NOW keep viewing history private, so nothing outside those apps can read your "Continue watching" list. That's why you add shows to **My shows** yourself. TV Hub then keeps them up to date using TVmaze, a free TV database.

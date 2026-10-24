@@ -62,6 +62,7 @@ var Extras = (function () {
       var now = Date.now();
       for (var i = 0; i < races.length; i++) {
         var r = races[i];
+        if (!r || !r.date) continue;
         var raceStart = utc(r.date, r.time);
         if (raceStart.getTime() + 3 * 3600000 < now) continue; // finished
         var sessions = [];
@@ -78,16 +79,18 @@ var Extras = (function () {
       done();
     });
     getJson(F1 + '/driverStandings.json', 3 * 3600000, function (d) {
-      var list = d && d.MRData && d.MRData.StandingsTable && d.MRData.StandingsTable.StandingsLists[0];
-      if (list) out.drivers = list.DriverStandings.map(function (x) {
-        return { pos: x.position, name: x.Driver.givenName + ' ' + x.Driver.familyName,
+      var table = d && d.MRData && d.MRData.StandingsTable;
+      var list = table && table.StandingsLists && table.StandingsLists[0];
+      if (list && list.DriverStandings) out.drivers = list.DriverStandings.filter(function (x) { return x && x.Driver; }).map(function (x) {
+        return { pos: x.position, name: [x.Driver.givenName, x.Driver.familyName].join(' ').trim(),
           team: x.Constructors && x.Constructors[0] ? x.Constructors[0].name : '', points: x.points, wins: x.wins };
       });
       done();
     });
     getJson(F1 + '/constructorStandings.json', 3 * 3600000, function (d) {
-      var list = d && d.MRData && d.MRData.StandingsTable && d.MRData.StandingsTable.StandingsLists[0];
-      if (list) out.teams = list.ConstructorStandings.map(function (x) {
+      var table = d && d.MRData && d.MRData.StandingsTable;
+      var list = table && table.StandingsLists && table.StandingsLists[0];
+      if (list && list.ConstructorStandings) out.teams = list.ConstructorStandings.filter(function (x) { return x && x.Constructor; }).map(function (x) {
         return { pos: x.position, name: x.Constructor.name, points: x.points, wins: x.wins };
       });
       done();
@@ -133,7 +136,7 @@ var Extras = (function () {
     getJson('https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard', 10 * 60000, function (d) {
       var events = d && d.events;
       if (!events) return cb(Platform.isTv ? null : demoNFL());
-      cb(events.map(function (ev) {
+      cb(events.filter(Boolean).map(function (ev) {
         var comp = ev.competitions && ev.competitions[0] || {};
         var side = function (where) {
           var c = (comp.competitors || []).filter(function (x) { return x.homeAway === where; })[0] || {};

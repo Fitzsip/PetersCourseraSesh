@@ -19,6 +19,7 @@ var Platform = (function () {
     if (!hasTizen || !tizen.tvinputdevice) return;
     var wanted = ['ColorF0Red', 'ColorF1Green', 'ColorF2Yellow', 'ColorF3Blue',
       'ChannelUp', 'ChannelDown', 'Info', 'Exit',
+      'MediaPlayPause', 'MediaPlay', 'MediaPause', 'MediaTrackNext', 'MediaTrackPrevious', 'MediaFastForward', 'MediaRewind',
       '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
     try {
       var supported = tizen.tvinputdevice.getSupportedKeys().map(function (k) { return k.name; });
@@ -50,6 +51,9 @@ var Platform = (function () {
       case KEYS.CH_UP: case 33: return 'CH_UP';    // Page Up
       case KEYS.CH_DOWN: case 34: return 'CH_DOWN';// Page Down
       case KEYS.INFO: case 73: return 'INFO';      // I
+      case 10252: case 415: case 19: case 80: return 'PLAYPAUSE';  // remote ▶‖ / ▶ / ‖ (P in demo)
+      case 10233: case 417: return 'NEXT';                          // next track / fast-forward
+      case 10232: case 412: return 'PREV';                          // previous track / rewind
     }
     return null;
   }
@@ -242,11 +246,12 @@ var Platform = (function () {
     });
   }
 
-  // HTTP request. cb(err, text, status). On the TV, config.xml allows these cross-site requests.
+  // HTTP request. cb(err, text, status, header(name)). On the TV, config.xml allows these cross-site requests.
   function request(method, url, headers, body, cb) {
     var xhr = new XMLHttpRequest();
     var done = false;
-    function finish(err, text) { if (!done) { done = true; cb(err, text, xhr.status); } }
+    function header(name) { try { return xhr.getResponseHeader(name); } catch (e) { return null; } }
+    function finish(err, text) { if (!done) { done = true; cb(err, text, xhr.status, header); } }
     try {
       xhr.open(method, url, true);
       xhr.timeout = 12000;

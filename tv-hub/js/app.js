@@ -302,12 +302,15 @@
   SPORT.forEach(function (c) { SID_CHANNEL[c.sid] = c; });
 
   // The followed sport a programme belongs to, or null. Only live coverage counts.
+  var sportRes = SPORTS.map(function (sp) {
+    return { sp: sp, re: new RegExp(sp.match, 'i'), not: sp.not ? new RegExp(sp.not, 'i') : null };
+  });
   function followedSport(title) {
     if (!/\blive\b/i.test(title)) return null;
-    for (var i = 0; i < SPORTS.length; i++) {
-      var sp = SPORTS[i];
-      if (state.mySports.indexOf(sp.key) === -1) continue;
-      if (new RegExp(sp.match, 'i').test(title) && !(sp.not && new RegExp(sp.not, 'i').test(title))) return sp;
+    for (var i = 0; i < sportRes.length; i++) {
+      var x = sportRes[i];
+      if (state.mySports.indexOf(x.sp.key) === -1) continue;
+      if (x.re.test(title) && !(x.not && x.not.test(title))) return x.sp;
     }
     return null;
   }
@@ -416,7 +419,7 @@
     var keys = function (list) { return list.map(function (e) { return e.key; }).join(); };
     return state.online.join() + '|' + keys(liveEvents()) + '|' + keys((sportEvents || []).slice(0, 12)) + '|' +
       episodesToday().map(function (x) { return x.show.tvmazeId + (x.upcoming ? 'u' : ''); }).join() + '|' +
-      (Spotify.isPaired() ? 'S' + (music.lists ? music.lists.length : '-') : '');
+      (Spotify.isPaired() ? 'S' + (music.lists ? music.lists.map(function (x) { return x.key; }).join() : '-') + (nowItem() && isPlaying() ? 'P' : '') : '');
   }
 
   function renderOnNow() {
@@ -435,6 +438,7 @@
       };
       row.appendChild(more);
     }
+    if (Spotify.isPaired() && nowItem() && isPlaying()) row.appendChild(onNowMusicTile());
     episodesToday().forEach(function (x) { row.appendChild(episodeTile(x)); });
     var li = lastIndex();
     if (li !== -1) row.appendChild(satelliteTile(state.channels[li], 'onnow-sat', true));
@@ -675,9 +679,9 @@
   function renderSport() {
     var row = $('row-sport');
     row.innerHTML = '';
+    statsTiles(row);
     (sportEvents || []).slice(0, 12).forEach(function (e) { row.appendChild(eventTile(e, 'sport-')); });
     visibleSport().forEach(function (c) { row.appendChild(sportTile(c, 'sport-' + c.key)); });
-    statsTiles(row);
     var names = SPORTS.filter(function (sp) { return state.mySports.indexOf(sp.key) !== -1; }).map(function (sp) { return sp.name; });
     $('sport-note').textContent = names.length ? names.join(' · ') + ' — live and coming up on Sky Sports' : 'choose your sports in Settings';
     var empty = !row.firstChild;
@@ -1316,8 +1320,8 @@
     spRow.appendChild(chip(Spotify.isPaired() ? 'Reconnect' : 'Connect Spotify', function () { show('pair'); }));
     spRow.appendChild(chip('Play/pause button: ' + (state.options.spotifyKey || 'none'), function () {
       var next = HOTKEYS[(HOTKEYS.indexOf(state.options.spotifyKey) + 1)] || null;
-      var had = next && appForHotkey(next);
-      if (had) had.hotkey = null;
+      var had = null;
+      state.apps.forEach(function (o) { if (next && o.hotkey === next) { had = had || o; o.hotkey = null; } });
       state.options.spotifyKey = next;
       if (had) toast('The ' + next + ' button now plays/pauses Spotify instead of opening ' + had.name);
       changed();
@@ -1335,7 +1339,7 @@
     body.appendChild(alRow);
     var wxRow = el('div', 'srow nav-row');
     wxRow.appendChild(el('div', 'label', 'Weather and screensaver'));
-    wxRow.appendChild(chip('Weather for: ' + state.options.town, openTownPicker));
+    wxRow.appendChild(chip('Weather (Open-Meteo) for: ' + state.options.town, openTownPicker));
     wxRow.appendChild(chip('Screensaver: ' + (state.options.ambientMins ? 'after ' + state.options.ambientMins + ' min' : 'Off'), function () {
       var steps = [0, 5, 10, 20, 30];
       state.options.ambientMins = steps[(steps.indexOf(state.options.ambientMins) + 1) % steps.length];
@@ -1359,9 +1363,12 @@
       state.options.livePreview ? 'on' : ''));
     body.appendChild(opts);
     var reset = el('div', 'srow nav-row');
-    reset.appendChild(el('div', 'label', 'Start again (removes your shows and channels)'));
+    reset.appendChild(el('div', 'label', 'Start again (removes your shows and channels, and disconnects Spotify)'));
     reset.appendChild(confirmChip('Reset everything', function () {
       try { localStorage.removeItem(STORE_KEY); } catch (e) {}
+      Spotify.unpair();
+      music.state = null;
+      music.lists = null;
       state = load();
       changed();
       toast('Back to the original setup');
@@ -1551,11 +1558,17 @@
 
   var music = { state: null, err: null, at: 0, stateAt: 0, lists: null, listsAt: 0, devices: [] };
 
+  // Every 4 s while something plays on screen, 15 s on the screensaver, 30 s when nothing plays.
+  var musicSeq = 0;
   function pollMusic(force) {
-    if (!Spotify.isPaired()) return;
-    if (!force && Date.now() - music.at < 4000) return;
+    if (!Spotify.isPaired() || Spotify.busy()) return;
+    var gap = !isPlaying() ? 30000 : ambientOn ? 15000 : 4000;
+    if (!force && Date.now() - music.at < gap) return;
     music.at = Date.now();
+    var seq = ++musicSeq;
     Spotify.playback(function (err, st) {
+      if (seq !== musicSeq) return; // a newer answer is on its way
+      if (!Spotify.isPaired()) { music.state = null; return scheduleRebuild(); }
       music.err = err;
       music.state = st;
       music.stateAt = Date.now();
@@ -1568,27 +1581,29 @@
   function loadMusicLists() {
     if (!Spotify.isPaired() || Date.now() - music.listsAt < 15 * MINUTE) return;
     music.listsAt = Date.now();
-    var out = [], left = 2;
+    var lists = [], recent = [], left = 2;
     function done() {
       if (--left) return;
-      music.lists = out;
+      music.lists = lists.concat(recent); // playlists first, then recently played
       scheduleRebuild();
     }
     Spotify.playlists(function (err, items) {
       items.forEach(function (p) {
-        out.push({ key: 'pl-' + p.id, name: p.name, sub: 'Playlist', uri: p.uri, image: p.images && p.images[0] && p.images[0].url });
+        if (!p || !p.id) return;
+        lists.push({ key: 'pl-' + p.id, name: p.name, sub: 'Playlist', uri: p.uri, image: p.images && p.images[0] && p.images[0].url });
       });
       done();
     });
     Spotify.recent(function (err, items) {
       var seen = {};
       items.forEach(function (it) {
+        if (!it) return;
         var t = it.track || {};
         var uri = it.context && it.context.uri || t.uri;
         if (!uri || seen[uri]) return;
         seen[uri] = true;
         var type = it.context ? it.context.type : 'track';
-        out.push({ key: 'rp-' + hash(uri), name: type === 'track' ? t.name : (type === 'album' && t.album ? t.album.name : t.name),
+        recent.push({ key: 'rp-' + hash(uri), name: type === 'track' ? t.name : (type === 'album' && t.album ? t.album.name : t.name),
           sub: 'Recently played · ' + ((t.artists || []).map(function (a) { return a.name; }).join(', ')),
           uri: uri, image: t.album && t.album.images && t.album.images[0] && t.album.images[0].url });
       });
@@ -1645,7 +1660,11 @@
     var d = music.state && music.state.device;
     if (!d) return toast('Nothing is playing');
     if (d.volume_percent == null) return toast(d.name + ' doesn’t let Spotify change its volume');
-    musicDo(function (cb) { Spotify.volume(d.volume_percent + delta, cb); }, 'Volume ' + Math.max(0, Math.min(100, d.volume_percent + delta)) + '%');
+    // Count from the last volume asked for, so quick presses add up.
+    d.volume_percent = Math.max(0, Math.min(100, d.volume_percent + delta));
+    var v = d.volume_percent;
+    musicDo(function (cb) { Spotify.volume(v, cb); }, 'Volume ' + v + '%');
+    paint('music');
   }
 
   function openDevicePicker() {
@@ -1706,10 +1725,15 @@
       flag.textContent = isPlaying() ? 'PLAYING' : (item ? 'PAUSED' : '');
       flag.classList.toggle('hidden', !item);
       bar.firstChild.style.width = Math.round(musicProgress() * 100) + '%';
-      setImage(t, artOf(item));
+      var art = artOf(item);
+      if (art !== t.lastArt) { setImage(t, art); t.lastArt = art; }
       var dev = music.state && music.state.device;
       $('music-note').textContent = dev ? 'on ' + dev.name + (dev.volume_percent != null ? ' · volume ' + dev.volume_percent + '%' : '') : '';
-      if (t.classList.contains('focused')) t.onfocusitem();
+      if (t.classList.contains('focused')) {
+        var id = (item && item.name) + '|' + isPlaying() + '|' + (dev && dev.volume_percent);
+        if (id !== t.lastHero) { t.lastHero = id; t.onfocusitem(); }
+        else $('hero-bar').firstChild.style.width = Math.round(musicProgress() * 100) + '%';
+      }
     }
     onPaint('music', draw);
     t.onselect = togglePlay;
@@ -1757,9 +1781,44 @@
     });
   }
 
+  // A small "now playing" tile for On now; OK goes to the full Spotify row.
+  function onNowMusicTile() {
+    var t = tile('pic wide', 'onnow-music');
+    t.style.backgroundColor = '#14532d';
+    var src = el('div', 'src', 'Spotify');
+    src.style.background = '#1db954';
+    src.style.color = '#000';
+    t.appendChild(src);
+    var name = el('div', 'name small', '');
+    var sub = el('div', 'sub', '');
+    var bar = el('div', 'bar');
+    bar.appendChild(el('i'));
+    t.appendChild(name);
+    t.appendChild(sub);
+    t.appendChild(bar);
+    function draw() {
+      var item = nowItem();
+      name.textContent = item ? item.name : 'Spotify';
+      sub.textContent = item ? artistOf(item) : '';
+      bar.firstChild.style.width = Math.round(musicProgress() * 100) + '%';
+      var art = artOf(item);
+      if (art !== t.lastArt) { setImage(t, art); t.lastArt = art; }
+    }
+    draw();
+    onPaint('music', draw);
+    t.onselect = function () { homeNav.focusKey('music-now'); };
+    t.onfocusitem = function () {
+      var item = nowItem();
+      hero({ eyebrow: 'Spotify', title: item ? item.name : 'Spotify', line1: artistOf(item), progress: item ? musicProgress() : null,
+        hint: 'OK for Spotify controls · ▶‖ on the remote plays/pauses', art: { image: artOf(item), color: '#1db954', label: 'Spotify' } });
+    };
+    return t;
+  }
+
   // ---------------------------------------------------------------- Spotify pairing screen
 
   var pairNav = new Nav($('pair'), 'first');
+  var freshQr = false;
 
   function renderPair() {
     var body = $('pair-body');
@@ -1783,14 +1842,15 @@
       pairNav.focus(1, 0);
     }));
     body.appendChild(r1);
-    body.appendChild(el('div', 'step-text tip', 'Tip: to paste from your phone, open Apps2Samsung → Remote and use its keyboard, which types straight into the TV.'));
+    body.appendChild(el('div', 'step-text tip', 'Tip: to paste from your phone, use Apps2Samsung’s Remote keyboard, or the SmartThings app’s TV remote keyboard, which type straight into the TV.'));
 
     if (Spotify.clientId().length === 32) {
       var step2 = el('div', 'step');
       step2.appendChild(el('div', 'step-title', '2. Sign in on your phone'));
       var wrap = el('div', 'qr-wrap');
       var img = el('img', 'qr');
-      img.src = qrDataUrl(Spotify.authUrl(), 360);
+      img.src = qrDataUrl(Spotify.authUrl(freshQr), 360);
+      freshQr = false;
       wrap.appendChild(img);
       wrap.appendChild(el('div', 'step-text', 'Scan with your phone’s camera and approve. Your phone then opens a page that won’t load, with an address starting 127.0.0.1 — that’s expected. Copy that whole address and paste it below.'));
       step2.appendChild(wrap);
@@ -1813,7 +1873,7 @@
       }));
       body.appendChild(r2);
       var r3 = el('div', 'srow nav-row');
-      r3.appendChild(chip('New QR code', function () { renderPair(); pairNav.focus(2, 0); }));
+      r3.appendChild(chip('New QR code', function () { freshQr = true; renderPair(); pairNav.focus(2, 0); }));
       body.appendChild(r3);
     }
   }
@@ -1856,7 +1916,10 @@
     body.appendChild(row);
   }
 
+  var statsToken = 0;
+  function dash(v) { return v == null || v !== v ? '–' : v; }
   function openStats(kind) {
+    var token = ++statsToken;
     var titles = { f1: 'Formula 1', pl: 'Premier League table', nfl: 'NFL this week' };
     $('stats-title').textContent = titles[kind];
     var body = $('stats-body');
@@ -1865,6 +1928,7 @@
     show('stats');
     function fail() { body.innerHTML = ''; statLine(body, 'Couldn’t load this right now — try again later'); statsNav.focus(0, 0); }
     if (kind === 'f1') Extras.f1(function (d) {
+      if (token !== statsToken || current !== 'stats') return;
       if (!d) return fail();
       body.innerHTML = '';
       if (d.race) {
@@ -1885,23 +1949,25 @@
       statsNav.focus(0, 0);
     });
     if (kind === 'pl') Extras.premierLeague(function (rows) {
+      if (token !== statsToken || current !== 'stats') return;
       if (!rows) return fail();
       body.innerHTML = '';
       body.appendChild(el('div', 'section-title', 'Pos · Team · Played · W-D-L · Goal difference · Points'));
       rows.forEach(function (r) {
-        statLine(body, r.pos + '.   ' + r.team + '   ·   P' + r.played + '   ·   ' + r.won + '-' + r.drawn + '-' + r.lost +
-          '   ·   GD ' + (r.gd > 0 ? '+' : '') + r.gd + '   ·   ' + r.points + ' pts');
+        statLine(body, r.pos + '.   ' + dash(r.team) + '   ·   P' + dash(r.played) + '   ·   ' + dash(r.won) + '-' + dash(r.drawn) + '-' + dash(r.lost) +
+          '   ·   GD ' + (r.gd > 0 ? '+' : '') + dash(r.gd) + '   ·   ' + dash(r.points) + ' pts');
       });
       statsNav.focus(0, 0);
     });
     if (kind === 'nfl') Extras.nfl(function (games) {
+      if (token !== statsToken || current !== 'stats') return;
       if (!games) return fail();
       body.innerHTML = '';
       if (!games.length) statLine(body, 'No games this week');
       games.forEach(function (g) {
         var text = g.state === 'pre'
           ? g.away.name + ' at ' + g.home.name + '   ·   ' + Guide.when(g.start)
-          : g.away.name + ' ' + g.away.score + ' – ' + g.home.score + ' ' + g.home.name + '   ·   ' + (g.state === 'in' ? 'LIVE ' : '') + g.detail;
+          : g.away.name + ' ' + dash(g.away.score) + ' – ' + dash(g.home.score) + ' ' + g.home.name + '   ·   ' + (g.state === 'in' ? 'LIVE ' : '') + g.detail;
         statLine(body, text, g.state === 'in' ? 'live' : '');
       });
       statsNav.focus(0, 0);
@@ -1911,8 +1977,8 @@
   screens.stats = {
     enter: function () { Platform.hideTvWindow(); },
     key: function (a) {
-      if (a === 'BACK' || a === 'ENTER') return show('home');
-      statsNav.move(a);
+      if (a === 'BACK') return show('home');
+      if (a !== 'ENTER') statsNav.move(a);
     }
   };
 
@@ -1933,15 +1999,17 @@
 
   // ---------------------------------------------------------------- "it's starting" alerts
 
-  var alertShown = null, alertTimer = null;
+  var alertShown = null, alertTimer = null, alertAt = 0;
 
   function checkAlerts() {
-    // One at a time: the next one shows after this is dismissed or times out.
-    if (!sportEvents || alertShown) return;
+    // One at a time: the next one shows after this is dismissed or times out. Only on the home
+    // screen or full-screen TV while TV Hub is in view, so nothing is missed or interrupts typing.
+    if (!sportEvents || alertShown || document.hidden || (current !== 'home' && current !== 'watch')) return;
     var now = Date.now(), seen = state.alerted;
     for (var k in seen) if (now - seen[k] > 3 * 24 * HOUR) delete seen[k];
     for (var i = 0; i < sportEvents.length; i++) {
       var e = sportEvents[i];
+      if (/practice|\bfp[123]\b/i.test(e.title)) continue; // practice sessions: listed, but no alert
       var startsIn = e.start - now;
       if (state.options.alertLive && startsIn <= 0 && -startsIn < 15 * MINUTE && now < e.stop && !seen[e.key + ':live']) return showAlert(e, 'live');
       if (state.options.alertSoon && startsIn > 0 && startsIn <= 10 * MINUTE && !seen[e.key + ':soon']) return showAlert(e, 'soon');
@@ -1954,16 +2022,18 @@
     save();
     if (ambientOn) exitAmbient();
     alertShown = e;
+    alertAt = Date.now();
     $('alert-flag').textContent = kind === 'live' ? 'LIVE NOW' : 'IN ' + Math.max(1, Math.round((e.start - Date.now()) / MINUTE)) + ' MIN';
     $('alert-title').textContent = e.title;
     $('alert-sub').textContent = e.sport.name + ' · ' + e.channels.map(function (c) { return c.name; }).join(' and ') + '   ·   OK: watch on NOW   ·   BACK: dismiss';
     $('alert').classList.remove('hidden');
     clearTimeout(alertTimer);
-    alertTimer = setTimeout(hideAlert, 45000);
+    alertTimer = setTimeout(hideAlert, 30000);
   }
 
   function hideAlert() {
     clearTimeout(alertTimer);
+    if (!alertShown) return;
     alertShown = null;
     $('alert').classList.add('hidden');
     setTimeout(checkAlerts, 2000); // anything that came up meanwhile
@@ -2019,23 +2089,56 @@
     var m = /TVHUB1(\{[\s\S]*\})/.exec(String(text || '').trim());
     var d = null;
     try { d = m && JSON.parse(m[1]); } catch (e) { d = null; }
-    if (!d || !Array.isArray(d.apps)) return 'That isn’t a TV Hub backup — it should start with TVHUB1';
+    var bad = 'That isn’t a complete TV Hub backup — it should start with TVHUB1 and be pasted in full';
+    if (!d || typeof d !== 'object' || !Array.isArray(d.apps)) return bad;
+    function str(v) { return typeof v === 'string' ? v : ''; }
+    function list(v) { return Array.isArray(v) ? v : []; }
     var known = {};
     TVHUB_DEFAULTS.apps.forEach(function (a) { known[a.id] = a; });
-    state.apps = d.apps.map(function (a) {
+    var used = {}, apps = [];
+    d.apps.forEach(function (a) {
+      if (!Array.isArray(a) || !str(a[0]) || used[a[0]]) return;
+      used[a[0]] = true;
       var base = known[a[0]] ? clone(known[a[0]]) : { id: a[0] };
-      base.name = a[1]; base.appId = a[2]; base.hidden = !!a[3]; base.hotkey = a[4] || null;
-      base.color = a[5] || base.color; base.text = a[6] || base.text;
-      return base;
+      base.name = str(a[1]) || base.name || a[0];
+      base.appId = str(a[2]);
+      base.hidden = !!a[3];
+      base.hotkey = HOTKEYS.indexOf(a[4]) !== -1 ? a[4] : null;
+      base.color = /^#[0-9a-f]{3,8}$/i.test(a[5]) ? a[5] : base.color || '#555555';
+      base.text = /^#[0-9a-f]{3,8}$/i.test(a[6]) ? a[6] : base.text || '#ffffff';
+      apps.push(base);
     });
-    state.channels = (d.ch || []).map(function (c) { return { major: c[0], minor: c[1], name: c[2] }; });
-    state.online = d.on || state.online;
-    state.shows = (d.sh || []).map(function (s) { return { tvmazeId: s[0], name: s[1], app: s[2] }; });
-    state.sportHidden = d.sp || state.sportHidden;
-    state.mySports = d.ms || state.mySports;
-    for (var k in d.o) state.options[k] = d.o[k];
-    state.lastKey = d.last || null;
-    if (d.sc) Spotify.setClientId(d.sc);
+    if (!apps.length) return bad;
+    var taken = {};
+    apps.forEach(function (a) { if (a.hotkey) { if (taken[a.hotkey]) a.hotkey = null; else taken[a.hotkey] = true; } });
+    var channels = [], seenCh = {};
+    list(d.ch).forEach(function (c) {
+      if (!Array.isArray(c) || typeof c[0] !== 'number' || !(c[0] > 0)) return;
+      var ch = { major: c[0], minor: typeof c[1] === 'number' ? c[1] : 0, name: str(c[2]) || 'Channel ' + c[0] };
+      if (!seenCh[chKey(ch)]) { seenCh[chKey(ch)] = true; channels.push(ch); }
+    });
+    var shows = [];
+    list(d.sh).forEach(function (x) {
+      if (Array.isArray(x) && typeof x[0] === 'number' && str(x[1])) shows.push({ tvmazeId: x[0], name: x[1], app: str(x[2]) });
+    });
+    var options = clone(state.options);
+    if (d.o && typeof d.o === 'object') {
+      for (var k in TVHUB_DEFAULTS.options) {
+        if (k in d.o && typeof d.o[k] === typeof TVHUB_DEFAULTS.options[k]) options[k] = d.o[k];
+      }
+      if (d.o.spotifyKey === null || HOTKEYS.indexOf(d.o.spotifyKey) !== -1) options.spotifyKey = d.o.spotifyKey;
+    }
+    if (options.spotifyKey && taken[options.spotifyKey]) options.spotifyKey = null;
+    // All checked: apply in one go.
+    state.apps = apps;
+    state.channels = channels;
+    state.online = list(d.on).filter(function (k) { return PLAYER[k]; });
+    state.shows = shows;
+    state.sportHidden = list(d.sp).filter(function (k) { return SPORT.some(function (c) { return c.key === k; }); });
+    state.mySports = list(d.ms).filter(function (k) { return SPORTS.some(function (x) { return x.key === k; }); });
+    state.options = options;
+    state.lastKey = typeof d.last === 'string' ? d.last : null;
+    if (str(d.sc)) Spotify.setClientId(d.sc);
     save();
     return null;
   }
@@ -2046,7 +2149,7 @@
     var text = backupText();
     var wrap = el('div', 'qr-wrap');
     var img = el('img', 'qr');
-    try { img.src = qrDataUrl(text, 480); } catch (e) { img = el('div', 'label', 'Too much to fit in a QR code — remove a few shows and try again.'); }
+    try { img.src = qrDataUrl(text, 620); } catch (e) { img = el('div', 'label', 'Too much to fit in a QR code — remove a few shows and try again.'); }
     wrap.appendChild(img);
     wrap.appendChild(el('div', 'step-text', 'Back up: scan this with your phone’s camera and save the text it shows (email it to yourself or keep it in Google Drive). ' +
       'It holds your apps, colour buttons, channels, shows, sports and options — not your Spotify sign-in.'));
@@ -2189,8 +2292,10 @@
     // The screensaver: any button just wakes it.
     if (ambientOn) { e.preventDefault(); exitAmbient(); return; }
     // A sport alert is showing: OK watches, BACK dismisses.
-    if (alertShown && (a === 'ENTER' || a === 'BACK')) {
+    var typingNow = document.activeElement && document.activeElement.tagName === 'INPUT';
+    if (alertShown && (a === 'ENTER' || a === 'BACK') && !typingNow && (current === 'home' || current === 'watch')) {
       e.preventDefault();
+      if (a === 'ENTER' && Date.now() - alertAt < 1500) return; // ignore an OK pressed just as it appeared
       var ev = alertShown;
       hideAlert();
       if (a === 'ENTER') {
@@ -2206,6 +2311,11 @@
       return;
     }
     if (a === 'INFO' && current === 'home') return show('settings');
+    // The remote's media buttons control Spotify.
+    if (a === 'PLAYPAUSE') { if (Spotify.isPaired()) togglePlay(); return; }
+    if ((a === 'NEXT' || a === 'PREV') && Spotify.isPaired() && current !== 'watch') {
+      return musicDo(a === 'NEXT' ? Spotify.next : Spotify.previous);
+    }
     var typing = document.activeElement && document.activeElement.tagName === 'INPUT';
     if (typing && e.keyCode === 8) return; // Backspace deletes text (keyboard in demo mode)
     if (!typing) e.preventDefault();
@@ -2230,8 +2340,9 @@
 
   // Coming back from Netflix etc.: refresh everything (keeping your place) and put the live preview back.
   document.addEventListener('visibilitychange', function () {
-    if (document.hidden) { clearTimeout(previewTimer); cancelLaunch(); if (ambientOn) exitAmbient(); Platform.hideTvWindow(); tunedKey = null; }
-    else if (current === 'home') { renderHome(); showPreview(); }
+    if (document.hidden) { clearTimeout(previewTimer); cancelLaunch(); hideAlert(); if (ambientOn) exitAmbient(); Platform.hideTvWindow(); tunedKey = null; return; }
+    lastKeyAt = Date.now(); // time away counts as activity, so the screensaver doesn't start at once
+    if (current === 'home') { renderHome(); showPreview(); }
     else if (current === 'watch') screens.watch.enter();
   });
 

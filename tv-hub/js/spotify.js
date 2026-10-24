@@ -84,10 +84,13 @@ var Spotify = (function () {
     return s.clientId.length === 32;
   }
 
-  // A fresh sign-in link (also starts a new pairing attempt).
-  function authUrl() {
-    s.verifier = randomString(64);
-    save();
+  // The sign-in link. The same link (and secret verifier) is reused until pairing succeeds or a
+  // fresh one is asked for, so leaving and reopening the set-up screen doesn't break a scan.
+  function authUrl(fresh) {
+    if (fresh || !s.verifier) {
+      s.verifier = randomString(64);
+      save();
+    }
     return 'https://accounts.spotify.com/authorize?' + form({
       response_type: 'code', client_id: s.clientId, scope: SCOPES, redirect_uri: REDIRECT,
       code_challenge_method: 'S256', code_challenge: base64url(sha256(s.verifier))
@@ -101,23 +104,37 @@ var Spotify = (function () {
     save();
   }
 
+  function decode(v) { try { return decodeURIComponent(v); } catch (e) { return v; } }
+
   // pasted: the 127.0.0.1 address from the phone (or just the code). cb(errorMessage or null)
+  var pairing = false;
   function finishPairing(pasted, cb) {
+    if (pairing) return; // already connecting
     var text = String(pasted || '').trim();
     var err = /[?&]error=([^&\s]+)/.exec(text);
-    if (err) return cb('Spotify said: ' + decodeURIComponent(err[1]) + '. Try signing in again.');
+    if (err) {
+      var why = decode(err[1]);
+      return cb(why === 'access_denied' ? 'Spotify sign-in was cancelled on the phone — scan the QR code and press Agree.' : 'Spotify said: ' + why + '. Try signing in again.');
+    }
     var m = /[?&]code=([^&\s#]+)/.exec(text);
-    var code = m ? decodeURIComponent(m[1]) : (/^[A-Za-z0-9_-]{40,}$/.test(text) ? text : null);
+    var code = m ? decode(m[1]) : (/^[A-Za-z0-9_-]{40,}$/.test(text) ? text : null);
     if (!code) return cb('That doesn’t look like the address from your phone. It should contain “code=”.');
     if (!s.verifier) return cb('Start again: show the QR code and sign in once more.');
+    pairing = true;
     Platform.request('POST', 'https://accounts.spotify.com/api/token', { 'Content-Type': 'application/x-www-form-urlencoded' },
       form({ grant_type: 'authorization_code', code: code, redirect_uri: REDIRECT, client_id: s.clientId, code_verifier: s.verifier }),
       function (e, body) {
+        pairing = false;
         var data = parse(body);
         if (e || !data || !data.access_token) {
-          return cb((data && (data.error_description || data.error)) ? 'Spotify said: ' + (data.error_description || data.error) : 'Couldn’t reach Spotify — check the internet connection');
+          var code2 = data && data.error;
+          if (code2 === 'invalid_grant') return cb('That sign-in has expired or was for an older QR code. Choose “New QR code”, scan it and paste the new address within a few minutes.');
+          if (code2 === 'invalid_client') return cb('Spotify doesn’t recognise that Client ID — check it on developer.spotify.com and save it again.');
+          return cb(code2 ? 'Spotify said: ' + (data.error_description || code2) : 'Couldn’t reach Spotify — check the internet connection');
         }
         delete s.verifier;
+        s.gen = (s.gen || 0) + 1;
+        backoffUntil = 0;
         storeTokens(data);
         cb(null);
       });
@@ -125,24 +142,35 @@ var Spotify = (function () {
 
   function isPaired() { return !!s.refreshToken; }
   function clientId() { return s.clientId || ''; }
-  function unpair() { s = { clientId: s.clientId }; save(); }
+  // Disconnect. The generation number makes any refresh still in flight be ignored.
+  function unpair() { s = { clientId: s.clientId, gen: (s.gen || 0) + 1 }; save(); }
 
   // ---- API calls
 
   function parse(text) { try { return text ? JSON.parse(text) : null; } catch (e) { return null; } }
 
+  // After errors, wait before asking Spotify again (doubling up to 5 minutes, or as Spotify asks).
+  var backoffUntil = 0, backoffMs = 0;
+  function backOff(retryAfterSecs) {
+    backoffMs = retryAfterSecs ? retryAfterSecs * 1000 : Math.min(5 * 60000, backoffMs ? backoffMs * 2 : 15000);
+    backoffUntil = Date.now() + backoffMs;
+  }
+
   var refreshing = null;
   function refresh(cb) {
     if (refreshing) return refreshing.push(cb);
     refreshing = [cb];
+    var gen = s.gen;
     Platform.request('POST', 'https://accounts.spotify.com/api/token', { 'Content-Type': 'application/x-www-form-urlencoded' },
       form({ grant_type: 'refresh_token', refresh_token: s.refreshToken, client_id: s.clientId }),
       function (e, body) {
         var data = parse(body);
         var msg = null;
-        if (data && data.access_token) storeTokens(data);
+        if (gen !== s.gen) msg = 'Spotify isn’t connected'; // disconnected meanwhile
+        else if (data && data.access_token) storeTokens(data);
         else if (data && data.error === 'invalid_grant') { unpair(); msg = 'Spotify sign-in expired — connect again in Settings'; }
-        else msg = 'Couldn’t reach Spotify';
+        else if (data && data.error === 'invalid_client') { unpair(); msg = 'Your Spotify app’s Client ID no longer works — set Spotify up again in Settings'; }
+        else { backOff(); msg = 'Couldn’t reach Spotify — trying again shortly'; }
         var cbs = refreshing;
         refreshing = null;
         cbs.forEach(function (f) { f(msg); });
@@ -153,15 +181,17 @@ var Spotify = (function () {
   function call(method, path, body, cb, retried) {
     cb = cb || function () {};
     if (!isPaired()) return cb('Spotify isn’t connected yet');
+    if (Date.now() < backoffUntil) return cb('Spotify is busy — trying again shortly');
     if (!s.accessToken || Date.now() > s.expiresAt - 60000) {
       return refresh(function (msg) { if (msg) return cb(msg); call(method, path, body, cb, true); });
     }
     var headers = { Authorization: 'Bearer ' + s.accessToken };
     if (body) headers['Content-Type'] = 'application/json';
-    Platform.request(method, API + path, headers, body ? JSON.stringify(body) : null, function (e, text, status) {
+    Platform.request(method, API + path, headers, body ? JSON.stringify(body) : null, function (e, text, status, header) {
       var data = parse(text);
       if (status === 401 && !retried) { s.expiresAt = 0; return call(method, path, body, cb, true); }
-      if (!e) return cb(null, data, status);
+      if (!e) { backoffMs = 0; return cb(null, data, status); }
+      if (status === 429 || status >= 500 || !status) backOff(status === 429 ? parseInt(header && header('Retry-After'), 10) || 30 : 0);
       var reason = data && data.error && (data.error.reason || data.error.message);
       cb(MESSAGES[reason] || (status === 403 ? 'Spotify refused — this needs Spotify Premium' : 'Spotify: ' + (reason || e.message)), data, status);
     });
@@ -177,6 +207,7 @@ var Spotify = (function () {
 
   return {
     REDIRECT: REDIRECT,
+    busy: function () { return Date.now() < backoffUntil; },
     sha256hex: function (t) { return sha256(t).map(function (b) { return (b < 16 ? '0' : '') + b.toString(16); }).join(''); },
     setClientId: setClientId, clientId: clientId, authUrl: authUrl, finishPairing: finishPairing,
     isPaired: isPaired, unpair: unpair,
