@@ -72,10 +72,10 @@
     });
   }
 
-  // microsoft.com/link pre-fills the code when given ?otc=, so the QR skips typing it.
+  // The QR opens the plain sign-in page. Pre-filling the code with ?otc= sends Microsoft
+  // down its first-party app flow, which rejects third-party apps with a consent error.
   function showSignInQr(code) {
-    var link = code.verificationUriComplete ||
-      code.verificationUri + (code.verificationUri.indexOf('?') === -1 ? '?' : '&') + 'otc=' + encodeURIComponent(code.userCode);
+    var link = code.verificationUriComplete || code.verificationUri;
     try {
       var qr = qrcode(0, 'M');
       qr.addData(link);
