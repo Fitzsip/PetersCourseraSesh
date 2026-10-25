@@ -419,7 +419,7 @@
     var keys = function (list) { return list.map(function (e) { return e.key; }).join(); };
     return state.online.join() + '|' + keys(liveEvents()) + '|' + keys((sportEvents || []).slice(0, 12)) + '|' +
       episodesToday().map(function (x) { return x.show.tvmazeId + (x.upcoming ? 'u' : ''); }).join() + '|' +
-      (Spotify.isPaired() ? 'S' + (music.lists ? music.lists.map(function (x) { return x.key; }).join() : '-') + (nowItem() && isPlaying() ? 'P' : '') : '');
+      (SpotifyApi.isPaired() ? 'S' + (music.lists ? music.lists.map(function (x) { return x.key; }).join() : '-') + (nowItem() && isPlaying() ? 'P' : '') : '');
   }
 
   function renderOnNow() {
@@ -438,7 +438,7 @@
       };
       row.appendChild(more);
     }
-    if (Spotify.isPaired() && nowItem() && isPlaying()) row.appendChild(onNowMusicTile());
+    if (SpotifyApi.isPaired() && nowItem() && isPlaying()) row.appendChild(onNowMusicTile());
     episodesToday().forEach(function (x) { row.appendChild(episodeTile(x)); });
     var li = lastIndex();
     if (li !== -1) row.appendChild(satelliteTile(state.channels[li], 'onnow-sat', true));
@@ -627,7 +627,7 @@
       s.appendChild(document.createTextNode(app.name));
       hk.appendChild(s);
     });
-    if (state.options.spotifyKey && Spotify.isPaired()) {
+    if (state.options.spotifyKey && SpotifyApi.isPaired()) {
       var sp = el('span');
       sp.appendChild(el('i', 'dot ' + state.options.spotifyKey));
       sp.appendChild(document.createTextNode('Play / pause'));
@@ -1316,8 +1316,8 @@
 
     section(body, 'Spotify');
     var spRow = el('div', 'srow nav-row');
-    spRow.appendChild(el('div', 'label', Spotify.isPaired() ? 'Connected' : 'Not connected'));
-    spRow.appendChild(chip(Spotify.isPaired() ? 'Reconnect' : 'Connect Spotify', function () { show('pair'); }));
+    spRow.appendChild(el('div', 'label', SpotifyApi.isPaired() ? 'Connected · ' + speakerText() : 'Not connected'));
+    spRow.appendChild(chip(SpotifyApi.isPaired() ? 'Reconnect' : 'Connect Spotify', function () { show('pair'); }));
     spRow.appendChild(chip('Play/pause button: ' + (state.options.spotifyKey || 'none'), function () {
       var next = HOTKEYS[(HOTKEYS.indexOf(state.options.spotifyKey) + 1)] || null;
       var had = null;
@@ -1326,7 +1326,7 @@
       if (had) toast('The ' + next + ' button now plays/pauses Spotify instead of opening ' + had.name);
       changed();
     }));
-    if (Spotify.isPaired()) spRow.appendChild(confirmChip('Disconnect', function () { Spotify.unpair(); music.state = null; music.lists = null; changed(); }));
+    if (SpotifyApi.isPaired()) spRow.appendChild(confirmChip('Disconnect', function () { SpotifyApi.unpair(); WebPlayer.stop(); music.state = null; music.lists = null; changed(); }));
     body.appendChild(spRow);
 
     section(body, 'Alerts, weather and screensaver');
@@ -1366,7 +1366,8 @@
     reset.appendChild(el('div', 'label', 'Start again (removes your shows and channels, and disconnects Spotify)'));
     reset.appendChild(confirmChip('Reset everything', function () {
       try { localStorage.removeItem(STORE_KEY); } catch (e) {}
-      Spotify.unpair();
+      SpotifyApi.unpair();
+      WebPlayer.stop();
       music.state = null;
       music.lists = null;
       state = load();
@@ -1561,14 +1562,14 @@
   // Every 4 s while something plays on screen, 15 s on the screensaver, 30 s when nothing plays.
   var musicSeq = 0;
   function pollMusic(force) {
-    if (!Spotify.isPaired() || Spotify.busy()) return;
+    if (!SpotifyApi.isPaired() || SpotifyApi.busy()) return;
     var gap = !isPlaying() ? 30000 : ambientOn ? 15000 : 4000;
     if (!force && Date.now() - music.at < gap) return;
     music.at = Date.now();
     var seq = ++musicSeq;
-    Spotify.playback(function (err, st) {
+    SpotifyApi.playback(function (err, st) {
       if (seq !== musicSeq) return; // a newer answer is on its way
-      if (!Spotify.isPaired()) { music.state = null; return scheduleRebuild(); }
+      if (!SpotifyApi.isPaired()) { music.state = null; return scheduleRebuild(); }
       music.err = err;
       music.state = st;
       music.stateAt = Date.now();
@@ -1579,7 +1580,7 @@
 
   // Playlists and recently played, refreshed every 15 minutes.
   function loadMusicLists() {
-    if (!Spotify.isPaired() || Date.now() - music.listsAt < 15 * MINUTE) return;
+    if (!SpotifyApi.isPaired() || Date.now() - music.listsAt < 15 * MINUTE) return;
     music.listsAt = Date.now();
     var lists = [], recent = [], left = 2;
     function done() {
@@ -1587,14 +1588,14 @@
       music.lists = lists.concat(recent); // playlists first, then recently played
       scheduleRebuild();
     }
-    Spotify.playlists(function (err, items) {
+    SpotifyApi.playlists(function (err, items) {
       items.forEach(function (p) {
         if (!p || !p.id) return;
         lists.push({ key: 'pl-' + p.id, name: p.name, sub: 'Playlist', uri: p.uri, image: p.images && p.images[0] && p.images[0].url });
       });
       done();
     });
-    Spotify.recent(function (err, items) {
+    SpotifyApi.recent(function (err, items) {
       var seen = {};
       items.forEach(function (it) {
         if (!it) return;
@@ -1636,10 +1637,19 @@
     });
   }
 
-  // Where to play when nothing is active: this TV if Spotify is open on it, else the first device.
+  // TV Hub's own speaker (js/webplayer.js): what it's doing, in a few words.
+  function speakerText() {
+    if (!SpotifyApi.canStream()) return 'Reconnect Spotify once to play through this TV';
+    var st = WebPlayer.status();
+    return st === 'ready' ? 'Ready to play through this TV' : st === 'starting' ? 'Getting ready…' :
+      st === 'failed' ? WebPlayer.error() : 'Off';
+  }
+
+  // Where to play when nothing is active: TV Hub's own speaker if it's ready, else Spotify on this TV, else the first device.
   function withTarget(cb) {
     if (music.state && music.state.device) return cb(null);
-    Spotify.devices(function (err, list) {
+    if (WebPlayer.deviceId()) { WebPlayer.activate(); return cb(WebPlayer.deviceId()); }
+    SpotifyApi.devices(function (err, list) {
       music.devices = list;
       if (!list.length) {
         toast('No Spotify devices found — open Spotify on your phone or this TV, then try again');
@@ -1651,9 +1661,10 @@
   }
 
   function togglePlay() {
-    if (!Spotify.isPaired()) return show('pair');
-    if (isPlaying()) return musicDo(Spotify.pause, 'Paused');
-    withTarget(function (id) { musicDo(function (cb) { Spotify.play(id, cb); }, 'Playing'); });
+    if (!SpotifyApi.isPaired()) return show('pair');
+    if (isPlaying()) return musicDo(SpotifyApi.pause, 'Paused');
+    WebPlayer.activate();
+    withTarget(function (id) { musicDo(function (cb) { SpotifyApi.play(id, cb); }, 'Playing'); });
   }
 
   function changeVolume(delta) {
@@ -1663,23 +1674,36 @@
     // Count from the last volume asked for, so quick presses add up.
     d.volume_percent = Math.max(0, Math.min(100, d.volume_percent + delta));
     var v = d.volume_percent;
-    musicDo(function (cb) { Spotify.volume(v, cb); }, 'Volume ' + v + '%');
+    musicDo(function (cb) { SpotifyApi.volume(v, cb); }, 'Volume ' + v + '%');
     paint('music');
   }
 
   function openDevicePicker() {
-    Spotify.devices(function (err, list) {
+    SpotifyApi.devices(function (err, list) {
       if (err) return toast(err);
       openPicker({
         title: 'Play Spotify on…', hint: 'OK to switch · BACK to go back', back: 'home',
         empty: 'No devices found. Open Spotify on your phone, speaker or this TV, then try again.',
         items: function () {
+          var mine = WebPlayer.deviceId();
+          if (mine && !list.some(function (d) { return d.id === mine; })) list.unshift({ id: mine, name: WebPlayer.NAME, type: 'TV' });
           var items = list.map(function (d) {
-            return { label: d.name + '   ·   ' + d.type + (d.is_active ? '   (playing)' : ''), chip: d.is_active ? '✓ Current' : 'Play here', on: d.is_active,
-              select: function () { musicDo(function (cb) { Spotify.transfer(d.id, true, cb); }, 'Playing on ' + d.name); show('home'); return true; } };
+            var name = d.id === mine ? WebPlayer.NAME + '   ·   plays while TV Hub is open' : d.name + '   ·   ' + d.type;
+            return { label: name + (d.is_active ? '   (playing)' : ''), chip: d.is_active ? '✓ Current' : 'Play here', on: d.is_active,
+              select: function () {
+                if (d.id === mine) WebPlayer.activate();
+                musicDo(function (cb) { SpotifyApi.transfer(d.id, true, cb); }, 'Playing on ' + d.name);
+                show('home');
+                return true;
+              } };
           });
+          if (!mine) {
+            items.unshift(SpotifyApi.canStream()
+              ? { label: 'This TV, through TV Hub   ·   ' + speakerText(), chip: 'Try again', select: function () { WebPlayer.stop(); WebPlayer.start(); toast('Starting TV Hub’s speaker…'); return true; } }
+              : { label: 'This TV, through TV Hub   ·   reconnect Spotify once to allow it', chip: 'Reconnect', select: function () { show('pair'); return true; } });
+          }
           var sp = appById('spotify');
-          if (sp && sp.appId) items.push({ label: 'Open the Spotify app on this TV (leaves TV Hub)', chip: 'Open', select: function () { show('home'); openApp(sp); return true; } });
+          if (sp && sp.appId) items.push({ label: 'Use the Spotify app instead (leaves TV Hub; music stops if you leave Spotify)', chip: 'Open', select: function () { show('home'); openApp(sp); return true; } });
           return items;
         }
       });
@@ -1689,7 +1713,7 @@
   function renderMusic() {
     var row = $('row-music');
     row.innerHTML = '';
-    if (!Spotify.isPaired()) {
+    if (!SpotifyApi.isPaired()) {
       var c = tile('add', 'music-connect');
       c.appendChild(el('div', 'name', 'Connect Spotify'));
       c.onselect = function () { show('pair'); };
@@ -1749,9 +1773,9 @@
     row.appendChild(t);
 
     // Controls
-    [['music-prev', '◀◀', 'Previous', function () { musicDo(Spotify.previous); }],
+    [['music-prev', '◀◀', 'Previous', function () { musicDo(SpotifyApi.previous); }],
       ['music-play', '▶ II', 'Play / pause', togglePlay],
-      ['music-next', '▶▶', 'Next', function () { musicDo(Spotify.next); }],
+      ['music-next', '▶▶', 'Next', function () { musicDo(SpotifyApi.next); }],
       ['music-voldn', 'Vol −', 'Volume down', function () { changeVolume(-10); }],
       ['music-volup', 'Vol +', 'Volume up', function () { changeVolume(10); }],
       ['music-device', 'Play on…', 'Choose where Spotify plays', openDevicePicker]].forEach(function (b) {
@@ -1766,6 +1790,41 @@
       row.appendChild(ct);
     });
 
+    // TV Hub's own speaker
+    var sp = tile('ctl speaker', 'music-speaker');
+    var spName = el('div', 'name small', 'This TV');
+    var spSub = el('div', 'sub', '');
+    sp.appendChild(spName);
+    sp.appendChild(spSub);
+    function drawSpeaker() {
+      var st = WebPlayer.status(), dev = music.state && music.state.device;
+      var here = !!dev && dev.id === WebPlayer.deviceId();
+      spSub.textContent = !SpotifyApi.canStream() ? 'Reconnect once' : here ? 'Playing here' : st === 'ready' ? 'Play here' :
+        st === 'starting' ? 'Getting ready…' : st === 'failed' ? 'Not available' : 'Off';
+      sp.classList.toggle('on', here);
+    }
+    onPaint('music', drawSpeaker);
+    drawSpeaker();
+    sp.onselect = function () {
+      if (!SpotifyApi.canStream()) return show('pair');
+      var st = WebPlayer.status();
+      if (st === 'failed' || st === 'off') { WebPlayer.stop(); WebPlayer.start(); return toast('Starting TV Hub’s speaker…'); }
+      if (st !== 'ready') return toast('Still getting ready — try again in a moment');
+      WebPlayer.activate();
+      musicDo(function (cb) { SpotifyApi.transfer(WebPlayer.deviceId(), true, cb); }, 'Playing through this TV');
+    };
+    sp.onfocusitem = function () {
+      var st = WebPlayer.status();
+      hero({ eyebrow: 'Spotify · this TV', title: 'Play through this TV',
+        line1: speakerText(),
+        line2: !SpotifyApi.canStream() ? 'TV Hub needs one extra Spotify permission. Reconnect with your phone, like the first time.' :
+          st === 'failed' ? 'You can still use the Spotify app on this TV, or play on your phone or speaker and control it here.' :
+          'Music plays while TV Hub is open. It stops if you open another app.',
+        hint: !SpotifyApi.canStream() ? 'Press OK to reconnect' : st === 'failed' ? 'Press OK to try again' : 'Press OK to play here',
+        art: { color: '#1db954', label: 'This TV' } });
+    };
+    row.appendChild(sp);
+
     // Playlists and recently played
     (music.lists || []).slice(0, 20).forEach(function (p) {
       var pt = tile('pic', 'music-' + p.key);
@@ -1773,7 +1832,7 @@
       setImage(pt, p.image);
       pt.appendChild(el('div', 'name small', p.name));
       pt.appendChild(el('div', 'sub', p.sub));
-      pt.onselect = function () { withTarget(function (id) { musicDo(function (cb) { Spotify.playContext(p.uri, id, cb); }, 'Playing ' + p.name); }); };
+      pt.onselect = function () { withTarget(function (id) { musicDo(function (cb) { SpotifyApi.playContext(p.uri, id, cb); }, 'Playing ' + p.name); }); };
       pt.onfocusitem = function () {
         hero({ eyebrow: 'Spotify · ' + p.sub, title: p.name, hint: 'OK plays it', art: { image: p.image, color: '#1db954', label: p.name } });
       };
@@ -1826,17 +1885,17 @@
     var step1 = el('div', 'step');
     step1.appendChild(el('div', 'step-title', '1. Create a Spotify app (once, on your phone)'));
     step1.appendChild(el('div', 'step-text', 'Go to developer.spotify.com/dashboard → Create app. Any name and description. Redirect URI: ' +
-      Spotify.REDIRECT + ' (press Add). Tick “Web API”, agree and Save. Then open the app’s Settings and copy its Client ID.'));
+      SpotifyApi.REDIRECT + ' (press Add). Tick “Web API” and “Web Playback SDK”, agree and Save. Then open the app’s Settings and copy its Client ID.'));
     body.appendChild(step1);
     var r1 = el('div', 'srow nav-row');
     var cid = el('input', 'field wide focusable');
     cid.type = 'text';
     cid.placeholder = 'Paste the Client ID here';
-    cid.value = Spotify.clientId();
+    cid.value = SpotifyApi.clientId();
     cid.onselect = function () { cid.focus(); };
     r1.appendChild(cid);
     r1.appendChild(chip('Save', function () {
-      if (!Spotify.setClientId(cid.value)) return toast('A Client ID is 32 letters and numbers — check it was pasted in full');
+      if (!SpotifyApi.setClientId(cid.value)) return toast('A Client ID is 32 letters and numbers — check it was pasted in full');
       toast('Saved — now scan the QR code');
       renderPair();
       pairNav.focus(1, 0);
@@ -1844,12 +1903,12 @@
     body.appendChild(r1);
     body.appendChild(el('div', 'step-text tip', 'Tip: to paste from your phone, use Apps2Samsung’s Remote keyboard, or the SmartThings app’s TV remote keyboard, which type straight into the TV.'));
 
-    if (Spotify.clientId().length === 32) {
+    if (SpotifyApi.clientId().length === 32) {
       var step2 = el('div', 'step');
       step2.appendChild(el('div', 'step-title', '2. Sign in on your phone'));
       var wrap = el('div', 'qr-wrap');
       var img = el('img', 'qr');
-      img.src = qrDataUrl(Spotify.authUrl(freshQr), 360);
+      img.src = qrDataUrl(SpotifyApi.authUrl(freshQr), 360);
       freshQr = false;
       wrap.appendChild(img);
       wrap.appendChild(el('div', 'step-text', 'Scan with your phone’s camera and approve. Your phone then opens a page that won’t load, with an address starting 127.0.0.1 — that’s expected. Copy that whole address and paste it below.'));
@@ -1863,10 +1922,12 @@
       r2.appendChild(code);
       r2.appendChild(chip('Connect', function () {
         toast('Connecting…');
-        Spotify.finishPairing(code.value, function (err) {
+        SpotifyApi.finishPairing(code.value, function (err) {
           if (err) return toast(err, 6000);
           toast('Spotify connected');
           music.listsAt = 0;
+          WebPlayer.stop();
+          WebPlayer.start();
           show('home');
           homeNav.focusKey('music-now');
         });
@@ -2171,7 +2232,7 @@
       apps: state.apps.map(function (a) { return [a.id, a.name, a.appId, a.hidden ? 1 : 0, a.hotkey || '', a.color, a.text]; }),
       ch: state.channels.map(function (c) { return [c.major, c.minor || 0, c.name]; }),
       on: state.online, sh: state.shows.map(function (s) { return [s.tvmazeId, s.name, s.app]; }),
-      sp: state.sportHidden, ms: state.mySports, o: state.options, last: state.lastKey, sc: Spotify.clientId()
+      sp: state.sportHidden, ms: state.mySports, o: state.options, last: state.lastKey, sc: SpotifyApi.clientId()
     });
   }
 
@@ -2228,7 +2289,7 @@
     state.mySports = list(d.ms).filter(function (k) { return SPORTS.some(function (x) { return x.key === k; }); });
     state.options = options;
     state.lastKey = typeof d.last === 'string' ? d.last : null;
-    if (str(d.sc)) Spotify.setClientId(d.sc);
+    if (str(d.sc)) SpotifyApi.setClientId(d.sc);
     save();
     return null;
   }
@@ -2402,9 +2463,9 @@
     }
     if (a === 'INFO' && current === 'home') return show('settings');
     // The remote's media buttons control Spotify.
-    if (a === 'PLAYPAUSE') { if (Spotify.isPaired()) togglePlay(); return; }
-    if ((a === 'NEXT' || a === 'PREV') && Spotify.isPaired() && current !== 'watch') {
-      return musicDo(a === 'NEXT' ? Spotify.next : Spotify.previous);
+    if (a === 'PLAYPAUSE') { if (SpotifyApi.isPaired()) togglePlay(); return; }
+    if ((a === 'NEXT' || a === 'PREV') && SpotifyApi.isPaired() && current !== 'watch') {
+      return musicDo(a === 'NEXT' ? SpotifyApi.next : SpotifyApi.previous);
     }
     var typing = document.activeElement && document.activeElement.tagName === 'INPUT';
     if (typing && e.keyCode === 8) return; // Backspace deletes text (keyboard in demo mode)
@@ -2416,7 +2477,7 @@
     if (current === 'home' || current === 'watch') {
       var colour = { RED: 'red', GREEN: 'green', YELLOW: 'yellow', BLUE: 'blue' }[a];
       if (colour) {
-        if (colour === state.options.spotifyKey && Spotify.isPaired()) return togglePlay();
+        if (colour === state.options.spotifyKey && SpotifyApi.isPaired()) return togglePlay();
         var app = appForHotkey(colour);
         if (app) openApp(app);
         return;
@@ -2434,6 +2495,7 @@
     lastKeyAt = Date.now(); // time away counts as activity, so the screensaver doesn't start at once
     if (current === 'home') { renderHome(); showPreview(); }
     else if (current === 'watch') screens.watch.enter();
+    if (WebPlayer.status() !== 'ready') WebPlayer.start(); // the TV may have dropped it while we were away
   });
 
   window.addEventListener('resize', fitStage);
@@ -2459,6 +2521,9 @@
   // Spotify: re-read what's playing every 5 s and move the progress bar every second.
   setInterval(function () { if ((current === 'home' || ambientOn) && !document.hidden) pollMusic(); }, 5000);
   setInterval(function () { if (isPlaying() && current === 'home' && !document.hidden) paint('music'); }, 1000);
+  // Make TV Hub a Spotify speaker (does nothing until Spotify is connected with permission to play).
+  WebPlayer.onChange(function () { paint('music'); });
+  WebPlayer.start();
   // Find NOW, RTÉ Player etc. on this TV by name if their IDs aren't known yet.
   Platform.resolveApps(state.apps, function (changedIds) {
     if (changedIds) { save(); renderHome(); }

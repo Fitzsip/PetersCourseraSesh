@@ -11,11 +11,14 @@
  *
  * Tokens are kept in their own storage key, separate from the settings backup.
  */
-var Spotify = (function () {
+var SpotifyApi = (function () {
   var STORE = 'tvhub.spotify';
   var REDIRECT = 'http://127.0.0.1:8888/callback';
+  // "streaming", "user-read-email" and "user-read-private" let TV Hub itself play audio as a
+  // Spotify Connect speaker (Web Playback SDK); the rest are for remote control.
   var SCOPES = 'user-read-playback-state user-modify-playback-state user-read-currently-playing ' +
-    'playlist-read-private playlist-read-collaborative user-read-recently-played';
+    'playlist-read-private playlist-read-collaborative user-read-recently-played ' +
+    'streaming user-read-email user-read-private';
   var API = 'https://api.spotify.com/v1';
 
   var s = load();
@@ -98,6 +101,7 @@ var Spotify = (function () {
   }
 
   function storeTokens(t) {
+    if (t.scope) s.scope = t.scope;
     s.accessToken = t.access_token;
     s.expiresAt = Date.now() + (t.expires_in || 3600) * 1000;
     if (t.refresh_token) s.refreshToken = t.refresh_token;
@@ -141,6 +145,15 @@ var Spotify = (function () {
   }
 
   function isPaired() { return !!s.refreshToken; }
+  // Whether the current sign-in allows TV Hub to play audio itself (older sign-ins didn't ask).
+  function canStream() { return isPaired() && (' ' + (s.scope || '') + ' ').indexOf(' streaming ') !== -1; }
+
+  // A valid access token for the Web Playback SDK: cb(token or null).
+  function token(cb) {
+    if (!isPaired()) return cb(null);
+    if (s.accessToken && Date.now() < s.expiresAt - 60000) return cb(s.accessToken);
+    refresh(function (msg) { cb(msg ? null : s.accessToken); });
+  }
   function clientId() { return s.clientId || ''; }
   // Disconnect. The generation number makes any refresh still in flight be ignored.
   function unpair() { s = { clientId: s.clientId, gen: (s.gen || 0) + 1 }; save(); }
@@ -210,7 +223,7 @@ var Spotify = (function () {
     busy: function () { return Date.now() < backoffUntil; },
     sha256hex: function (t) { return sha256(t).map(function (b) { return (b < 16 ? '0' : '') + b.toString(16); }).join(''); },
     setClientId: setClientId, clientId: clientId, authUrl: authUrl, finishPairing: finishPairing,
-    isPaired: isPaired, unpair: unpair,
+    isPaired: isPaired, unpair: unpair, canStream: canStream, token: token,
     // cb(err, state|null): state.item, state.is_playing, state.progress_ms, state.device
     playback: function (cb) { call('GET', '/me/player?additional_types=episode', null, function (e, d) { cb(e, d || null); }); },
     play: function (deviceId, cb) { call('PUT', '/me/player/play' + q(deviceId), null, cb); },

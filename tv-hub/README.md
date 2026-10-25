@@ -113,7 +113,7 @@ You need a Windows, Mac or Linux computer on the same Wi-Fi or network as the TV
 2. Tap **Create app**:
    1. Any name and description, e.g. "TV Hub".
    2. **Redirect URI:** enter `http://127.0.0.1:8888/callback` and tap **Add**.
-   3. Under the APIs, tick **Web API**.
+   3. Under the APIs, tick **Web API** and **Web Playback SDK**.
    4. Agree to the terms and **Save**.
 3. Open the app's **Settings** and copy the **Client ID**.
 4. On the TV, open TV Hub → **Spotify** row → **Connect Spotify**:
@@ -129,6 +129,16 @@ You need a Windows, Mac or Linux computer on the same Wi-Fi or network as the TV
 - **If you leave the set-up screen:** the same QR code stays until you connect, so it's safe to come back. Choose **New QR code** if it's been more than a few minutes.
 - **Signing in with your own account:** this works straight away, because you own the app.
 - **Using other Spotify accounts in the house:** add each one under **User Management** on developer.spotify.com. Spotify only allows a few.
+
+### Play music through the TV itself (experimental)
+
+TV Hub can be a Spotify speaker called **TV Hub (this TV)**, so music plays through the TV while you browse TV Hub. Music stops if you open another app.
+
+**If you connected Spotify before version 1.1.2,** do this once:
+1. On developer.spotify.com, open your app → **Settings** → **Edit**, tick **Web Playback SDK** and **Save**.
+2. In TV Hub, choose the **This TV** tile in the Spotify row and reconnect, the same way as the first time.
+
+Spotify only officially supports this player on computer browsers. If your TV can't run it, the **This TV** tile says **Not available**. You can still use the Spotify app, or play on your phone or speaker and control it from TV Hub.
 
 ## Good to know
 
@@ -184,6 +194,7 @@ tv-hub/
   js/guide.js      Online TV guide for RTÉ, Virgin Media and Sky Sports
   js/shows.js      "My shows" info from TVmaze
   js/spotify.js    Spotify sign-in (PKCE) and remote control
+  js/webplayer.js  Makes TV Hub a Spotify speaker (Web Playback SDK, experimental)
   js/extras.js     Weather, F1 standings and schedule, Premier League table, NFL scores
   js/vendor/qrcode.js  QR code generator (MIT, Kazuhiko Arase)
   js/app.js        Home screen, live TV, sport, shows, Spotify, alerts, backup, screensaver, settings

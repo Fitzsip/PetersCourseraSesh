@@ -232,6 +232,9 @@ input.field.wide { width: 900px; font-size: 30px; }
 .topbar { height: 120px; }
 .tile.ctl { width: 150px; background: #1f2937; align-items: center; justify-content: center; text-align: center; padding: 10px; }
 .tile.ctl .name { font-size: 30px; }
+.tile.ctl.speaker { width: 220px; }
+.tile.ctl.speaker .name { font-size: 26px; }
+.tile.ctl.speaker.on { background: #14532d; }
 .tile.stat { background: var(--bg-2); border-color: rgba(122,162,255,0.4); width: 280px; }
 .tile.stat .name { color: var(--text); font-size: 28px; }
 
