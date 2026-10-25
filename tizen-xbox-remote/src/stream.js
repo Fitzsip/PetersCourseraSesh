@@ -43,6 +43,10 @@ var XboxStream = (function () {
     this.stopped = false;
     this.inputSeq = 0;
     this.inputReady = false;
+    // Diagnostics for the controller path, shown in the stats line.
+    this.inputSent = 0;
+    this.inputReceived = 0;
+    this.lastMask = 0;
   }
 
   Stream.prototype.headers = function () {
@@ -201,6 +205,9 @@ var XboxStream = (function () {
       .then(function (answer) {
         if (answer.status && answer.status !== 'success') throw new Error('Console rejected the offer: ' + JSON.stringify(answer).slice(0, 300));
         self.ui.log('Answer received', 'ok');
+        var extra = {};
+        Object.keys(answer).forEach(function (k) { if (k !== 'sdp') extra[k] = answer[k]; });
+        self.ui.log('Answer details: ' + JSON.stringify(extra).slice(0, 250));
         return pc.setRemoteDescription({ type: 'answer', sdp: answer.sdp });
       })
       .then(function () {
@@ -259,13 +266,26 @@ var XboxStream = (function () {
       self.sendInput(self.clientMetadataPacket());
       self.inputReady = true;
     };
+    input.onmessage = function (ev) {
+      self.inputReceived++;
+      if (self.inputReceived <= 3) {
+        var bytes = new Uint8Array(ev.data);
+        var hex = Array.prototype.slice.call(bytes, 0, 24).map(function (b) { return (b + 0x100).toString(16).slice(1); }).join(' ');
+        self.ui.log('Input from console: type ' + new DataView(ev.data).getUint16(0, true) + ', ' + bytes.length + ' bytes: ' + hex);
+      }
+    };
 
     control.onopen = function () {
       self.ui.log('Control channel open', 'ok');
       control.send(JSON.stringify({ message: 'authorizationRequest', accessKey: CONTROL_ACCESS_KEY }));
       control.send(JSON.stringify({ message: 'gamepadChanged', gamepadIndex: 0, wasAdded: true }));
     };
+    var controlLogged = 0;
+    control.onmessage = function (ev) {
+      if (++controlLogged <= 5) self.ui.log('Control from console: ' + String(ev.data).slice(0, 150));
+    };
 
+    this.messagesLogged = 0;
     message.onopen = function () {
       self.ui.log('Message channel open', 'ok');
       message.send(JSON.stringify({ type: 'Handshake', version: 'messageV1', id: uuid(), cv: '' }));
@@ -273,6 +293,9 @@ var XboxStream = (function () {
     message.onmessage = function (ev) {
       var msg;
       try { msg = JSON.parse(ev.data); } catch (e) { return; }
+      if (msg.type !== 'HandshakeAck' && ++self.messagesLogged <= 10) {
+        self.ui.log('Message from console: ' + msg.type + (msg.target ? ' ' + msg.target : ''));
+      }
       if (msg.type === 'HandshakeAck') {
         self.ui.log('Console handshake complete', 'ok');
         self.sendConfiguration();
@@ -352,6 +375,8 @@ var XboxStream = (function () {
     view.setUint32(o, 0, true); o += 4;       // physical physicality
     view.setUint32(o, 0, true);               // virtual physicality
     this.sendInput(view.buffer);
+    this.inputSent++;
+    this.lastMask = mask;
   };
 
   Stream.prototype.reportStats = function () {
@@ -364,8 +389,11 @@ var XboxStream = (function () {
         var fps = self.lastStats ? Math.round((s.framesDecoded - self.lastStats.frames) * 1000 / (now - self.lastStats.time)) : 0;
         var kbps = self.lastStats ? Math.round((s.bytesReceived - self.lastStats.bytes) * 8 / (now - self.lastStats.time)) : 0;
         self.lastStats = { frames: s.framesDecoded, bytes: s.bytesReceived, time: now };
+        var input = self.channels.input;
         self.ui.onStats((s.frameWidth ? s.frameWidth + 'x' + s.frameHeight + '  ' : '') +
-          fps + ' fps  ' + kbps + ' kbps  lost ' + (s.packetsLost || 0));
+          fps + ' fps  ' + kbps + ' kbps  lost ' + (s.packetsLost || 0) +
+          ' | input ' + (input ? input.readyState : '-') + ' sent ' + self.inputSent +
+          ' recv ' + self.inputReceived + ' buttons 0x' + self.lastMask.toString(16));
       });
     }).catch(function () { /* stats are best-effort */ });
   };

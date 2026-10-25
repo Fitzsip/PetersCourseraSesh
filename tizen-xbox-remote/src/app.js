@@ -252,6 +252,7 @@
 
   // While streaming, the controller goes to the Xbox; otherwise A starts and Y restarts.
   var wasDown = {};
+  var sendFailed = false;
   function pressed(pad, index) {
     var down = !!(pad.buttons[index] && pad.buttons[index].pressed);
     var rising = down && !wasDown[index];
@@ -264,7 +265,12 @@
     for (var i = 0; i < pads.length; i++) if (pads[i]) { pad = pads[i]; break; }
     if (pad) {
       if (mode === 'stream') {
-        stream.sendGamepad(pad);
+        try {
+          stream.sendGamepad(pad);
+        } catch (err) {
+          if (!sendFailed) streamLogLine('Controller send failed: ' + err.message, 'fail');
+          sendFailed = true;
+        }
       } else {
         var a = pressed(pad, 0);
         var y = pressed(pad, 3);
