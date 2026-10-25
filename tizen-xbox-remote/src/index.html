@@ -29,9 +29,16 @@
       <ul id="consoles"><li class="muted">Not loaded yet</li></ul>
     </section>
   </main>
-  <footer>Y / red button: sign out and start again &middot; BACK: exit</footer>
+  <footer>A / OK: stream &middot; Y / red button: sign out and start again &middot; BACK: exit</footer>
+  <div id="stream" hidden>
+    <video id="stream-video" autoplay playsinline></video>
+    <audio id="stream-audio" autoplay></audio>
+    <div id="stream-stats"></div>
+    <div id="stream-log"></div>
+  </div>
   <script src="config.js"></script>
   <script src="xbox-auth.js"></script>
+  <script src="stream.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

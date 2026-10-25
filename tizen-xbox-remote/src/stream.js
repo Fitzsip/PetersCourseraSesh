@@ -1,0 +1,371 @@
+// Xbox Remote Play session: starts a home-streaming session on the console,
+// negotiates WebRTC, and relays controller input over the 'input' data channel.
+// The wire formats follow the reverse-engineered protocol used by open-source
+// clients (e.g. Greenlight); every stage logs so failures can be read off the TV.
+var XboxStream = (function () {
+  'use strict';
+
+  var http = XboxAuth.http;
+
+  // Gamepad API standard-mapping index -> Xbox button bit.
+  var BUTTON_BITS = [
+    [0, 16], [1, 32], [2, 64], [3, 128],          // A B X Y
+    [4, 4096], [5, 8192],                         // LB RB
+    [8, 8], [9, 4],                               // View Menu
+    [10, 16384], [11, 32768],                     // stick clicks
+    [12, 256], [13, 512], [14, 1024], [15, 2048], // d-pad up down left right
+    [16, 2]                                       // Xbox (Nexus) button
+  ];
+  var REPORT_GAMEPAD = 2;
+  var REPORT_CLIENT_METADATA = 8;
+  var CONTROL_ACCESS_KEY = '4BDB3609-C1F1-4195-9B37-FEFF45DA8B8E';
+
+  function uuid() {
+    var b = new Uint8Array(16);
+    crypto.getRandomValues(b);
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    var h = Array.prototype.map.call(b, function (x) { return (x + 0x100).toString(16).slice(1); }).join('');
+    return h.slice(0, 8) + '-' + h.slice(8, 12) + '-' + h.slice(12, 16) + '-' + h.slice(16, 20) + '-' + h.slice(20);
+  }
+
+  function wait(ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); }
+
+  // ui: { log(text, cls), video, audio, onStats(text) }
+  function Stream(session, serverId, ui) {
+    this.session = session;
+    this.serverId = serverId;
+    this.ui = ui;
+    this.sessionUrl = null;
+    this.pc = null;
+    this.channels = {};
+    this.timers = [];
+    this.stopped = false;
+    this.inputSeq = 0;
+    this.inputReady = false;
+  }
+
+  Stream.prototype.headers = function () {
+    return {
+      'Authorization': 'Bearer ' + this.session.gsToken,
+      'x-gssv-client': 'XboxComBrowser'
+    };
+  };
+
+  Stream.prototype.api = function (step, method, path, payload) {
+    var h = this.headers();
+    var options = { method: method, headers: h };
+    if (payload !== undefined) {
+      h['Content-Type'] = 'application/json';
+      options.body = JSON.stringify(payload);
+    }
+    return http.request(step, this.sessionUrl + path, options).then(function (r) {
+      if (!r.ok) {
+        var err = new Error(step + ' failed: HTTP ' + r.status + (r.text ? ' — ' + r.text.slice(0, 300) : ''));
+        throw err;
+      }
+      return r;
+    });
+  };
+
+  Stream.prototype.start = function () {
+    var self = this;
+    return this.startSession()
+      .then(function () { return self.waitForProvisioned(); })
+      .then(function () { return self.negotiate(); })
+      .then(function () {
+        self.every(30000, function () {
+          self.api('Keepalive', 'POST', '/keepalive', {}).catch(function (e) { self.ui.log(e.message, 'warn'); });
+        });
+        self.every(2000, function () { self.reportStats(); });
+      });
+  };
+
+  Stream.prototype.every = function (ms, fn) {
+    this.timers.push(setInterval(fn, ms));
+  };
+
+  Stream.prototype.startSession = function () {
+    var self = this;
+    this.ui.log('Starting Remote Play session…');
+    return http.postJson('Start session', this.session.baseUri + '/v5/sessions/home/play', {
+      titleId: '',
+      systemUpdateGroup: '',
+      clientSessionId: '',
+      settings: {
+        nanoVersion: 'V3;WebrtcTransport.dll',
+        enableTextToSpeech: false,
+        highContrast: 0,
+        locale: navigator.language || 'en-GB',
+        useIceConnection: false,
+        timezoneOffsetMinutes: -new Date().getTimezoneOffset(),
+        sdkType: 'web',
+        osName: 'windows'
+      },
+      serverId: this.serverId,
+      fallbackRegionNames: []
+    }, this.headers()).then(function (j) {
+      self.sessionUrl = self.session.baseUri + '/' + j.sessionPath.replace(/^\//, '');
+      self.ui.log('Session created (' + j.state + ')', 'ok');
+    });
+  };
+
+  Stream.prototype.waitForProvisioned = function () {
+    var self = this;
+    var deadline = Date.now() + 120000;
+    var last = null;
+    function poll() {
+      if (self.stopped) throw new Error('Stopped');
+      if (Date.now() > deadline) throw new Error('Console did not become ready within 2 minutes (last state: ' + last + ')');
+      return self.api('Session state', 'GET', '/state').then(function (r) {
+        var state = r.json && r.json.state;
+        if (state !== last) {
+          self.ui.log('Session state: ' + state + (state === 'Provisioning' ? ' (waking the console)' : ''));
+          last = state;
+        }
+        if (state === 'Provisioned') return null;
+        if (state === 'Failed') {
+          var d = (r.json && r.json.errorDetails) || {};
+          throw new Error('Session failed: ' + (d.code || '') + ' ' + (d.message || JSON.stringify(r.json)));
+        }
+        if (state === 'ReadyToConnect') {
+          throw new Error('Console asked for an extra sign-in step (ReadyToConnect), which this version does not handle yet.');
+        }
+        return wait(1000).then(poll);
+      });
+    }
+    return poll();
+  };
+
+  Stream.prototype.negotiate = function () {
+    var self = this;
+    var pc = this.pc = new RTCPeerConnection({});
+    var localCandidates = [];
+    var gathered = new Promise(function (resolve) {
+      pc.onicecandidate = function (ev) {
+        if (!ev.candidate) { resolve(); return; }
+        localCandidates.push({
+          candidate: ev.candidate.candidate,
+          sdpMid: ev.candidate.sdpMid,
+          sdpMLineIndex: ev.candidate.sdpMLineIndex
+        });
+      };
+    });
+
+    pc.oniceconnectionstatechange = function () {
+      self.ui.log('Connection: ' + pc.iceConnectionState, pc.iceConnectionState === 'failed' ? 'fail' : '');
+    };
+    pc.ontrack = function (ev) {
+      var el = ev.track.kind === 'video' ? self.ui.video : self.ui.audio;
+      el.srcObject = (ev.streams && ev.streams[0]) || new MediaStream([ev.track]);
+      var played = el.play();
+      if (played && played.catch) played.catch(function (e) { self.ui.log(ev.track.kind + ' play(): ' + e.message, 'warn'); });
+      self.ui.log('Receiving ' + ev.track.kind, 'ok');
+    };
+
+    this.openChannels();
+    pc.addTransceiver('audio', { direction: 'sendrecv' });
+    pc.addTransceiver('video', { direction: 'recvonly' });
+
+    return pc.createOffer()
+      .then(function (offer) { return pc.setLocalDescription(offer).then(function () { return offer; }); })
+      .then(function (offer) {
+        self.ui.log('Sending connection offer…');
+        return self.api('Send offer', 'POST', '/sdp', {
+          messageType: 'offer',
+          sdp: offer.sdp,
+          configuration: {
+            chatConfiguration: {
+              bytesPerSample: 2,
+              expectedClipDurationMs: 20,
+              format: { codec: 'opus', container: 'webm' },
+              numChannels: 1,
+              sampleFrequencyHz: 24000
+            },
+            chat: { minVersion: 1, maxVersion: 1 },
+            control: { minVersion: 1, maxVersion: 3 },
+            input: { minVersion: 1, maxVersion: 8 },
+            message: { minVersion: 1, maxVersion: 1 }
+          }
+        });
+      })
+      .then(function () { return self.pollExchange('Connection answer', '/sdp'); })
+      .then(function (answer) {
+        if (answer.status && answer.status !== 'success') throw new Error('Console rejected the offer: ' + JSON.stringify(answer).slice(0, 300));
+        self.ui.log('Answer received', 'ok');
+        return pc.setRemoteDescription({ type: 'answer', sdp: answer.sdp });
+      })
+      .then(function () {
+        return Promise.race([gathered, wait(5000)]);
+      })
+      .then(function () {
+        self.ui.log('Sending ' + localCandidates.length + ' network candidates…');
+        return self.api('Send candidates', 'POST', '/ice', { messageType: 'iceCandidate', candidate: localCandidates });
+      })
+      .then(function () { return self.pollExchange('Console candidates', '/ice'); })
+      .then(function (remote) {
+        var added = 0;
+        (remote || []).forEach(function (c) {
+          var text = String(c.candidate || '');
+          if (text.indexOf('end-of-candidates') !== -1) return;
+          pc.addIceCandidate({
+            candidate: text.replace(/^a=/, ''),
+            sdpMid: c.sdpMid,
+            sdpMLineIndex: parseInt(c.sdpMLineIndex, 10)
+          }).catch(function (e) { self.ui.log('Candidate rejected: ' + e.message, 'warn'); });
+          added++;
+        });
+        self.ui.log('Added ' + added + ' console candidates', 'ok');
+      });
+  };
+
+  // GETs an exchange endpoint until the console has answered; returns the parsed exchangeResponse.
+  Stream.prototype.pollExchange = function (step, path) {
+    var self = this;
+    var deadline = Date.now() + 30000;
+    function poll() {
+      if (self.stopped) throw new Error('Stopped');
+      if (Date.now() > deadline) throw new Error(step + ': no answer from the console within 30s');
+      return self.api(step, 'GET', path).then(function (r) {
+        if (r.status === 204 || !r.json || !r.json.exchangeResponse) return wait(1000).then(poll);
+        if (r.json.errorDetails) throw new Error(step + ': ' + JSON.stringify(r.json.errorDetails).slice(0, 300));
+        return JSON.parse(r.json.exchangeResponse);
+      });
+    }
+    return poll();
+  };
+
+  Stream.prototype.openChannels = function () {
+    var self = this;
+    var pc = this.pc;
+    var input = this.channels.input = pc.createDataChannel('input', { ordered: true, protocol: '1.0' });
+    var control = this.channels.control = pc.createDataChannel('control', { protocol: 'controlV1' });
+    var message = this.channels.message = pc.createDataChannel('message', { protocol: 'messageV1' });
+    this.channels.chat = pc.createDataChannel('chat', { protocol: 'chatV1' });
+    input.binaryType = 'arraybuffer';
+
+    input.onopen = function () {
+      self.ui.log('Input channel open', 'ok');
+      self.sendInput(self.clientMetadataPacket());
+      self.inputReady = true;
+    };
+
+    control.onopen = function () {
+      self.ui.log('Control channel open', 'ok');
+      control.send(JSON.stringify({ message: 'authorizationRequest', accessKey: CONTROL_ACCESS_KEY }));
+      control.send(JSON.stringify({ message: 'gamepadChanged', gamepadIndex: 0, wasAdded: true }));
+    };
+
+    message.onopen = function () {
+      self.ui.log('Message channel open', 'ok');
+      message.send(JSON.stringify({ type: 'Handshake', version: 'messageV1', id: uuid(), cv: '' }));
+    };
+    message.onmessage = function (ev) {
+      var msg;
+      try { msg = JSON.parse(ev.data); } catch (e) { return; }
+      if (msg.type === 'HandshakeAck') {
+        self.ui.log('Console handshake complete', 'ok');
+        self.sendConfiguration();
+        self.requestKeyframe();
+      } else if (msg.type === 'TransactionStart') {
+        // Answer console UI requests (e.g. keyboard prompts) so they don't block the stream.
+        message.send(JSON.stringify({ type: 'TransactionComplete', content: '', id: msg.id, cv: msg.cv || '' }));
+      }
+    };
+  };
+
+  Stream.prototype.sendConfiguration = function () {
+    var channel = this.channels.message;
+    function send(target, content) {
+      channel.send(JSON.stringify({ type: 'Message', content: JSON.stringify(content), id: uuid(), target: target, cv: '' }));
+    }
+    send('/streaming/systemUi/configuration', { version: [0, 1, 0], systemUis: [] });
+    send('/streaming/properties/clientappinstallidchanged', { clientAppInstallId: uuid() });
+    send('/streaming/characteristics/orientationchanged', { orientation: 0 });
+    send('/streaming/characteristics/touchinputenabledchanged', { touchInputEnabled: false });
+    send('/streaming/characteristics/clientdevicecapabilities', {});
+    send('/streaming/characteristics/dimensionschanged', {
+      horizontal: 1920, vertical: 1080, preferredWidth: 1920, preferredHeight: 1080,
+      safeAreaLeft: 0, safeAreaTop: 0, safeAreaRight: 1920, safeAreaBottom: 1080,
+      supportsCustomResolution: true
+    });
+  };
+
+  Stream.prototype.requestKeyframe = function () {
+    var control = this.channels.control;
+    if (control && control.readyState === 'open') {
+      control.send(JSON.stringify({ message: 'videoKeyframeRequested', ifrRequested: true }));
+    }
+  };
+
+  // Packet header: uint16 report type, uint32 sequence, float64 timestamp (little-endian).
+  Stream.prototype.packet = function (reportType, bodySize) {
+    var view = new DataView(new ArrayBuffer(14 + bodySize));
+    view.setUint16(0, reportType, true);
+    view.setUint32(2, ++this.inputSeq, true);
+    view.setFloat64(6, performance.now(), true);
+    return view;
+  };
+
+  Stream.prototype.clientMetadataPacket = function () {
+    var view = this.packet(REPORT_CLIENT_METADATA, 1);
+    view.setUint8(14, 1); // max touch points
+    return view.buffer;
+  };
+
+  Stream.prototype.sendInput = function (buffer) {
+    var input = this.channels.input;
+    if (input && input.readyState === 'open') input.send(buffer);
+  };
+
+  Stream.prototype.sendGamepad = function (pad) {
+    if (!this.inputReady) return;
+    var mask = 0;
+    BUTTON_BITS.forEach(function (pair) {
+      var b = pad.buttons[pair[0]];
+      if (b && b.pressed) mask |= pair[1];
+    });
+    function axis(v) { return Math.max(-32767, Math.min(32767, Math.round((v || 0) * 32767))); }
+    function trigger(b) { return b ? Math.round(b.value * 65535) : 0; }
+
+    var view = this.packet(REPORT_GAMEPAD, 1 + 23);
+    var o = 14;
+    view.setUint8(o, 1); o += 1;              // frame count
+    view.setUint8(o, 0); o += 1;              // gamepad index
+    view.setUint16(o, mask, true); o += 2;
+    view.setInt16(o, axis(pad.axes[0]), true); o += 2;
+    view.setInt16(o, axis(-pad.axes[1]), true); o += 2;  // Xbox expects up = positive
+    view.setInt16(o, axis(pad.axes[2]), true); o += 2;
+    view.setInt16(o, axis(-pad.axes[3]), true); o += 2;
+    view.setUint16(o, trigger(pad.buttons[6]), true); o += 2;
+    view.setUint16(o, trigger(pad.buttons[7]), true); o += 2;
+    view.setUint32(o, 0, true); o += 4;       // physical physicality
+    view.setUint32(o, 0, true);               // virtual physicality
+    this.sendInput(view.buffer);
+  };
+
+  Stream.prototype.reportStats = function () {
+    var self = this;
+    if (!this.pc || !this.pc.getStats) return;
+    this.pc.getStats().then(function (report) {
+      report.forEach(function (s) {
+        if (s.type !== 'inbound-rtp' || (s.kind || s.mediaType) !== 'video') return;
+        var now = s.timestamp;
+        var fps = self.lastStats ? Math.round((s.framesDecoded - self.lastStats.frames) * 1000 / (now - self.lastStats.time)) : 0;
+        var kbps = self.lastStats ? Math.round((s.bytesReceived - self.lastStats.bytes) * 8 / (now - self.lastStats.time)) : 0;
+        self.lastStats = { frames: s.framesDecoded, bytes: s.bytesReceived, time: now };
+        self.ui.onStats((s.frameWidth ? s.frameWidth + 'x' + s.frameHeight + '  ' : '') +
+          fps + ' fps  ' + kbps + ' kbps  lost ' + (s.packetsLost || 0));
+      });
+    }).catch(function () { /* stats are best-effort */ });
+  };
+
+  Stream.prototype.stop = function () {
+    this.stopped = true;
+    this.timers.forEach(clearInterval);
+    if (this.pc) this.pc.close();
+    if (this.sessionUrl) this.api('End session', 'DELETE', '').catch(function () {});
+  };
+
+  return { Stream: Stream };
+})();

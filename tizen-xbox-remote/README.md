@@ -1,8 +1,10 @@
 # Xbox Remote (Samsung Tizen TV)
 
-Signs in to your Microsoft account from a Samsung TV, then goes through the
-Xbox Live and Remote Play sign-in steps and lists your consoles. Streaming is
-the next stage; this app shows how far the sign-in gets.
+Streams your own Xbox to a Samsung TV with Xbox Remote Play. It signs in to
+your Microsoft account, goes through the Xbox Live and Remote Play sign-in
+steps, then starts a session and plays the console's video with your
+controller's input sent back. The streaming protocol is reverse-engineered
+(as in open-source clients such as Greenlight), so each stage logs on screen.
 
 ## One-time setup: your own app ID
 
@@ -33,5 +35,11 @@ and set the power mode to **Sleep**.
 
 ## Controls
 
-- **Y** on the controller or the **red** remote button: sign out and get a new code
+Menu:
+- **A** or **OK**: start streaming
+- **Y** or the **red** remote button: sign out and get a new code
 - **BACK**: exit
+
+While streaming, the controller goes to the Xbox:
+- **BACK** on the TV remote: stop streaming
+- **Green** remote button: show or hide the connection log

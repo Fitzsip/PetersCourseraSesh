@@ -4,6 +4,10 @@
   'use strict';
 
   var config = window.APP_CONFIG || {};
+  var streamingSession = null;
+  var readyConsole = null;
+  var stream = null;
+  var mode = 'signin'; // signin | ready | stream
   var stepsEl = document.getElementById('steps');
   var summaryEl = document.getElementById('summary');
 
@@ -138,12 +142,15 @@
               return c.deviceName + ' — ' + c.consoleType + ', ' + c.powerState;
             });
             if (!list.length) throw new Error('No consoles available for Remote Play. Turn on Remote features on the Xbox.');
+            readyConsole = list[0];
+            streamingSession = streaming.session;
             return { detail: list.length + ' ready' };
           });
         });
       })
       .then(function () {
-        setSummary('Ready: Remote Play accepted this app. Next step is streaming.', 'ok');
+        mode = 'ready';
+        setSummary('Ready: press A (or OK on the remote) to stream ' + readyConsole.deviceName + '.', 'ok');
       })
       .catch(function (err) {
         var name = STEPS.filter(function (s) { return s[0] === err.stepId; })[0];
@@ -151,30 +158,104 @@
       });
   }
 
+  var streamEl = document.getElementById('stream');
+  var streamLog = document.getElementById('stream-log');
+  var streamStats = document.getElementById('stream-stats');
+  var logHideTimer = null;
+
+  function streamLogLine(text, cls) {
+    var line = document.createElement('div');
+    line.textContent = text;
+    if (cls) line.className = cls;
+    streamLog.appendChild(line);
+    streamLog.scrollTop = streamLog.scrollHeight;
+  }
+
+  function startStreaming() {
+    mode = 'stream';
+    document.body.className = 'streaming';
+    streamEl.hidden = false;
+    streamLog.innerHTML = '';
+    streamLog.hidden = false;
+    streamStats.textContent = '';
+    var video = document.getElementById('stream-video');
+
+    stream = new XboxStream.Stream(streamingSession, readyConsole.serverId, {
+      log: streamLogLine,
+      video: video,
+      audio: document.getElementById('stream-audio'),
+      onStats: function (text) { streamStats.textContent = text; }
+    });
+    // Once frames are showing, tuck the log away; green button brings it back.
+    video.onplaying = function () {
+      streamLogLine('Video playing', 'ok');
+      clearTimeout(logHideTimer);
+      logHideTimer = setTimeout(function () { streamLog.hidden = true; }, 8000);
+    };
+    stream.start().catch(function (err) {
+      streamLogLine(err.message, 'fail');
+      streamLogLine('Photo this screen. Press BACK to return.', 'fail');
+      streamLog.hidden = false;
+    });
+  }
+
+  function stopStreaming() {
+    if (stream) stream.stop();
+    stream = null;
+    clearTimeout(logHideTimer);
+    var video = document.getElementById('stream-video');
+    video.onplaying = null;
+    video.srcObject = null;
+    document.getElementById('stream-audio').srcObject = null;
+    streamEl.hidden = true;
+    document.body.className = '';
+    mode = 'ready';
+  }
+
   function restart() {
     XboxAuth.signOut();
     window.location.reload();
   }
 
-  try { tizen.tvinputdevice.registerKey('ColorF0Red'); } catch (e) { /* not on a TV */ }
+  try {
+    tizen.tvinputdevice.registerKey('ColorF0Red');
+    tizen.tvinputdevice.registerKey('ColorF1Green');
+  } catch (e) { /* not on a TV */ }
+
   document.addEventListener('keydown', function (e) {
     if (e.keyCode === 10009) {
+      if (mode === 'stream') { stopStreaming(); return; }
       try { tizen.application.getCurrentApplication().exit(); } catch (err) { /* not on a TV */ }
-    } else if (e.keyCode === 403) {
+    } else if (e.keyCode === 13 && mode === 'ready') {
+      startStreaming();
+    } else if (e.keyCode === 403 && mode !== 'stream') {
       restart();
+    } else if (e.keyCode === 404 && mode === 'stream') {
+      streamLog.hidden = !streamLog.hidden;
     }
   });
 
-  // Y on the controller (standard mapping button 3) signs out and starts again.
-  var yWasDown = false;
+  // While streaming, the controller goes to the Xbox; otherwise A starts and Y restarts.
+  var wasDown = {};
+  function pressed(pad, index) {
+    var down = !!(pad.buttons[index] && pad.buttons[index].pressed);
+    var rising = down && !wasDown[index];
+    wasDown[index] = down;
+    return rising;
+  }
   (function pollPad() {
     var pads = navigator.getGamepads ? navigator.getGamepads() : [];
-    for (var i = 0; i < pads.length; i++) {
-      if (!pads[i]) continue;
-      var yDown = pads[i].buttons[3] && pads[i].buttons[3].pressed;
-      if (yDown && !yWasDown) { restart(); return; }
-      yWasDown = !!yDown;
-      break;
+    var pad = null;
+    for (var i = 0; i < pads.length; i++) if (pads[i]) { pad = pads[i]; break; }
+    if (pad) {
+      if (mode === 'stream') {
+        stream.sendGamepad(pad);
+      } else {
+        var a = pressed(pad, 0);
+        var y = pressed(pad, 3);
+        if (y) { restart(); return; }
+        if (a && mode === 'ready') startStreaming();
+      }
     }
     requestAnimationFrame(pollPad);
   })();

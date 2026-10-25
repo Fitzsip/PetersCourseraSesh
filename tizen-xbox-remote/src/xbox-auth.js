@@ -198,6 +198,7 @@ var XboxAuth = (function () {
     listAccountConsoles: listAccountConsoles,
     streamingLogin: streamingLogin,
     listStreamingConsoles: listStreamingConsoles,
-    signOut: signOut
+    signOut: signOut,
+    http: { request: request, postJson: postJson, getJson: getJson }
   };
 })();
