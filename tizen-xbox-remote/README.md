@@ -47,3 +47,7 @@ While streaming, the controller goes to the Xbox:
 ## Third-party code
 
 `src/vendor/qrcode.js` is [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) 1.4.4 by Kazuhiko Arase (MIT license).
+
+The controller start-up sequence and input packet layout follow
+[xbox-xcloud-player](https://github.com/unknownskl/xbox-xcloud-player) 0.2.11 (MIT), the
+library behind Greenlight.

@@ -16,6 +16,7 @@ var XboxStream = (function () {
     [12, 256], [13, 512], [14, 1024], [15, 2048], // d-pad up down left right
     [16, 2]                                       // Xbox (Nexus) button
   ];
+  var REPORT_METADATA = 1;
   var REPORT_GAMEPAD = 2;
   var REPORT_CLIENT_METADATA = 8;
   var CONTROL_ACCESS_KEY = '4BDB3609-C1F1-4195-9B37-FEFF45DA8B8E';
@@ -272,6 +273,7 @@ var XboxStream = (function () {
     [['input', input], ['control', control], ['message', message], ['chat', this.channels.chat]].forEach(function (pair) {
       pair[1].onclose = function () {
         if (self.stopped) return;
+        if (pair[0] === 'chat') { self.ui.log('Voice chat channel closed (expected, no microphone)'); return; }
         self.ui.log(self.elapsed() + pair[0] + ' channel closed by console (input packets sent: ' + self.inputSent +
           ', last buttons 0x' + self.lastMask.toString(16) + ')', 'fail');
         self.ui.problem();
@@ -281,8 +283,6 @@ var XboxStream = (function () {
     input.onopen = function () {
       self.openedAt = Date.now();
       self.ui.log('Input channel open', 'ok');
-      self.sendInput(self.clientMetadataPacket());
-      self.inputReady = true;
     };
     input.onmessage = function (ev) {
       self.inputReceived++;
@@ -295,8 +295,6 @@ var XboxStream = (function () {
 
     control.onopen = function () {
       self.ui.log('Control channel open', 'ok');
-      control.send(JSON.stringify({ message: 'authorizationRequest', accessKey: CONTROL_ACCESS_KEY }));
-      control.send(JSON.stringify({ message: 'gamepadChanged', gamepadIndex: 0, wasAdded: true }));
     };
     var controlLogged = 0;
     control.onmessage = function (ev) {
@@ -316,6 +314,10 @@ var XboxStream = (function () {
       }
       if (msg.type === 'HandshakeAck') {
         self.ui.log('Console handshake complete', 'ok');
+        // The console only registers a client once the handshake is done, so the controller
+        // authorization and input stream must start here, not when their channels open.
+        self.startControl();
+        self.startInput();
         self.sendConfiguration();
         self.requestKeyframe();
       } else if (msg.type === 'TransactionStart') {
@@ -349,6 +351,41 @@ var XboxStream = (function () {
     });
   };
 
+  Stream.prototype.startControl = function () {
+    var control = this.channels.control;
+    control.send(JSON.stringify({ message: 'authorizationRequest', accessKey: CONTROL_ACCESS_KEY }));
+    control.send(JSON.stringify({ message: 'gamepadChanged', gamepadIndex: 0, wasAdded: true }));
+    this.ui.log(this.elapsed() + 'Controller registered with the console', 'ok');
+  };
+
+  Stream.prototype.startInput = function () {
+    this.sendInput(this.clientMetadataPacket());
+    this.inputReady = true;
+    this.watchVideoFrames();
+  };
+
+  // Per-frame render reports, as the reference client sends; only possible where the
+  // engine has requestVideoFrameCallback (newer than Tizen 5.5's, so usually skipped).
+  Stream.prototype.watchVideoFrames = function () {
+    var self = this;
+    var video = this.ui.video;
+    this.frameMetadata = [];
+    if (!video.requestVideoFrameCallback) {
+      this.ui.log('Frame reports: not supported on this TV');
+      return;
+    }
+    function onFrame(now, info) {
+      if (self.stopped) return;
+      if (self.frameMetadata.length < 30) {
+        self.frameMetadata.push([info.rtpTimestamp || 0, info.receiveTime || 0, info.receiveTime || 0,
+          info.expectedDisplayTime || 0, info.expectedDisplayTime || 0]);
+      }
+      video.requestVideoFrameCallback(onFrame);
+    }
+    video.requestVideoFrameCallback(onFrame);
+    this.ui.log('Frame reports: on');
+  };
+
   Stream.prototype.requestKeyframe = function () {
     var control = this.channels.control;
     if (control && control.readyState === 'open') {
@@ -357,17 +394,17 @@ var XboxStream = (function () {
   };
 
   // Packet header: uint16 report type, uint32 sequence, float64 timestamp (little-endian).
-  Stream.prototype.packet = function (reportType, bodySize) {
+  Stream.prototype.packet = function (reportType, bodySize, sequence) {
     var view = new DataView(new ArrayBuffer(14 + bodySize));
     view.setUint16(0, reportType, true);
-    view.setUint32(2, ++this.inputSeq, true);
+    view.setUint32(2, sequence === undefined ? ++this.inputSeq : sequence, true);
     view.setFloat64(6, performance.now(), true);
     return view;
   };
 
   Stream.prototype.clientMetadataPacket = function () {
-    var view = this.packet(REPORT_CLIENT_METADATA, 1);
-    view.setUint8(14, 1); // max touch points
+    var view = this.packet(REPORT_CLIENT_METADATA, 1, 0);
+    view.setUint8(14, 2); // max touch points
     return view.buffer;
   };
 
@@ -383,11 +420,22 @@ var XboxStream = (function () {
       var b = pad.buttons[pair[0]];
       if (b && b.pressed) mask |= pair[1];
     });
-    function axis(v) { return Math.max(-32767, Math.min(32767, Math.round((v || 0) * 32767))); }
-    function trigger(b) { return b ? Math.round(b.value * 65535) : 0; }
+    // Truncate toward zero, as the reference client's Int16/Uint16 conversion does.
+    function axis(v) { return Math.trunc(Math.max(-32767, Math.min(32767, (v || 0) * 32767))); }
+    function trigger(b) { return b ? Math.trunc(Math.max(0, Math.min(65535, b.value * 65535))) : 0; }
 
-    var view = this.packet(REPORT_GAMEPAD, 1 + 23);
+    var frames = this.frameMetadata || [];
+    var metaSize = frames.length ? 1 + 28 * frames.length : 0;
+    var view = this.packet(REPORT_GAMEPAD | (frames.length ? REPORT_METADATA : 0), metaSize + 1 + 23);
     var o = 14;
+    if (frames.length) {
+      var nowMs = performance.now();
+      view.setUint8(o, frames.length); o += 1;
+      frames.forEach(function (f) {
+        f.concat([nowMs, nowMs]).forEach(function (v) { view.setUint32(o, Math.round(v) >>> 0, true); o += 4; });
+      });
+      this.frameMetadata = [];
+    }
     view.setUint8(o, 1); o += 1;              // frame count
     view.setUint8(o, 0); o += 1;              // gamepad index
     view.setUint16(o, mask, true); o += 2;
@@ -417,6 +465,7 @@ var XboxStream = (function () {
         var now = s.timestamp;
         var fps = self.lastStats ? Math.round((s.framesDecoded - self.lastStats.frames) * 1000 / (now - self.lastStats.time)) : 0;
         var kbps = self.lastStats ? Math.round((s.bytesReceived - self.lastStats.bytes) * 8 / (now - self.lastStats.time)) : 0;
+        if (self.lastStats && fps === 0 && self.inputReady) self.requestKeyframe();
         self.lastStats = { frames: s.framesDecoded, bytes: s.bytesReceived, time: now };
         var input = self.channels.input;
         self.ui.onStats((s.frameWidth ? s.frameWidth + 'x' + s.frameHeight + '  ' : '') +
