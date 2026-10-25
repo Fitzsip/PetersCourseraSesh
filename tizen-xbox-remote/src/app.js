@@ -6,6 +6,8 @@
   var config = window.APP_CONFIG || {};
   var streamingSession = null;
   var readyConsole = null;
+  var gssvToken = null;
+  var cloudTestRunning = false;
   var stream = null;
   var mode = 'signin'; // signin | ready | stream
 
@@ -156,6 +158,7 @@
         return step('stream', function () {
           return XboxAuth.streamingLogin(streaming.token).then(function (s) {
             streaming.session = s;
+            gssvToken = streaming.token;
             return { detail: 'region ' + s.baseUri.replace(/^https:\/\//, '') };
           });
         });
@@ -183,9 +186,28 @@
       });
   }
 
+  function runCloudTest() {
+    if (cloudTestRunning || !gssvToken) return;
+    cloudTestRunning = true;
+    var ul = document.getElementById('cloud-test');
+    ul.innerHTML = '<li class="running">Running\u2026</li>';
+    var first = true;
+    CloudTest.run(gssvToken, config.clientId, function (name, ok, detail) {
+      if (first) { ul.innerHTML = ''; first = false; }
+      var li = document.createElement('li');
+      li.className = ok ? 'ok' : 'fail';
+      li.textContent = (ok ? '\u2713 ' : '\u2717 ') + name;
+      var d = document.createElement('span');
+      d.className = 'detail';
+      d.textContent = detail || '';
+      li.appendChild(d);
+      ul.appendChild(li);
+    }).then(function () { cloudTestRunning = false; });
+  }
+
   function showReady() {
     setSummary('Ready: press A (or OK) to stream ' + readyConsole.deviceName +
-      '. Controller protocol: up to v' + inputMaxVersion + ' (\u2190 \u2192 to change)', 'ok');
+      '. Controller protocol: up to v' + inputMaxVersion + ' (\u2190 \u2192 to change). X: cloud test', 'ok');
   }
 
   // Debounced because the TV may also turn controller d-pad presses into arrow keys.
@@ -310,6 +332,8 @@
         var y = pressed(pad, 3);
         var left = pressed(pad, 14);
         var right = pressed(pad, 15);
+        var x = pressed(pad, 2);
+        if (x && mode === 'ready') runCloudTest();
         if (y) { restart(); return; }
         if (mode === 'ready' && (left || right)) cycleInputVersion(right ? 1 : -1);
         if (a && mode === 'ready') startStreaming();

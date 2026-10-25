@@ -16,7 +16,7 @@ li { margin: 4px 0; }
 .detail { display: block; font-size: 18px; color: #bbb; white-space: pre-wrap; word-break: break-all; }
 .pending { color: #777; } .running { color: #fc3; } .ok { color: #6cc644; } .fail { color: #f55; } .skip { color: #888; }
 .muted { color: #777; }
-#consoles li { list-style: none; margin-left: -32px; padding: 6px 0; border-bottom: 1px solid #333; }
+#consoles li, #cloud-test li { list-style: none; margin-left: -32px; padding: 6px 0; border-bottom: 1px solid #333; }
 footer { position: fixed; bottom: 12px; left: 40px; color: #888; font-size: 20px; }
 
 body.streaming header, body.streaming main, body.streaming footer { display: none; }
