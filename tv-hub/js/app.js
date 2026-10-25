@@ -271,6 +271,8 @@
     bar.classList.toggle('hidden', o.progress == null);
     bar.firstChild.style.width = Math.round((o.progress || 0) * 100) + '%';
     var art = $('preview-art');
+    // Music playing through the TV takes the live preview's place: show its cover there.
+    if (!o.art && musicHere() && !previewOn()) o.art = { image: artOf(nowItem()), color: '#14532d', label: nowItem().name };
     art.classList.toggle('hidden', !o.art);
     if (o.art) {
       art.style.backgroundColor = o.art.color || '';
@@ -934,8 +936,8 @@
     });
   }
 
-  // Optionally no live preview while Spotify plays through the TV, in case the tuner takes over the speakers.
-  function previewOn() { return state.options.livePreview && Platform.canTune() && (state.options.previewWithMusic || !musicHere()); }
+  // No live preview while Spotify plays through the TV: the TV can't play the tuner and Spotify's audio together.
+  function previewOn() { return state.options.livePreview && Platform.canTune() && (state.options.musicPreview || !musicHere()); }
 
   function showPreview() {
     document.body.classList.toggle('no-preview', Platform.isTv && !previewOn());
@@ -1007,6 +1009,7 @@
 
   screens.watch = {
     enter: function () {
+      if (musicHere()) { musicDo(SpotifyApi.pause, 'Spotify paused for live TV'); music.state.is_playing = false; }
       Platform.showTvWindow({ x: 0, y: 0, w: 1920, h: 1080 });
       var ch = state.channels[lastIndex()];
       if (ch) tuneTo(ch, { fail: function (msg) { toast('Couldn’t tune ' + ch.name + ': ' + msg); } });
@@ -1363,8 +1366,8 @@
     opts.appendChild(chip('Live preview: ' + (state.options.livePreview ? 'On' : 'Off'),
       function () { state.options.livePreview = !state.options.livePreview; if (!state.options.livePreview) Platform.hideTvWindow(); changed(); },
       state.options.livePreview ? 'on' : ''));
-    opts.appendChild(chip('Preview while Spotify plays on the TV: ' + (state.options.previewWithMusic ? 'On' : 'Off'),
-      function () { state.options.previewWithMusic = !state.options.previewWithMusic; changed(); }, state.options.previewWithMusic ? 'on' : ''));
+    opts.appendChild(chip('Live preview while Spotify plays on this TV: ' + (state.options.musicPreview ? 'On' : 'Off'),
+      function () { state.options.musicPreview = !state.options.musicPreview; changed(); }, state.options.musicPreview ? 'on' : ''));
     body.appendChild(opts);
     var reset = el('div', 'srow nav-row');
     reset.appendChild(el('div', 'label', 'Start again (removes your shows and channels, and disconnects Spotify)'));
@@ -1629,9 +1632,10 @@
     if (here === wasHere) return;
     wasHere = here;
     if (current !== 'home') return;
-    if (state.options.previewWithMusic) return;
+    if (state.options.musicPreview) return;
     if (here) { clearTimeout(previewTimer); Platform.hideTvWindow(); tunedKey = null; }
     showPreview();
+    homeNav.refresh(); // redraw the hero, so the cover replaces the preview (or goes away)
   }
   function isPlaying() { return !!(music.state && music.state.is_playing); }
   function musicProgress() {
@@ -1665,14 +1669,20 @@
       st === 'failed' ? WebPlayer.error() : 'Off';
   }
 
-  // Where to play when nothing is active: TV Hub's own speaker if it's ready, else Spotify on this TV, else the first device.
+  // Where to play when nothing is active: your default speaker (the last one chosen in Play on…)
+  // if Spotify can see it, else TV Hub's own speaker, else Spotify on a TV, else the first device.
   function withTarget(cb) {
     if (music.state && music.state.device) return cb(null);
-    if (WebPlayer.deviceId()) { WebPlayer.activate(); return cb(WebPlayer.deviceId()); }
+    var mine = WebPlayer.deviceId(), want = state.options.musicDevice;
+    function useMine() { WebPlayer.activate(); cb(mine); }
+    if (mine && (!want || want === WebPlayer.NAME)) return useMine();
     SpotifyApi.devices(function (err, list) {
       music.devices = list;
+      var pick = list.filter(function (d) { return want && d.name === want && d.id !== mine; })[0];
+      if (pick) return cb(pick.id);
+      if (mine) return useMine();
       if (!list.length) {
-        toast('No Spotify devices found — open Spotify on your phone or this TV, then try again');
+        toast('No Spotify devices found — open Spotify on your phone or speaker, then try again');
         return;
       }
       var tv = list.filter(function (d) { return d.type === 'TV' || /tv|samsung/i.test(d.name); })[0];
@@ -1702,16 +1712,19 @@
     SpotifyApi.devices(function (err, list) {
       if (err) return toast(err);
       openPicker({
-        title: 'Play Spotify on…', hint: 'OK to switch · BACK to go back', back: 'home',
+        title: 'Play Spotify on…', hint: 'OK to switch (it becomes your default for ▶) · BACK to go back', back: 'home',
         empty: 'No devices found. Open Spotify on your phone, speaker or this TV, then try again.',
         items: function () {
           var mine = WebPlayer.deviceId();
           if (mine && !list.some(function (d) { return d.id === mine; })) list.unshift({ id: mine, name: WebPlayer.NAME, type: 'TV' });
           var items = list.map(function (d) {
             var name = d.id === mine ? WebPlayer.NAME + '   ·   plays while TV Hub is open' : d.name + '   ·   ' + d.type;
-            return { label: name + (d.is_active ? '   (playing)' : ''), chip: d.is_active ? '✓ Current' : 'Play here', on: d.is_active,
+            var isDefault = state.options.musicDevice ? state.options.musicDevice === d.name : d.id === mine;
+            return { label: name + (d.is_active ? '   (playing)' : '') + (isDefault ? '   ★ default' : ''), chip: d.is_active ? '✓ Current' : 'Play here', on: d.is_active,
               select: function () {
                 if (d.id === mine) WebPlayer.activate();
+                state.options.musicDevice = d.name; // ▶ plays here next time nothing is playing
+                save();
                 musicDo(function (cb) { SpotifyApi.transfer(d.id, true, cb); }, 'Playing on ' + d.name);
                 show('home');
                 return true;
@@ -1832,6 +1845,8 @@
       if (st !== 'ready') return toast('Still getting ready — try again in a moment');
       if (musicHere()) return openSoundCheck();
       WebPlayer.activate();
+      state.options.musicDevice = WebPlayer.NAME;
+      save();
       musicDo(function (cb) { SpotifyApi.transfer(WebPlayer.deviceId(), true, cb); }, 'Playing through this TV');
     };
     sp.onfocusitem = function () {
@@ -1870,10 +1885,10 @@
         items: function () {
           var items = [
             { label: 'Play a test beep. If you hear it, the TV’s web sound works.', chip: 'Beep', select: function () { return { chip: WebPlayer.beep() ? 'Beep again' : 'Can’t beep' }; } },
-            { label: 'Still silent? Try hiding the live preview while music plays (the TV channel may be taking the speakers). Turn it back on here if it makes no difference.',
-              chip: 'Preview with music: ' + (state.options.previewWithMusic ? 'On' : 'Off'), select: function () {
-                state.options.previewWithMusic = !state.options.previewWithMusic;
-                return { chip: 'Preview with music: ' + (state.options.previewWithMusic ? 'On' : 'Off'), on: !state.options.previewWithMusic };
+            { label: 'Keep the live preview while music plays here? The TV usually can’t play both, so this is normally Off.',
+              chip: 'Preview with music: ' + (state.options.musicPreview ? 'On' : 'Off'), select: function () {
+                state.options.musicPreview = !state.options.musicPreview;
+                return { chip: 'Preview with music: ' + (state.options.musicPreview ? 'On' : 'Off'), on: !state.options.musicPreview };
               } },
             { label: 'Spotify says it’s playing here but it’s silent? Unlock the sound and restart the song.', chip: 'Unlock sound', select: function () {
               WebPlayer.resume();

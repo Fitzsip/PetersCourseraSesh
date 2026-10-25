@@ -134,6 +134,11 @@ You need a Windows, Mac or Linux computer on the same Wi-Fi or network as the TV
 
 TV Hub can be a Spotify speaker called **TV Hub (this TV)**, so music plays through the TV while you browse TV Hub. Music stops if you open another app.
 
+- **The live preview pauses while music plays through the TV.** The TV can't play the satellite tuner and Spotify's sound together, so the album cover takes the preview's place, and the preview comes back when the music stops or moves to another speaker. To keep the preview anyway, use **Settings → Options**.
+- **Opening a satellite channel pauses Spotify** if it's playing through the TV.
+- **Your default speaker:** whatever you last chose in **Play on…** (or the **This TV** tile) is where ▶ plays when nothing is playing. It's marked ★ in **Play on…**.
+- **No sound?** Press OK on the **This TV** tile while it says "Playing here" to open the **Sound check**.
+
 **If you connected Spotify before version 1.1.2,** do this once:
 1. On developer.spotify.com, open your app → **Settings** → **Edit**, tick **Web Playback SDK** and **Save**.
 2. In TV Hub, choose the **This TV** tile in the Spotify row and reconnect, the same way as the first time.
