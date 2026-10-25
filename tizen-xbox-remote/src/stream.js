@@ -32,7 +32,9 @@ var XboxStream = (function () {
   function wait(ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); }
 
   // ui: { log(text, cls), video, audio, onStats(text) }
-  function Stream(session, serverId, ui) {
+  // options: { inputMaxVersion } - highest controller protocol version to offer the console.
+  function Stream(session, serverId, ui, options) {
+    this.options = options || {};
     this.session = session;
     this.serverId = serverId;
     this.ui = ui;
@@ -79,7 +81,9 @@ var XboxStream = (function () {
       .then(function () { return self.negotiate(); })
       .then(function () {
         self.every(30000, function () {
-          self.api('Keepalive', 'POST', '/keepalive', {}).catch(function (e) { self.ui.log(e.message, 'warn'); });
+          self.api('Keepalive', 'POST', '/keepalive', {})
+            .then(function () { self.ui.log(self.elapsed() + 'Keepalive ok'); })
+            .catch(function (e) { self.ui.log(self.elapsed() + e.message, 'warn'); });
         });
         self.every(2000, function () { self.reportStats(); });
       });
@@ -199,7 +203,7 @@ var XboxStream = (function () {
             },
             chat: { minVersion: 1, maxVersion: 1 },
             control: { minVersion: 1, maxVersion: 3 },
-            input: { minVersion: 1, maxVersion: 8 },
+            input: { minVersion: 1, maxVersion: self.options.inputMaxVersion || 8 },
             message: { minVersion: 1, maxVersion: 1 }
           }
         });
@@ -315,6 +319,8 @@ var XboxStream = (function () {
         self.sendConfiguration();
         self.requestKeyframe();
       } else if (msg.type === 'TransactionStart') {
+        // The content often explains why (e.g. the reason for a server-initiated disconnect).
+        self.ui.log(self.elapsed() + 'Console request ' + (msg.target || '') + ': ' + String(msg.content || '').slice(0, 300), 'warn');
         // Answer console UI requests (e.g. keyboard prompts) so they don't block the stream.
         message.send(JSON.stringify({ type: 'TransactionComplete', content: '', id: msg.id, cv: msg.cv || '' }));
       }

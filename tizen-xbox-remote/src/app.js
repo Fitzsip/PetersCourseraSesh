@@ -8,6 +8,16 @@
   var readyConsole = null;
   var stream = null;
   var mode = 'signin'; // signin | ready | stream
+
+  // Highest controller-protocol version offered to the console; switchable on the Ready
+  // screen so different versions can be tried without reinstalling.
+  var INPUT_VERSIONS = [8, 6, 4, 2, 1];
+  var INPUT_VERSION_KEY = 'xboxRemote.inputMaxVersion';
+  var inputMaxVersion = 8;
+  try {
+    var saved = parseInt(window.localStorage.getItem(INPUT_VERSION_KEY), 10);
+    if (INPUT_VERSIONS.indexOf(saved) !== -1) inputMaxVersion = saved;
+  } catch (e) { /* storage unavailable */ }
   var stepsEl = document.getElementById('steps');
   var summaryEl = document.getElementById('summary');
 
@@ -165,12 +175,28 @@
       })
       .then(function () {
         mode = 'ready';
-        setSummary('Ready: press A (or OK on the remote) to stream ' + readyConsole.deviceName + '.', 'ok');
+        showReady();
       })
       .catch(function (err) {
         var name = STEPS.filter(function (s) { return s[0] === err.stepId; })[0];
         setSummary('Stopped at: ' + (name ? name[1] : 'unknown step') + '. Photo this screen.', 'fail');
       });
+  }
+
+  function showReady() {
+    setSummary('Ready: press A (or OK) to stream ' + readyConsole.deviceName +
+      '. Controller protocol: up to v' + inputMaxVersion + ' (\u2190 \u2192 to change)', 'ok');
+  }
+
+  // Debounced because the TV may also turn controller d-pad presses into arrow keys.
+  var lastCycle = 0;
+  function cycleInputVersion(step) {
+    if (Date.now() - lastCycle < 250) return;
+    lastCycle = Date.now();
+    var i = INPUT_VERSIONS.indexOf(inputMaxVersion);
+    inputMaxVersion = INPUT_VERSIONS[(i + step + INPUT_VERSIONS.length) % INPUT_VERSIONS.length];
+    try { window.localStorage.setItem(INPUT_VERSION_KEY, String(inputMaxVersion)); } catch (e) { /* storage unavailable */ }
+    showReady();
   }
 
   var streamEl = document.getElementById('stream');
@@ -204,7 +230,8 @@
         clearTimeout(logHideTimer);
         streamLog.hidden = false;
       }
-    });
+    }, { inputMaxVersion: inputMaxVersion });
+    streamLogLine('Offering controller protocol up to v' + inputMaxVersion);
     // Once frames are showing, tuck the log away; green button brings it back.
     video.onplaying = function () {
       streamLogLine('Video playing', 'ok');
@@ -229,6 +256,7 @@
     streamEl.hidden = true;
     document.body.className = '';
     mode = 'ready';
+    showReady();
   }
 
   function restart() {
@@ -247,6 +275,8 @@
       try { tizen.application.getCurrentApplication().exit(); } catch (err) { /* not on a TV */ }
     } else if (e.keyCode === 13 && mode === 'ready') {
       startStreaming();
+    } else if ((e.keyCode === 37 || e.keyCode === 39) && mode === 'ready') {
+      cycleInputVersion(e.keyCode === 39 ? 1 : -1);
     } else if (e.keyCode === 403 && mode !== 'stream') {
       restart();
     } else if (e.keyCode === 404 && mode === 'stream') {
@@ -278,7 +308,10 @@
       } else {
         var a = pressed(pad, 0);
         var y = pressed(pad, 3);
+        var left = pressed(pad, 14);
+        var right = pressed(pad, 15);
         if (y) { restart(); return; }
+        if (mode === 'ready' && (left || right)) cycleInputVersion(right ? 1 : -1);
         if (a && mode === 'ready') startStreaming();
       }
     }
