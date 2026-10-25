@@ -236,7 +236,9 @@ var XboxStream = (function () {
       if (Date.now() > deadline) throw new Error(step + ': no answer from the console within 30s');
       return self.api(step, 'GET', path).then(function (r) {
         if (r.status === 204 || !r.json || !r.json.exchangeResponse) return wait(1000).then(poll);
-        if (r.json.errorDetails) throw new Error(step + ': ' + JSON.stringify(r.json.errorDetails).slice(0, 300));
+        // errorDetails is always present; it only signals a failure when it has content.
+        var d = r.json.errorDetails;
+        if (d && (d.code || d.message)) throw new Error(step + ': ' + JSON.stringify(d).slice(0, 300));
         return JSON.parse(r.json.exchangeResponse);
       });
     }
