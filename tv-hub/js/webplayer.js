@@ -60,6 +60,7 @@ var WebPlayer = (function () {
     player.addListener('authentication_error', function (e) { fail('Spotify sign-in problem — reconnect Spotify (' + (e && e.message) + ')'); });
     player.addListener('account_error', function () { fail('Playing on this TV needs Spotify Premium'); });
     player.addListener('playback_error', function (e) { error = 'Playback problem: ' + (e && e.message); notify(); });
+    player.addListener('autoplay_failed', function () { error = 'The TV blocked the sound until a button is pressed'; notify(); });
     reconnect();
   }
 
@@ -76,6 +77,53 @@ var WebPlayer = (function () {
     try { if (player && player.activateElement) player.activateElement(); } catch (e) {}
   }
 
+  // Unlock sound and nudge the player, for when Spotify says it's playing here but nothing is heard.
+  function resume() {
+    activate();
+    try { if (player) player.resume(); } catch (e) {}
+  }
+
+  // What this TV can do, for the Sound check screen. cb(list of [label, result]), in a fixed order.
+  function diagnose(cb) {
+    var rows = [], left = 1;
+    function add(label) { var r = [label, '…']; rows.push(r); left++; return function (v) { r[1] = v; if (--left === 0) cb(rows); }; }
+    function codec(t) { try { return !!(window.MediaSource && MediaSource.isTypeSupported(t)); } catch (e) { return false; } }
+    rows.push(['Spotify’s player', { ready: 'Connected', starting: 'Starting', failed: 'Failed', off: 'Off' }[status]]);
+    if (error) rows.push(['Last problem', error]);
+    rows.push(['Audio formats MP4 / WebM / FLAC', ['audio/mp4; codecs="mp4a.40.2"', 'audio/webm; codecs="vorbis"', 'audio/mp4; codecs="flac"']
+      .map(function (t) { return codec(t) ? 'yes' : 'no'; }).join(' / ')]);
+    [['com.widevine.alpha', 'Protected audio: Widevine (Spotify needs this)'], ['com.microsoft.playready', 'Protected audio: PlayReady']].forEach(function (k) {
+      var set = add(k[1]);
+      try {
+        navigator.requestMediaKeySystemAccess(k[0], [{ initDataTypes: ['cenc'], audioCapabilities: [{ contentType: 'audio/mp4; codecs="mp4a.40.2"' }] }])
+          .then(function () { set('yes'); }, function (e) { set('no (' + ((e && e.name) || 'refused') + ')'); });
+      } catch (e) { set('not available'); }
+    });
+    var setState = add('Player state'), setVol = add('Player volume');
+    if (!player) { setState('none'); setVol('—'); }
+    else {
+      try {
+        player.getCurrentState().then(function (st) {
+          setState(st ? (st.paused ? 'paused' : 'playing') + ' at ' + Math.round(st.position / 1000) + ' s' : 'not playing here');
+        }, function () { setState('unknown'); });
+        player.getVolume().then(function (v) { setVol(Math.round(v * 100) + '%'); }, function () { setVol('unknown'); });
+      } catch (e) { setState('error'); setVol('error'); }
+    }
+    if (--left === 0) cb(rows);
+  }
+
+  // A short beep through the TV's speakers, to check web audio works at all.
+  function beep() {
+    try {
+      var C = window.AudioContext || window.webkitAudioContext, ctx = new C(), o = ctx.createOscillator(), g = ctx.createGain();
+      o.frequency.value = 660; g.gain.value = 0.3;
+      o.connect(g); g.connect(ctx.destination);
+      o.start(); o.stop(ctx.currentTime + 0.8);
+      setTimeout(function () { try { ctx.close(); } catch (e) {} }, 1500);
+      return true;
+    } catch (e) { return false; }
+  }
+
   function stop() {
     clearTimeout(timer);
     try { if (player) player.disconnect(); } catch (e) {}
@@ -87,7 +135,7 @@ var WebPlayer = (function () {
   }
 
   return {
-    NAME: NAME, start: start, stop: stop, activate: activate,
+    NAME: NAME, start: start, stop: stop, activate: activate, resume: resume, diagnose: diagnose, beep: beep,
     deviceId: function () { return deviceId; },
     status: function () { return status; },
     error: function () { return error; },

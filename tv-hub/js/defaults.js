@@ -96,6 +96,7 @@ var TVHUB_DEFAULTS = {
     ambientMins: 10,           // screensaver after this many idle minutes on the home screen (0 = off)
     spotifyKey: null,          // colour button that plays/pauses Spotify
     livePreview: true,         // show the live channel behind the home screen
+    previewWithMusic: true,    // keep the live preview while Spotify plays through the TV
     // Used only when the TV doesn't let this app tune channels itself.
     tvViewerAppId: 'org.tizen.tv-viewer'
   }
