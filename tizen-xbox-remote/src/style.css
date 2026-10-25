@@ -5,6 +5,8 @@ h2 { font-size: 26px; margin: 16px 0 8px; color: #aaa; }
 #summary { font-size: 28px; font-weight: bold; margin: 8px 0 0; }
 main { display: flex; gap: 40px; padding: 0 40px; }
 #left { flex: 3; } #right { flex: 2; }
+#signin:not([hidden]) { display: flex; align-items: center; gap: 32px; }
+#signin-qr { width: 296px; height: 296px; background: #fff; border-radius: 8px; image-rendering: pixelated; }
 #signin { background: #1d2b1d; border: 2px solid #107c10; border-radius: 12px; padding: 8px 24px 16px; margin-top: 12px; }
 #signin p { margin: 6px 0; }
 .big { font-size: 32px; font-weight: bold; }

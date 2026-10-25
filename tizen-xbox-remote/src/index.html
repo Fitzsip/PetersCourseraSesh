@@ -7,17 +7,20 @@
 </head>
 <body>
   <header>
-    <h1>Xbox Remote <small>v0.3</small></h1>
+    <h1>Xbox Remote <small>v0.4</small></h1>
     <p id="summary">Starting&hellip;</p>
   </header>
   <main>
     <section id="left">
       <div id="signin" hidden>
-        <h2>Sign in</h2>
-        <p>On your phone, go to</p>
-        <p id="signin-url" class="big"></p>
-        <p>and enter the code</p>
-        <p id="signin-code" class="code"></p>
+        <img id="signin-qr" alt="">
+        <div>
+          <h2>Sign in</h2>
+          <p>Scan the code with your phone's camera, or go to</p>
+          <p id="signin-url" class="big"></p>
+          <p>and enter the code</p>
+          <p id="signin-code" class="code"></p>
+        </div>
       </div>
       <h2>Steps</h2>
       <ol id="steps"></ol>
@@ -36,6 +39,7 @@
     <div id="stream-stats"></div>
     <div id="stream-log"></div>
   </div>
+  <script src="vendor/qrcode.js"></script>
   <script src="config.js"></script>
   <script src="xbox-auth.js"></script>
   <script src="stream.js"></script>

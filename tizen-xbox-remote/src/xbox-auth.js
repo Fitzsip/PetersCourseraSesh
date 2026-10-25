@@ -107,7 +107,7 @@ var XboxAuth = (function () {
     }).then(function (r) {
       if (!r.ok) throw HttpError('Device code request', r.status, r.text);
       var dc = r.json;
-      onCode({ userCode: dc.user_code, verificationUri: dc.verification_uri });
+      onCode({ userCode: dc.user_code, verificationUri: dc.verification_uri, verificationUriComplete: dc.verification_uri_complete });
       var interval = (dc.interval || 5) * 1000;
       var deadline = Date.now() + (dc.expires_in || 900) * 1000;
 

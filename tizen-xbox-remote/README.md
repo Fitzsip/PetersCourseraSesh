@@ -43,3 +43,7 @@ Menu:
 While streaming, the controller goes to the Xbox:
 - **BACK** on the TV remote: stop streaming
 - **Green** remote button: show or hide the connection log
+
+## Third-party code
+
+`src/vendor/qrcode.js` is [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) 1.4.4 by Kazuhiko Arase (MIT license).

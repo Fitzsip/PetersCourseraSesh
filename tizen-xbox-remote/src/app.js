@@ -72,6 +72,20 @@
     });
   }
 
+  // microsoft.com/link pre-fills the code when given ?otc=, so the QR skips typing it.
+  function showSignInQr(code) {
+    var link = code.verificationUriComplete ||
+      code.verificationUri + (code.verificationUri.indexOf('?') === -1 ? '?' : '&') + 'otc=' + encodeURIComponent(code.userCode);
+    try {
+      var qr = qrcode(0, 'M');
+      qr.addData(link);
+      qr.make();
+      document.getElementById('signin-qr').src = qr.createDataURL(8, 4);
+    } catch (e) {
+      document.getElementById('signin-qr').hidden = true;
+    }
+  }
+
   function msSignIn() {
     return XboxAuth.refreshMicrosoftToken(config.clientId).then(function (token) {
       if (token) return { token: token, detail: 'restored saved session' };
@@ -79,6 +93,7 @@
       return XboxAuth.deviceCodeSignIn(config.clientId, function (code) {
         document.getElementById('signin-url').textContent = code.verificationUri.replace(/^https:\/\//, '');
         document.getElementById('signin-code').textContent = code.userCode;
+        showSignInQr(code);
         box.hidden = false;
         setSummary('Waiting for you to sign in on your phone…', 'running');
       }).then(function (t) {
