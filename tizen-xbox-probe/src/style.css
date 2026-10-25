@@ -1,0 +1,16 @@
+html, body { margin: 0; background: #101010; color: #eee; font-family: sans-serif; font-size: 22px; }
+header { padding: 20px 40px 0; }
+h1 { margin: 0; font-size: 36px; color: #6cc644; }
+h2 { font-size: 26px; margin: 12px 0 8px; color: #aaa; }
+#verdict { font-size: 28px; font-weight: bold; margin: 8px 0 0; }
+main { display: flex; gap: 40px; padding: 0 40px; }
+main section { flex: 1; }
+table { border-collapse: collapse; width: 100%; }
+td { padding: 4px 8px; border-bottom: 1px solid #333; vertical-align: top; }
+td.name { width: 38%; }
+.pass { color: #6cc644; } .fail { color: #f55; } .warn { color: #fc3; }
+#pad-buttons span { display: inline-block; width: 44px; margin: 3px; padding: 4px 0; text-align: center; background: #333; border-radius: 6px; }
+#pad-buttons span.on { background: #107c10; }
+#pad-axes { margin-top: 8px; font-family: monospace; }
+pre { white-space: pre-wrap; font-size: 18px; color: #bbb; margin: 0; }
+footer { position: fixed; bottom: 12px; left: 40px; color: #888; font-size: 20px; }

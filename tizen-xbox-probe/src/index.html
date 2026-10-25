@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Xbox Probe</title>
+  <script src="$WEBAPIS/webapis/webapis.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Xbox Remote Play &mdash; TV capability probe</h1>
+    <p id="verdict">Running checks&hellip;</p>
+  </header>
+  <main>
+    <section>
+      <h2>Checks</h2>
+      <table id="results"></table>
+    </section>
+    <section>
+      <h2>Controller</h2>
+      <p id="pad-status">Press any button on your Xbox controller&hellip;</p>
+      <div id="pad-buttons"></div>
+      <div id="pad-axes"></div>
+      <h2>Device</h2>
+      <pre id="device"></pre>
+    </section>
+  </main>
+  <footer>Take a photo of this screen and send it back. Press BACK on the remote to exit.</footer>
+  <script src="probe.js"></script>
+</body>
+</html>
