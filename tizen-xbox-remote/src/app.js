@@ -6,20 +6,10 @@
   var config = window.APP_CONFIG || {};
   var streamingSession = null;
   var readyConsole = null;
-  var gssvToken = null;
-  var cloudTestRunning = false;
   var stream = null;
   var mode = 'signin'; // signin | ready | stream
-
-  // Highest controller-protocol version offered to the console; switchable on the Ready
-  // screen so different versions can be tried without reinstalling.
-  var INPUT_VERSIONS = [8, 6, 4, 2, 1];
-  var INPUT_VERSION_KEY = 'xboxRemote.inputMaxVersion';
-  var inputMaxVersion = 8;
-  try {
-    var saved = parseInt(window.localStorage.getItem(INPUT_VERSION_KEY), 10);
-    if (INPUT_VERSIONS.indexOf(saved) !== -1) inputMaxVersion = saved;
-  } catch (e) { /* storage unavailable */ }
+  var MAX_RECONNECTS = 3;
+  var reconnects = 0;
   var stepsEl = document.getElementById('steps');
   var summaryEl = document.getElementById('summary');
 
@@ -158,7 +148,6 @@
         return step('stream', function () {
           return XboxAuth.streamingLogin(streaming.token).then(function (s) {
             streaming.session = s;
-            gssvToken = streaming.token;
             return { detail: 'region ' + s.baseUri.replace(/^https:\/\//, '') };
           });
         });
@@ -179,6 +168,8 @@
       .then(function () {
         mode = 'ready';
         showReady();
+        // Signed in and the console is reachable: go straight to the stream.
+        startStreaming();
       })
       .catch(function (err) {
         var name = STEPS.filter(function (s) { return s[0] === err.stepId; })[0];
@@ -186,45 +177,16 @@
       });
   }
 
-  function runCloudTest() {
-    if (cloudTestRunning || !gssvToken) return;
-    cloudTestRunning = true;
-    var ul = document.getElementById('cloud-test');
-    ul.innerHTML = '<li class="running">Running\u2026</li>';
-    var first = true;
-    CloudTest.run(gssvToken, config.clientId, function (name, ok, detail) {
-      if (first) { ul.innerHTML = ''; first = false; }
-      var li = document.createElement('li');
-      li.className = ok ? 'ok' : 'fail';
-      li.textContent = (ok ? '\u2713 ' : '\u2717 ') + name;
-      var d = document.createElement('span');
-      d.className = 'detail';
-      d.textContent = detail || '';
-      li.appendChild(d);
-      ul.appendChild(li);
-    }).then(function () { cloudTestRunning = false; });
-  }
-
   function showReady() {
-    setSummary('Ready: press A (or OK) to stream ' + readyConsole.deviceName +
-      '. Controller protocol: up to v' + inputMaxVersion + ' (\u2190 \u2192 to change). X: cloud test', 'ok');
-  }
-
-  // Debounced because the TV may also turn controller d-pad presses into arrow keys.
-  var lastCycle = 0;
-  function cycleInputVersion(step) {
-    if (Date.now() - lastCycle < 250) return;
-    lastCycle = Date.now();
-    var i = INPUT_VERSIONS.indexOf(inputMaxVersion);
-    inputMaxVersion = INPUT_VERSIONS[(i + step + INPUT_VERSIONS.length) % INPUT_VERSIONS.length];
-    try { window.localStorage.setItem(INPUT_VERSION_KEY, String(inputMaxVersion)); } catch (e) { /* storage unavailable */ }
-    showReady();
+    setSummary('Ready: press A (or OK) to stream ' + readyConsole.deviceName + '.', 'ok');
   }
 
   var streamEl = document.getElementById('stream');
   var streamLog = document.getElementById('stream-log');
   var streamStats = document.getElementById('stream-stats');
-  var logHideTimer = null;
+  var streamStatus = document.getElementById('stream-status');
+  var video = document.getElementById('stream-video');
+  var audio = document.getElementById('stream-audio');
 
   function streamLogLine(text, cls) {
     var line = document.createElement('div');
@@ -234,47 +196,71 @@
     streamLog.scrollTop = streamLog.scrollHeight;
   }
 
+  function setStatus(text) {
+    streamStatus.textContent = text || '';
+    streamStatus.hidden = !text;
+  }
+
   function startStreaming() {
     mode = 'stream';
+    reconnects = 0;
     document.body.className = 'streaming';
     streamEl.hidden = false;
     streamLog.innerHTML = '';
-    streamLog.hidden = false;
-    streamStats.textContent = '';
-    var video = document.getElementById('stream-video');
+    streamLog.hidden = true;
+    connect();
+  }
 
-    stream = new XboxStream.Stream(streamingSession, readyConsole.serverId, {
+  // One connection attempt. A lost connection comes back through onEnded and retries.
+  function connect() {
+    streamStats.textContent = '';
+    setStatus(reconnects ? 'Reconnecting to ' + readyConsole.deviceName + ' (' + reconnects + '/' + MAX_RECONNECTS + ')\u2026'
+      : 'Connecting to ' + readyConsole.deviceName + '\u2026');
+
+    var current = stream = new XboxStream.Stream(streamingSession, readyConsole.serverId, {
       log: streamLogLine,
       video: video,
-      audio: document.getElementById('stream-audio'),
+      audio: audio,
       onStats: function (text) { streamStats.textContent = text; },
-      problem: function () {
-        clearTimeout(logHideTimer);
-        streamLog.hidden = false;
-      }
-    }, { inputMaxVersion: inputMaxVersion });
-    streamLogLine('Offering controller protocol up to v' + inputMaxVersion);
-    // Once frames are showing, tuck the log away; green button brings it back.
+      onEnded: function (reason) { if (current === stream) connectionLost(reason); }
+    });
     video.onplaying = function () {
-      streamLogLine('Video playing', 'ok');
-      clearTimeout(logHideTimer);
-      logHideTimer = setTimeout(function () { streamLog.hidden = true; }, 8000);
+      reconnects = 0;
+      setStatus('');
     };
-    stream.start().catch(function (err) {
+    current.start().catch(function (err) {
+      if (current !== stream) return;
       streamLogLine(err.message, 'fail');
-      streamLogLine('Photo this screen. Press BACK to return.', 'fail');
-      streamLog.hidden = false;
+      // An expired streaming login can't be fixed by retrying; sign in again from scratch.
+      if (/HTTP 401/.test(err.message)) { window.location.reload(); return; }
+      connectionLost(err.message);
     });
   }
 
-  function stopStreaming() {
+  function connectionLost(reason) {
+    if (mode !== 'stream') return;
     if (stream) stream.stop();
+    if (reconnects >= MAX_RECONNECTS) {
+      setStatus('Could not reconnect. Press A to try again, or BACK to return.');
+      streamLog.hidden = false;
+      stream = null;
+      return;
+    }
+    reconnects++;
+    streamLogLine('Connection lost: ' + reason + '. Retrying\u2026', 'warn');
+    setStatus('Connection lost. Reconnecting (' + reconnects + '/' + MAX_RECONNECTS + ')\u2026');
     stream = null;
-    clearTimeout(logHideTimer);
-    var video = document.getElementById('stream-video');
+    setTimeout(function () { if (mode === 'stream' && !stream) connect(); }, 2000 * reconnects);
+  }
+
+  function stopStreaming() {
+    var s = stream;
+    stream = null;
+    if (s) s.stop();
     video.onplaying = null;
     video.srcObject = null;
-    document.getElementById('stream-audio').srcObject = null;
+    audio.srcObject = null;
+    setStatus('');
     streamEl.hidden = true;
     document.body.className = '';
     mode = 'ready';
@@ -297,8 +283,6 @@
       try { tizen.application.getCurrentApplication().exit(); } catch (err) { /* not on a TV */ }
     } else if (e.keyCode === 13 && mode === 'ready') {
       startStreaming();
-    } else if ((e.keyCode === 37 || e.keyCode === 39) && mode === 'ready') {
-      cycleInputVersion(e.keyCode === 39 ? 1 : -1);
     } else if (e.keyCode === 403 && mode !== 'stream') {
       restart();
     } else if (e.keyCode === 404 && mode === 'stream') {
@@ -306,9 +290,9 @@
     }
   });
 
-  // While streaming, the controller goes to the Xbox; otherwise A starts and Y restarts.
+  // While streaming, the controller goes to the Xbox; otherwise A starts and Y signs out.
+  // After reconnects run out, A on the "Could not reconnect" screen tries again.
   var wasDown = {};
-  var sendFailed = false;
   function pressed(pad, index) {
     var down = !!(pad.buttons[index] && pad.buttons[index].pressed);
     var rising = down && !wasDown[index];
@@ -320,22 +304,13 @@
     var pad = null;
     for (var i = 0; i < pads.length; i++) if (pads[i]) { pad = pads[i]; break; }
     if (pad) {
-      if (mode === 'stream') {
-        try {
-          stream.sendGamepad(pad);
-        } catch (err) {
-          if (!sendFailed) streamLogLine('Controller send failed: ' + err.message, 'fail');
-          sendFailed = true;
-        }
+      if (mode === 'stream' && stream) {
+        stream.sendGamepad(pad);
       } else {
         var a = pressed(pad, 0);
         var y = pressed(pad, 3);
-        var left = pressed(pad, 14);
-        var right = pressed(pad, 15);
-        var x = pressed(pad, 2);
-        if (x && mode === 'ready') runCloudTest();
-        if (y) { restart(); return; }
-        if (mode === 'ready' && (left || right)) cycleInputVersion(right ? 1 : -1);
+        if (mode === 'stream' && a) { reconnects = 0; streamLog.hidden = true; connect(); }
+        if (y && mode !== 'stream') { restart(); return; }
         if (a && mode === 'ready') startStreaming();
       }
     }

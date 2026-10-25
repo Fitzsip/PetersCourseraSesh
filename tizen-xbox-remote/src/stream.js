@@ -30,12 +30,28 @@ var XboxStream = (function () {
     return h.slice(0, 8) + '-' + h.slice(8, 12) + '-' + h.slice(12, 16) + '-' + h.slice(16, 20) + '-' + h.slice(20);
   }
 
+  // Adds a b=AS receive-bandwidth line to the video section of an SDP, unless it has one.
+  function withVideoBandwidth(sdp, kbps) {
+    var lines = sdp.split('\r\n');
+    var inVideo = false;
+    for (var i = 0; i < lines.length; i++) {
+      if (lines[i].indexOf('m=') === 0) inVideo = lines[i].indexOf('m=video') === 0;
+      else if (inVideo && lines[i].indexOf('b=') === 0) return sdp;
+      else if (inVideo && lines[i].indexOf('c=') === 0) {
+        lines.splice(i + 1, 0, 'b=AS:' + kbps);
+        return lines.join('\r\n');
+      }
+    }
+    return sdp;
+  }
+
   function wait(ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); }
 
-  // ui: { log(text, cls), video, audio, onStats(text) }
-  // options: { inputMaxVersion } - highest controller protocol version to offer the console.
-  function Stream(session, serverId, ui, options) {
-    this.options = options || {};
+  // Receive bandwidth the TV advertises for video, in kbps (the console decides the actual rate).
+  var VIDEO_BANDWIDTH_KBPS = 20000;
+
+  // ui: { log(text, cls), video, audio, onStats(text), onEnded(reason) }
+  function Stream(session, serverId, ui) {
     this.session = session;
     this.serverId = serverId;
     this.ui = ui;
@@ -83,11 +99,17 @@ var XboxStream = (function () {
       .then(function () {
         self.every(30000, function () {
           self.api('Keepalive', 'POST', '/keepalive', {})
-            .then(function () { self.ui.log(self.elapsed() + 'Keepalive ok'); })
             .catch(function (e) { self.ui.log(self.elapsed() + e.message, 'warn'); });
         });
         self.every(2000, function () { self.reportStats(); });
       });
+  };
+
+  Stream.prototype.ended = function (reason) {
+    if (this.stopped || this.endReported) return;
+    this.endReported = true;
+    this.ui.log(this.elapsed() + 'Ended: ' + reason, 'fail');
+    this.ui.onEnded(reason);
   };
 
   Stream.prototype.every = function (ms, fn) {
@@ -162,11 +184,17 @@ var XboxStream = (function () {
       };
     });
 
+    var disconnectTimer = null;
     pc.oniceconnectionstatechange = function () {
       var state = pc.iceConnectionState;
-      var bad = state === 'failed' || state === 'disconnected' || state === 'closed';
-      self.ui.log(self.elapsed() + 'Connection: ' + state, bad ? 'fail' : '');
-      if (bad && !self.stopped) self.ui.problem();
+      self.ui.log(self.elapsed() + 'Connection: ' + state);
+      clearTimeout(disconnectTimer);
+      // 'disconnected' often recovers on its own, so give it a few seconds first.
+      if (state === 'disconnected') {
+        disconnectTimer = setTimeout(function () { self.ended('network connection lost'); }, 5000);
+      } else if (state === 'failed' || state === 'closed') {
+        self.ended('network connection ' + state);
+      }
     };
     pc.ontrack = function (ev) {
       var el = ev.track.kind === 'video' ? self.ui.video : self.ui.audio;
@@ -188,7 +216,10 @@ var XboxStream = (function () {
     }
 
     return pc.createOffer(offerOptions)
-      .then(function (offer) { return pc.setLocalDescription(offer).then(function () { return offer; }); })
+      .then(function (offer) {
+        offer = { type: offer.type, sdp: withVideoBandwidth(offer.sdp, VIDEO_BANDWIDTH_KBPS) };
+        return pc.setLocalDescription(offer).then(function () { return offer; });
+      })
       .then(function (offer) {
         self.ui.log('Sending connection offer…');
         return self.api('Send offer', 'POST', '/sdp', {
@@ -204,7 +235,7 @@ var XboxStream = (function () {
             },
             chat: { minVersion: 1, maxVersion: 1 },
             control: { minVersion: 1, maxVersion: 3 },
-            input: { minVersion: 1, maxVersion: self.options.inputMaxVersion || 8 },
+            input: { minVersion: 1, maxVersion: 8 },
             message: { minVersion: 1, maxVersion: 1 }
           }
         });
@@ -274,9 +305,7 @@ var XboxStream = (function () {
       pair[1].onclose = function () {
         if (self.stopped) return;
         if (pair[0] === 'chat') { self.ui.log('Voice chat channel closed (expected, no microphone)'); return; }
-        self.ui.log(self.elapsed() + pair[0] + ' channel closed by console (input packets sent: ' + self.inputSent +
-          ', last buttons 0x' + self.lastMask.toString(16) + ')', 'fail');
-        self.ui.problem();
+        self.ended(pair[0] + ' channel closed by the console');
       };
     });
 
@@ -323,6 +352,11 @@ var XboxStream = (function () {
       } else if (msg.type === 'TransactionStart') {
         // The content often explains why (e.g. the reason for a server-initiated disconnect).
         self.ui.log(self.elapsed() + 'Console request ' + (msg.target || '') + ': ' + String(msg.content || '').slice(0, 300), 'warn');
+        if (/serverInitiatedDisconnect/.test(msg.target || '')) {
+          var why = '';
+          try { why = JSON.parse(msg.content).reason || ''; } catch (e) { /* no reason given */ }
+          self.ended('console disconnected' + (why ? ' (' + why + ')' : ''));
+        }
         // Answer console UI requests (e.g. keyboard prompts) so they don't block the stream.
         message.send(JSON.stringify({ type: 'TransactionComplete', content: '', id: msg.id, cv: msg.cv || '' }));
       }
@@ -467,11 +501,9 @@ var XboxStream = (function () {
         var kbps = self.lastStats ? Math.round((s.bytesReceived - self.lastStats.bytes) * 8 / (now - self.lastStats.time)) : 0;
         if (self.lastStats && fps === 0 && self.inputReady) self.requestKeyframe();
         self.lastStats = { frames: s.framesDecoded, bytes: s.bytesReceived, time: now };
-        var input = self.channels.input;
-        self.ui.onStats((s.frameWidth ? s.frameWidth + 'x' + s.frameHeight + '  ' : '') +
-          fps + ' fps  ' + kbps + ' kbps  lost ' + (s.packetsLost || 0) +
-          ' | input ' + (input ? input.readyState : '-') + ' sent ' + self.inputSent +
-          ' recv ' + self.inputReceived + ' buttons 0x' + self.lastMask.toString(16));
+        var v = self.ui.video;
+        var size = v.videoWidth ? v.videoWidth + 'x' + v.videoHeight + '  ' : '';
+        self.ui.onStats(size + fps + ' fps  ' + (kbps / 1000).toFixed(1) + ' Mbps  lost ' + (s.packetsLost || 0));
       });
     }).catch(function () { /* stats are best-effort */ });
   };

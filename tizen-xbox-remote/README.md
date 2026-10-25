@@ -33,7 +33,11 @@ Install `dist/XboxRemote.wgt` with Apps2Samsung → **Custom WGT / TPK**.
 On the Xbox, turn on **Settings → Devices & connections → Remote features**
 and set the power mode to **Sleep**.
 
-## Controls
+## Using it
+
+Once you're signed in and the Xbox is reachable, the app goes straight into
+the stream. If the connection drops, it reconnects automatically (up to three
+tries); after that, press **A** to try again.
 
 Menu:
 - **A** or **OK**: start streaming
@@ -41,8 +45,12 @@ Menu:
 - **BACK**: exit
 
 While streaming, the controller goes to the Xbox:
-- **BACK** on the TV remote: stop streaming
-- **Green** remote button: show or hide the connection log
+- **BACK** on the TV remote: stop streaming and return to the menu
+- **Green** remote button (if your remote has one): show or hide the connection log
+
+The top-right corner shows resolution, frame rate, data rate and lost packets.
+Only consoles you own can be streamed; Game Pass cloud gaming needs a token
+Microsoft issues only to its own apps, so it isn't supported.
 
 ## Third-party code
 

@@ -16,7 +16,7 @@ li { margin: 4px 0; }
 .detail { display: block; font-size: 18px; color: #bbb; white-space: pre-wrap; word-break: break-all; }
 .pending { color: #777; } .running { color: #fc3; } .ok { color: #6cc644; } .fail { color: #f55; } .skip { color: #888; }
 .muted { color: #777; }
-#consoles li, #cloud-test li { list-style: none; margin-left: -32px; padding: 6px 0; border-bottom: 1px solid #333; }
+#consoles li { list-style: none; margin-left: -32px; padding: 6px 0; border-bottom: 1px solid #333; }
 footer { position: fixed; bottom: 12px; left: 40px; color: #888; font-size: 20px; }
 
 body.streaming header, body.streaming main, body.streaming footer { display: none; }
@@ -25,3 +25,4 @@ body.streaming header, body.streaming main, body.streaming footer { display: non
 #stream-stats { position: absolute; top: 12px; right: 20px; font-size: 18px; color: #9f9; text-shadow: 0 0 4px #000; font-family: monospace; }
 #stream-log { position: absolute; left: 40px; bottom: 40px; width: 1100px; max-height: 600px; overflow: hidden; background: rgba(0, 0, 0, 0.75); padding: 12px 16px; border-radius: 8px; font-size: 20px; }
 #stream-log .ok { color: #6cc644; } #stream-log .fail { color: #f55; } #stream-log .warn { color: #fc3; }
+#stream-status { position: absolute; left: 0; right: 0; top: 45%; text-align: center; font-size: 36px; color: #fff; text-shadow: 0 0 8px #000; }

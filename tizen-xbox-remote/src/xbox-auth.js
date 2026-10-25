@@ -99,19 +99,6 @@ var XboxAuth = (function () {
     });
   }
 
-  // Uses the saved refresh token to ask for a token with a different scope. Returns the raw
-  // response so callers can show Microsoft's exact error.
-  function requestScopedToken(clientId, scope) {
-    var refreshToken = storage(function (s) { return s.getItem(REFRESH_KEY); });
-    if (!refreshToken) return Promise.resolve({ ok: false, status: 0, text: 'not signed in', json: null });
-    return postForm('Scoped token', MS_BASE + '/token', {
-      client_id: clientId,
-      grant_type: 'refresh_token',
-      refresh_token: refreshToken,
-      scope: scope
-    });
-  }
-
   // onCode({userCode, verificationUri}) is called once the code is ready to show.
   function deviceCodeSignIn(clientId, onCode) {
     return postForm('Device code request', MS_BASE + '/devicecode', {
@@ -212,7 +199,6 @@ var XboxAuth = (function () {
     streamingLogin: streamingLogin,
     listStreamingConsoles: listStreamingConsoles,
     signOut: signOut,
-    requestScopedToken: requestScopedToken,
     http: { request: request, postJson: postJson, getJson: getJson }
   };
 })();
