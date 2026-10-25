@@ -139,7 +139,8 @@ var XboxStream = (function () {
 
   Stream.prototype.negotiate = function () {
     var self = this;
-    var pc = this.pc = new RTCPeerConnection({});
+    // Tizen 5.5's Chromium predates unified-plan as the default, so ask for it explicitly.
+    var pc = this.pc = new RTCPeerConnection({ sdpSemantics: 'unified-plan' });
     var localCandidates = [];
     var gathered = new Promise(function (resolve) {
       pc.onicecandidate = function (ev) {
@@ -164,10 +165,17 @@ var XboxStream = (function () {
     };
 
     this.openChannels();
-    pc.addTransceiver('audio', { direction: 'sendrecv' });
-    pc.addTransceiver('video', { direction: 'recvonly' });
+    var offerOptions = {};
+    try {
+      pc.addTransceiver('audio', { direction: 'sendrecv' });
+      pc.addTransceiver('video', { direction: 'recvonly' });
+    } catch (e) {
+      // Older engines without transceivers: request the same media through offer options.
+      this.ui.log('Using legacy media setup (' + e.name + ')', 'warn');
+      offerOptions = { offerToReceiveAudio: true, offerToReceiveVideo: true };
+    }
 
-    return pc.createOffer()
+    return pc.createOffer(offerOptions)
       .then(function (offer) { return pc.setLocalDescription(offer).then(function () { return offer; }); })
       .then(function (offer) {
         self.ui.log('Sending connection offer…');
