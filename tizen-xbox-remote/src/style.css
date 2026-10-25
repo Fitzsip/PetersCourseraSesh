@@ -1,0 +1,18 @@
+html, body { margin: 0; background: #101010; color: #eee; font-family: sans-serif; font-size: 22px; }
+header { padding: 20px 40px 0; }
+h1 { margin: 0; font-size: 36px; color: #6cc644; }
+h2 { font-size: 26px; margin: 16px 0 8px; color: #aaa; }
+#summary { font-size: 28px; font-weight: bold; margin: 8px 0 0; }
+main { display: flex; gap: 40px; padding: 0 40px; }
+#left { flex: 3; } #right { flex: 2; }
+#signin { background: #1d2b1d; border: 2px solid #107c10; border-radius: 12px; padding: 8px 24px 16px; margin-top: 12px; }
+#signin p { margin: 6px 0; }
+.big { font-size: 32px; font-weight: bold; }
+.code { font-size: 64px; font-weight: bold; letter-spacing: 8px; color: #6cc644; font-family: monospace; }
+ol { margin: 0; padding-left: 32px; }
+li { margin: 4px 0; }
+.detail { display: block; font-size: 18px; color: #bbb; white-space: pre-wrap; word-break: break-all; }
+.pending { color: #777; } .running { color: #fc3; } .ok { color: #6cc644; } .fail { color: #f55; } .skip { color: #888; }
+.muted { color: #777; }
+#consoles li { list-style: none; margin-left: -32px; padding: 6px 0; border-bottom: 1px solid #333; }
+footer { position: fixed; bottom: 12px; left: 40px; color: #888; font-size: 20px; }

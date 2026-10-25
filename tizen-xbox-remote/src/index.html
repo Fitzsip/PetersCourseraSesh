@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Xbox Remote</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Xbox Remote</h1>
+    <p id="summary">Starting&hellip;</p>
+  </header>
+  <main>
+    <section id="left">
+      <div id="signin" hidden>
+        <h2>Sign in</h2>
+        <p>On your phone, go to</p>
+        <p id="signin-url" class="big"></p>
+        <p>and enter the code</p>
+        <p id="signin-code" class="code"></p>
+      </div>
+      <h2>Steps</h2>
+      <ol id="steps"></ol>
+    </section>
+    <section id="right">
+      <h2>Account</h2>
+      <p id="gamertag">&mdash;</p>
+      <h2>Consoles</h2>
+      <ul id="consoles"><li class="muted">Not loaded yet</li></ul>
+    </section>
+  </main>
+  <footer>Y / red button: sign out and start again &middot; BACK: exit</footer>
+  <script src="config.js"></script>
+  <script src="xbox-auth.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
