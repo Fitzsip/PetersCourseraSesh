@@ -158,7 +158,10 @@ var XboxStream = (function () {
     });
 
     pc.oniceconnectionstatechange = function () {
-      self.ui.log('Connection: ' + pc.iceConnectionState, pc.iceConnectionState === 'failed' ? 'fail' : '');
+      var state = pc.iceConnectionState;
+      var bad = state === 'failed' || state === 'disconnected' || state === 'closed';
+      self.ui.log(self.elapsed() + 'Connection: ' + state, bad ? 'fail' : '');
+      if (bad && !self.stopped) self.ui.problem();
     };
     pc.ontrack = function (ev) {
       var el = ev.track.kind === 'video' ? self.ui.video : self.ui.audio;
@@ -261,7 +264,18 @@ var XboxStream = (function () {
     this.channels.chat = pc.createDataChannel('chat', { protocol: 'chatV1' });
     input.binaryType = 'arraybuffer';
 
+    // Any channel closing mid-stream means the console hung up; record when, and surface the log.
+    [['input', input], ['control', control], ['message', message], ['chat', this.channels.chat]].forEach(function (pair) {
+      pair[1].onclose = function () {
+        if (self.stopped) return;
+        self.ui.log(self.elapsed() + pair[0] + ' channel closed by console (input packets sent: ' + self.inputSent +
+          ', last buttons 0x' + self.lastMask.toString(16) + ')', 'fail');
+        self.ui.problem();
+      };
+    });
+
     input.onopen = function () {
+      self.openedAt = Date.now();
       self.ui.log('Input channel open', 'ok');
       self.sendInput(self.clientMetadataPacket());
       self.inputReady = true;
@@ -305,6 +319,11 @@ var XboxStream = (function () {
         message.send(JSON.stringify({ type: 'TransactionComplete', content: '', id: msg.id, cv: msg.cv || '' }));
       }
     };
+  };
+
+  // "[12.3s] " since the input channel opened, for timing when the console hangs up.
+  Stream.prototype.elapsed = function () {
+    return this.openedAt ? '[' + ((Date.now() - this.openedAt) / 1000).toFixed(1) + 's] ' : '';
   };
 
   Stream.prototype.sendConfiguration = function () {
@@ -376,6 +395,10 @@ var XboxStream = (function () {
     view.setUint32(o, 0, true);               // virtual physicality
     this.sendInput(view.buffer);
     this.inputSent++;
+    if (mask && !this.lastMask && !this.firstPressLogged) {
+      this.firstPressLogged = true;
+      this.ui.log(this.elapsed() + 'First button press sent (0x' + mask.toString(16) + ')');
+    }
     this.lastMask = mask;
   };
 

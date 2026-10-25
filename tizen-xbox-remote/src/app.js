@@ -199,7 +199,11 @@
       log: streamLogLine,
       video: video,
       audio: document.getElementById('stream-audio'),
-      onStats: function (text) { streamStats.textContent = text; }
+      onStats: function (text) { streamStats.textContent = text; },
+      problem: function () {
+        clearTimeout(logHideTimer);
+        streamLog.hidden = false;
+      }
     });
     // Once frames are showing, tuck the log away; green button brings it back.
     video.onplaying = function () {
