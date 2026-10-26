@@ -10,8 +10,10 @@ with a chime.
 ## How it works
 
 * Every 5 seconds the app asks a free ADS-B flight-tracking API for aircraft
-  near your home (default **adsb.lol**; **airplanes.live** and **OpenSky** are
-  also built in). No API key is needed.
+  near your home. In **auto** mode it tries **adsb.fi**, then **airplanes.live**,
+  then **adsb.lol**, and sticks with whichever answers. No API key is needed.
+* Private jets alert from further out (10 km by default) at any altitude, and the
+  side list shows an **OVER HOUSE 1m 20s** countdown for planes heading your way.
 * A plane counts as **overhead** when it is below the altitude limit (default
   20,000 ft) and either within the overhead radius (default 2.5 km) or on a
   course that will bring it inside that radius within 30 seconds. The early
@@ -26,6 +28,31 @@ with a chime.
   Military aircraft, helicopters and private light aircraft are flagged too.
 * Routes come from the adsb.lol route database and photos from
   planespotters.net. Both are optional and fail quietly.
+
+## Push alerts to a phone (ntfy)
+
+The TV can only show popups while the app is open, so it can also send alerts
+to a phone with [ntfy](https://ntfy.sh), a free notification app:
+
+1. Install **ntfy** on the phone (App Store / Google Play), tap **+** and
+   subscribe to a topic name. Make it unique and hard to guess, for example
+   `lisa-jets-4471`. Anyone who knows the name can read the alerts.
+2. On the TV, open Settings, enter the same name in **Phone push topic (ntfy)**
+   and choose **Send a test push**.
+3. Choose **Push to phone for** → `private jets` (default) or `all alerts`.
+   **No pushes 22:00–08:00** is on by default.
+
+A push looks like:
+
+```
+Private jet approaching ✈️
+VJT612 · Challenger 350 · 9H-VCE
+Farnborough → Cork
+6.9 km NNE of Home, 2,800 ft, over the house in ~1m 20s
+In the air 47 min · Today: France → United Kingdom
+```
+
+Pushes only go out while the app is running on the TV.
 
 ## Where it came from, flight time and countries visited (optional)
 
@@ -62,9 +89,11 @@ FlightAware to hide them won't have history.
 | **Back** | Dismiss the popup, close settings, or exit |
 | ▲ ▼ ◀ ▶ | Move and change values in settings |
 
-On first launch you're asked for your home's latitude and longitude. To find
-them, right-click your roof in Google Maps and click the coordinates to copy
-them. You can also turn on **Demo mode** to see simulated planes.
+On first launch, Settings opens. Type your Eircode or address, choose **Find my
+house from the address**, check the coordinates and press **Save**. They're
+saved on the TV, so the app goes straight to the radar on every later launch.
+Uninstalling the app clears them. You can also turn on **Demo mode** to see
+simulated planes.
 
 ## Try it in a desktop browser
 
@@ -128,7 +157,11 @@ All settings can be changed on the TV. The defaults are in `js/config.js`.
 | Overhead radius | 2.5 km | How close a plane must pass to trigger a popup |
 | Ignore planes above | 20,000 ft | Skip high cruising traffic you can barely see |
 | Radar range | 30 km | Area shown on the radar and requested from the API |
-| Data source | adsb.lol | `adsb.lol`, `airplanes.live` or `opensky` |
+| Private jet alert radius | 10 km | Private jets alert from this far out, at any altitude |
+| Data source | auto | `auto`, `adsb.fi`, `airplanes.live`, `adsb.lol` or `opensky` |
+| Phone push topic | (none) | ntfy topic for phone alerts |
+| Push to phone for | private jets | `private jets` or `all alerts` |
+| No pushes 22:00–08:00 | on | Quiet hours for phone pushes |
 | Units | metric | `metric` (m, km/h, km) or `imperial` (ft, mph, mi) |
 | Pop up for | all | `all` or `private jets` |
 | FlightAware API key | (none) | Enables take-off airport, flight time and countries |
@@ -148,6 +181,7 @@ index.html        Page layout
 css/style.css     TV styling (1920x1080, scales to any size)
 js/config.js      Default settings
 js/providers.js   Flight data APIs, route and photo lookups
+js/notify.js      Phone pushes via ntfy
 js/history.js     FlightAware lookup: take-off airport, flight time, countries
 js/tracker.js     Overhead detection and alert cooldowns
 js/radar.js       Radar drawing
@@ -159,3 +193,10 @@ js/data.js        Airline/aircraft names, private-jet detection, airport countri
 
 Flight data © adsb.lol / airplanes.live / The OpenSky Network contributors.
 Photos © their photographers via planespotters.net.
+
+## Changelog
+
+* **1.1.0**: Phone pushes via ntfy, Eircode/address lookup, adsb.fi with automatic
+  fallback, hexdb.io routes, "over the house in" countdown, wider private-jet
+  alert radius, airport pins on the radar.
+* **1.0.0**: Radar, overhead popups, private jet flag, FlightAware history, demo mode.

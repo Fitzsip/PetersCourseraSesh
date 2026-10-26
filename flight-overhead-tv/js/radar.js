@@ -114,6 +114,24 @@ var Radar = (function () {
     ctx.stroke();
     if (ctx.setLineDash) ctx.setLineDash([]);
 
+    // Airports.
+    ctx.font = (1.5 * rem) + 'px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    for (var ap = 0; ap < AIRPORT_PINS.length; ap++) {
+      var pin = Geo.toLocal(cfg.homeLat, cfg.homeLon, AIRPORT_PINS[ap].lat, AIRPORT_PINS[ap].lon);
+      if (pin.x * pin.x + pin.y * pin.y > cfg.watchRadiusKm * cfg.watchRadiusKm) continue;
+      var ax = cx + pin.x * scale, ay = cy - pin.y * scale;
+      ctx.save();
+      ctx.translate(ax, ay);
+      ctx.rotate(Math.PI / 4);
+      ctx.fillStyle = '#57c7d4';
+      ctx.fillRect(-5, -5, 10, 10);
+      ctx.restore();
+      ctx.fillStyle = 'rgba(87, 199, 212, 0.85)';
+      ctx.fillText(AIRPORT_PINS[ap].icao, ax + 10, ay);
+    }
+
     // Home.
     ctx.fillStyle = '#ffd38a';
     ctx.beginPath();

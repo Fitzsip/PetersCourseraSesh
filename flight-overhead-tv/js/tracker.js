@@ -35,14 +35,19 @@ Tracker.prototype.update = function (list, cfg, now) {
     a.cpaKm = cpa.km;
     a.cpaSec = cpa.seconds;
 
-    var altOk = !a.onGround && (a.altFt === null || a.altFt <= cfg.maxAltitudeFt);
+    var isJet = a.flag.kind === 'private-jet';
+    // Private jets are announced at any altitude and from further out.
+    var altOk = !a.onGround && (isJet || a.altFt === null || a.altFt <= cfg.maxAltitudeFt);
+    var willPass = hasVelocity && a.cpaKm <= cfg.alertRadiusKm && a.cpaSec > 0;
     a.overheadNow = altOk && a.distKm <= cfg.alertRadiusKm;
+    a.overHouseIn = altOk && !a.overheadNow && willPass && a.cpaSec <= 900 ? a.cpaSec : null;
     a.inZone = a.overheadNow ||
-      (altOk && hasVelocity && a.cpaKm <= cfg.alertRadiusKm && a.cpaSec <= cfg.lookaheadSeconds);
+      (altOk && willPass && a.cpaSec <= cfg.lookaheadSeconds) ||
+      (altOk && isJet && a.distKm <= Math.max(cfg.alertRadiusKm, cfg.jetAlertRadiusKm || 0));
 
     if (a.inZone) {
       var last = this.lastInZone[a.hex];
-      var wanted = cfg.alertFilter !== 'private jets' || a.flag.kind === 'private-jet';
+      var wanted = cfg.alertFilter !== 'private jets' || isJet;
       if ((!last || now - last > cooldownMs) && wanted) newAlerts.push(a);
       this.lastInZone[a.hex] = now;
     }

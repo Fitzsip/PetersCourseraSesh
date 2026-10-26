@@ -6,10 +6,22 @@
 var Providers = (function () {
   'use strict';
 
-  var READSB_POINT_URLS = {
-    'adsb.lol': 'https://api.adsb.lol/v2/point/',
-    'airplanes.live': 'https://api.airplanes.live/v2/point/'
+  // Free sources serving the readsb JSON format. 'auto' tries them in this order and
+  // sticks with whichever answered last.
+  var READSB_SOURCES = {
+    'adsb.fi': function (lat, lon, nm) {
+      return 'https://opendata.adsb.fi/api/v2/lat/' + lat + '/lon/' + lon + '/dist/' + nm;
+    },
+    'airplanes.live': function (lat, lon, nm) {
+      return 'https://api.airplanes.live/v2/point/' + lat + '/' + lon + '/' + nm;
+    },
+    'adsb.lol': function (lat, lon, nm) {
+      return 'https://api.adsb.lol/v2/point/' + lat + '/' + lon + '/' + nm;
+    }
   };
+  var AUTO_ORDER = ['adsb.fi', 'airplanes.live', 'adsb.lol'];
+  var autoIndex = 0;
+  var lastSource = '';
 
   function hostOf(url) {
     var m = /^https?:\/\/([^\/]+)/.exec(url);
@@ -70,13 +82,34 @@ var Providers = (function () {
     };
   }
 
-  function fetchReadsb(cfg) {
+  function fetchReadsb(cfg, source) {
     var nm = Math.max(1, Math.min(250, Math.ceil(cfg.watchRadiusKm / 1.852)));
-    var url = READSB_POINT_URLS[cfg.provider] + cfg.homeLat.toFixed(4) + '/' +
-              cfg.homeLon.toFixed(4) + '/' + nm;
+    var url = READSB_SOURCES[source](cfg.homeLat.toFixed(4), cfg.homeLon.toFixed(4), nm);
     return request('GET', url).then(function (data) {
-      return (data.ac || data.aircraft || []).map(fromReadsb).filter(Boolean);
+      var list = data.ac || data.aircraft;
+      if (!list || typeof list.length !== 'number') throw new Error('No aircraft list from ' + hostOf(url));
+      lastSource = source;
+      return list.map(fromReadsb).filter(Boolean);
     });
+  }
+
+  function fetchAuto(cfg) {
+    var tries = 0;
+    var firstError = null;
+    function attempt() {
+      var source = AUTO_ORDER[(autoIndex + tries) % AUTO_ORDER.length];
+      return fetchReadsb(cfg, source).then(function (list) {
+        autoIndex = (autoIndex + tries) % AUTO_ORDER.length;
+        return list;
+      }, function (err) {
+        firstError = firstError || err;
+        tries++;
+        if (tries < AUTO_ORDER.length) return attempt();
+        autoIndex = (autoIndex + 1) % AUTO_ORDER.length;
+        throw firstError;
+      });
+    }
+    return attempt();
   }
 
   // OpenSky "state vectors": positional arrays, SI units.
@@ -88,6 +121,7 @@ var Providers = (function () {
       '&lomin=' + (cfg.homeLon - dLon).toFixed(4) + '&lomax=' + (cfg.homeLon + dLon).toFixed(4);
     return request('GET', url).then(function (data) {
       var now = data.time;
+      lastSource = 'opensky';
       return (data.states || []).map(function (s) {
         if (num(s[5]) === null || num(s[6]) === null) return null;
         var altM = num(s[7]) !== null ? s[7] : num(s[13]);
@@ -107,9 +141,10 @@ var Providers = (function () {
   }
 
   function fetchAircraft(cfg) {
-    if (cfg.demo) return Promise.resolve(Demo.aircraft(cfg));
+    if (cfg.demo) { lastSource = 'demo data'; return Promise.resolve(Demo.aircraft(cfg)); }
+    if (cfg.provider === 'auto') return fetchAuto(cfg);
     if (cfg.provider === 'opensky') return fetchOpenSky(cfg);
-    if (READSB_POINT_URLS[cfg.provider]) return fetchReadsb(cfg);
+    if (READSB_SOURCES[cfg.provider]) return fetchReadsb(cfg, cfg.provider);
     return Promise.reject(new Error('Unknown data source "' + cfg.provider + '"'));
   }
 
@@ -131,22 +166,53 @@ var Providers = (function () {
     return { code: ap.iata || ap.icao || '?', city: ap.location || ap.name || '' };
   }
 
+  function routeFromAdsbLol(a) {
+    return request('POST', 'https://api.adsb.lol/api/0/routeset',
+      { planes: [{ callsign: a.callsign, lat: a.lat, lng: a.lon }] }, 8000)
+      .then(function (res) {
+        var r = res && res[0];
+        var aps = r && r._airports;
+        if (!aps || aps.length < 2) return null;
+        return {
+          origin: airport(aps[0]),
+          dest: airport(aps[aps.length - 1]),
+          plausible: r.plausible !== 0 && r.plausible !== false
+        };
+      });
+  }
+
+  // hexdb.io gives ICAO codes only ("EICK-EGSS"), so look the airport names up too.
+  var hexdbAirports = {};
+  function hexdbAirport(code) {
+    return cached(hexdbAirports, code, function () {
+      return request('GET', 'https://hexdb.io/api/v1/airport/icao/' + code, null, 8000)
+        .then(function (j) {
+          var name = j && j.airport ? String(j.airport)
+            .replace(/\b(International|Airport|Airfield|Aerodrome|Air Base)\b/gi, '')
+            .replace(/\s{2,}/g, ' ').replace(/[\s,\/-]+$/, '').trim() : '';
+          return name || code;
+        });
+    }).then(function (name) { return { code: code, city: name || code }; });
+  }
+
+  function routeFromHexdb(a) {
+    return request('GET', 'https://hexdb.io/api/v1/route/icao/' + encodeURIComponent(a.callsign), null, 8000)
+      .then(function (j) {
+        var m = j && /^([A-Z]{4})-(?:.*-)?([A-Z]{4})$/.exec(j.route || '');
+        if (!m) return null;
+        return Promise.all([hexdbAirport(m[1]), hexdbAirport(m[2])]).then(function (aps) {
+          return { origin: aps[0], dest: aps[1], plausible: true };
+        });
+      });
+  }
+
   function lookupRoute(a) {
     if (a.demoRoute) return Promise.resolve(a.demoRoute);
     if (!a.callsign) return Promise.resolve(null);
     return cached(routeCache, a.callsign, function () {
-      return request('POST', 'https://api.adsb.lol/api/0/routeset',
-        { planes: [{ callsign: a.callsign, lat: a.lat, lng: a.lon }] }, 8000)
-        .then(function (res) {
-          var r = res && res[0];
-          var aps = r && r._airports;
-          if (!aps || aps.length < 2) return null;
-          return {
-            origin: airport(aps[0]),
-            dest: airport(aps[aps.length - 1]),
-            plausible: r.plausible !== 0 && r.plausible !== false
-          };
-        });
+      return routeFromAdsbLol(a)
+        .catch(function () { return null; })
+        .then(function (r) { return r || routeFromHexdb(a); });
     });
   }
 
@@ -163,6 +229,8 @@ var Providers = (function () {
   }
 
   return {
+    request: request,
+    lastSource: function () { return lastSource; },
     fetchAircraft: fetchAircraft,
     lookupRoute: lookupRoute,
     lookupPhoto: lookupPhoto,

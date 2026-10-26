@@ -36,6 +36,12 @@ html, body {
 #nearby li.empty { color: #6f8aa5; border-left-color: transparent; font-size: 2.4rem; }
 .nb-top { display: flex; justify-content: space-between; font-size: 2.6rem; }
 .nb-cs { font-weight: 700; }
+.nb-badge {
+  margin-left: 1rem; margin-right: auto; padding: 0.2rem 0.8rem; border-radius: 0.5rem; align-self: center;
+  font-size: 1.5rem; font-weight: 700; letter-spacing: 0.1rem; text-transform: uppercase;
+  border: 0.2rem solid #ffb547; color: #ffb547;
+}
+.nb-badge.eta { background: #ffb547; color: #141007; }
 .nb-dist { color: #9fb3c8; }
 .nb-sub { font-size: 2rem; color: #8aa0b6; margin-top: 0.3rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -135,6 +141,8 @@ html, body {
 #settings .buttons { display: flex; margin-top: 2rem; }
 #settings .buttons .row { flex: 1; justify-content: center; font-weight: 700; margin-right: 1.6rem; }
 #settings .buttons .row:last-child { margin-right: 0; }
+#settings .row.action .value { color: #7cc4ff; }
+#settings-version { font-size: 1.6rem; color: #56708a; margin-top: 1rem; line-height: 1.6; }
 #settings-error { color: #ffd38a; font-size: 2.2rem; margin-top: 1.6rem; min-height: 2.6rem; }
 #settings-error.error { color: #ff8a7a; }
 

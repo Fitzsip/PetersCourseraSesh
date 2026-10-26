@@ -11,6 +11,11 @@ var Fmt = {
     if (kt === null || kt === undefined) return '—';
     return cfg.units === 'metric' ? Math.round(kt * 1.852) + ' km/h' : Math.round(kt * 1.15078) + ' mph';
   },
+  eta: function (s) {
+    if (s < 60) return Math.max(5, Math.round(s / 5) * 5) + 's';
+    var m = Math.floor(s / 60), r = Math.min(50, Math.round((s % 60) / 10) * 10);
+    return m + 'm' + (r ? ' ' + r + 's' : '');
+  },
   dist: function (km, cfg) {
     var metric = cfg.units === 'metric';
     var v = metric ? km : km * 0.621371;
@@ -63,6 +68,8 @@ var UI = (function () {
       var li = el('li', (a.inZone ? 'hot ' : '') + (isJet ? 'private-jet' : ''));
       var top = el('div', 'nb-top');
       top.appendChild(el('span', 'nb-cs', a.callsign || a.reg || a.hex.toUpperCase()));
+      if (a.overheadNow) top.appendChild(el('span', 'nb-badge', 'Overhead'));
+      else if (a.overHouseIn !== null) top.appendChild(el('span', 'nb-badge eta', 'Over house ' + Fmt.eta(a.overHouseIn)));
       top.appendChild(el('span', 'nb-dist', Fmt.dist(a.distKm, cfg) + ' ' + Geo.compass(a.bearing)));
       var sub = el('div', 'nb-sub',
         [aircraftTypeName(a) || airlineFor(a.callsign), a.onGround ? 'on ground' : Fmt.alt(a.altFt, cfg)]
@@ -220,8 +227,11 @@ var UI = (function () {
     if (a.overheadNow) {
       card.kicker.textContent = '✈  Overhead now · ' + where;
       card.kicker.className = 'alert-kicker now';
+    } else if (a.overHouseIn !== null) {
+      card.kicker.textContent = 'Approaching · over the house in ~' + Fmt.eta(a.overHouseIn);
+      card.kicker.className = 'alert-kicker soon';
     } else if (a.inZone) {
-      card.kicker.textContent = 'Approaching · overhead in ~' + Math.max(1, Math.round(a.cpaSec)) + ' s';
+      card.kicker.textContent = 'Nearby · ' + where;
       card.kicker.className = 'alert-kicker soon';
     } else {
       card.kicker.textContent = 'Passed over · now ' + where;

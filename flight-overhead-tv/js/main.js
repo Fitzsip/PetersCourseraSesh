@@ -64,11 +64,13 @@
       var result = tracker.update(list, cfg, now);
       state.aircraft = result.aircraft;
       state.fetchedAt = now;
-      result.newAlerts.forEach(function (a) { UI.showAlert(a, cfg); });
+      result.newAlerts.forEach(function (a) {
+        UI.showAlert(a, cfg);
+        pushAlert(a, cfg);
+      });
       UI.refreshAlerts(result.aircraft, cfg);
       UI.renderSide({ cfg: cfg, aircraft: state.aircraft });
-      UI.setStatus('Updated ' + new Date(now).toLocaleTimeString() + ' · ' +
-        (cfg.demo ? 'demo data' : cfg.provider), false);
+      UI.setStatus('Updated ' + new Date(now).toLocaleTimeString() + ' · ' + Providers.lastSource(), false);
       failures = 0;
       schedule(pollInterval(cfg));
     }, function (err) {
@@ -78,6 +80,45 @@
       UI.setStatus(err.message + ' — retrying in ' + Math.round(wait) + ' s', true);
       schedule(wait);
     });
+  }
+
+  // Wait briefly for route and history (both cached, shared with the popup) so the push can include them.
+  function withTimeout(promise, ms) {
+    return new Promise(function (resolve) {
+      setTimeout(function () { resolve(null); }, ms);
+      promise.then(resolve, function () { resolve(null); });
+    });
+  }
+
+  function pushAlert(a, cfg) {
+    var isJet = a.flag.kind === 'private-jet';
+    if (cfg.demo || !cfg.ntfyTopic || (cfg.pushFor !== 'all alerts' && !isJet)) return;
+    Promise.all([
+      withTimeout(cfg.showRoutes ? Providers.lookupRoute(a) : Promise.resolve(null), 4000),
+      withTimeout(History.lookup(a, cfg), 4000)
+    ]).then(function (extra) {
+      var route = extra[0], hist = extra[1];
+      var what = isJet ? 'Private jet' : 'Flight';
+      var title = what + (a.overheadNow ? ' overhead' : ' approaching') + ' \u2708\ufe0f';
+      var lines = [[a.callsign || a.reg, aircraftTypeName(a), a.reg !== a.callsign ? a.reg : '']
+        .filter(Boolean).join(' \u00b7 ')];
+      if (route && route.origin && route.dest) {
+        lines.push((route.origin.city || route.origin.code) + ' \u2192 ' + (route.dest.city || route.dest.code));
+      } else if (hist && hist.origin) {
+        lines.push('From ' + (hist.origin.city || hist.origin.code));
+      }
+      var where = Fmt.dist(a.distKm, cfg) + ' ' + Geo.compass(a.bearing) + ' of ' + (cfg.homeName || 'home') +
+        ', ' + Fmt.alt(a.altFt, cfg);
+      if (a.overheadNow) where += ', overhead now';
+      else if (a.overHouseIn !== null) where += ', over the house in ~' + Fmt.eta(a.overHouseIn);
+      lines.push(where);
+      if (hist && hist.departedAt) {
+        var mins = Math.round((Date.now() - hist.departedAt) / 60000);
+        lines.push('In the air ' + (mins >= 60 ? Math.floor(mins / 60) + ' h ' : '') + (mins % 60) + ' min' +
+          (hist.countries.length ? ' \u00b7 Today: ' + hist.countries.join(' \u2192 ') : ''));
+      }
+      return Notify.send(cfg, title, lines.join('\n'));
+    }).then(null, function (e) { UI.setStatus('Phone push failed: ' + e.message, true); });
   }
 
   function pollInterval(cfg) {

@@ -2,19 +2,29 @@
 var Settings = (function () {
   'use strict';
 
+  var COUNTRY_CODES = { 'Ireland': 'ie', 'United Kingdom': 'gb', 'United States': 'us', 'Anywhere': '' };
+
   var FIELDS = [
+    { key: 'address', label: 'Eircode or address', type: 'text' },
+    { key: 'lookupCountry', label: 'Search in', type: 'choice', options: ['Ireland', 'United Kingdom', 'United States', 'Anywhere'] },
+    { label: 'Find my house from the address', type: 'action', run: findAddress },
     { key: 'homeLat', label: 'Home latitude', type: 'number' },
     { key: 'homeLon', label: 'Home longitude', type: 'number' },
     { key: 'homeName', label: 'Location name', type: 'text' },
     { key: 'alertRadiusKm', label: 'Overhead radius (km)', type: 'number' },
+    { key: 'jetAlertRadiusKm', label: 'Private jet alert radius (km)', type: 'number' },
     { key: 'maxAltitudeFt', label: 'Ignore planes above (ft)', type: 'number' },
     { key: 'watchRadiusKm', label: 'Radar range (km)', type: 'number' },
-    { key: 'provider', label: 'Flight data source', type: 'choice', options: ['adsb.lol', 'airplanes.live', 'opensky'] },
+    { key: 'provider', label: 'Flight data source', type: 'choice', options: ['auto', 'adsb.fi', 'airplanes.live', 'adsb.lol', 'opensky'] },
     { key: 'units', label: 'Units', type: 'choice', options: ['imperial', 'metric'] },
     { key: 'sound', label: 'Chime on alert', type: 'bool' },
     { key: 'showRoutes', label: 'Look up routes', type: 'bool' },
     { key: 'showPhotos', label: 'Show aircraft photos', type: 'bool' },
     { key: 'alertFilter', label: 'Pop up for', type: 'choice', options: ['all', 'private jets'] },
+    { key: 'ntfyTopic', label: 'Phone push topic (ntfy)', type: 'text' },
+    { key: 'pushFor', label: 'Push to phone for', type: 'choice', options: ['private jets', 'all alerts'] },
+    { key: 'quietHours', label: 'No pushes 22:00\u201308:00', type: 'bool' },
+    { label: 'Send a test push', type: 'action', run: testPush },
     { key: 'flightawareKey', label: 'FlightAware API key', type: 'text' },
     { key: 'demo', label: 'Demo mode (simulated planes)', type: 'bool' }
   ];
@@ -24,12 +34,54 @@ var Settings = (function () {
 
   var root, rowsEl, errorEl, draft, rows = [], index = 0, onSave = null, open = false;
 
+  function message(text, isError) {
+    errorEl.textContent = text;
+    errorEl.className = isError ? 'error' : '';
+  }
+
+  function setValue(key, value) {
+    draft[key] = value;
+    rows.forEach(function (r) {
+      if (r.field && r.field.key === key && r.input) r.input.value = value;
+    });
+  }
+
+  function findAddress() {
+    var q = String(draft.address || '').trim();
+    if (!q) { message('Type your Eircode or address in the row above first.', true); return; }
+    var cc = COUNTRY_CODES[draft.lookupCountry] || '';
+    message('Searching\u2026');
+    Providers.request('GET', 'https://nominatim.openstreetmap.org/search?format=json&limit=1' +
+      (cc ? '&countrycodes=' + cc : '') + '&q=' + encodeURIComponent(q), null, 10000)
+      .then(function (res) {
+        if (!res || !res[0]) {
+          message('No match. Try adding the street and town, or check "Search in".', true);
+          return;
+        }
+        setValue('homeLat', Math.round(res[0].lat * 1e5) / 1e5);
+        setValue('homeLon', Math.round(res[0].lon * 1e5) / 1e5);
+        message('Found: ' + String(res[0].display_name).split(',').slice(0, 3).join(',') +
+          '. Check it, then Save.');
+      }, function () { message('Address lookup failed. Check the internet connection.', true); });
+  }
+
+  function testPush() {
+    if (!String(draft.ntfyTopic || '').trim()) { message('Enter an ntfy topic first.', true); return; }
+    message('Sending\u2026');
+    Notify.send(draft, 'Flight Overhead test \u2708\ufe0f', 'Test alert from Flight Overhead. You\'re connected.',
+      { ignoreQuiet: true, tags: 'white_check_mark', priority: 'default' })
+      .then(function () { message('Test push sent to "' + draft.ntfyTopic.trim() + '". Check the ntfy app.'); },
+            function (e) { message('Push failed: ' + e.message, true); });
+  }
+
   function init() {
     root = document.getElementById('settings');
     rowsEl = document.getElementById('settings-rows');
     errorEl = document.getElementById('settings-error');
     document.getElementById('settings-save').onclick = save;
     document.getElementById('settings-cancel').onclick = close;
+    document.getElementById('settings-version').textContent = 'Flight Overhead v' + APP_VERSION + ' · ' +
+      CHANGELOG.map(function (c) { return 'v' + c[0] + ': ' + c[1]; }).join(' · ');
   }
 
   function display(f) {
@@ -62,6 +114,12 @@ var Settings = (function () {
         input.onblur = function () { commitInput(f, input); };
         row.appendChild(input);
         row.input = input;
+      } else if (f.type === 'action') {
+        row.className = 'row field action';
+        var go = document.createElement('span');
+        go.className = 'value';
+        go.textContent = 'OK ▸';
+        row.appendChild(go);
       } else {
         var value = document.createElement('span');
         value.className = 'value';
@@ -100,6 +158,7 @@ var Settings = (function () {
   function activate(row) {
     if (!row.field) { row.click(); return; }
     if (row.input) { row.input.focus(); return; }   // opens the TV's on-screen keyboard
+    if (row.field.type === 'action') { row.field.run(); return; }
     cycle(row, 1);
   }
 
@@ -138,6 +197,10 @@ var Settings = (function () {
     }
     if (!isNum(c.alertRadiusKm) || c.alertRadiusKm <= 0) return 'Overhead radius must be a positive number.';
     if (!isNum(c.maxAltitudeFt) || c.maxAltitudeFt <= 0) return 'Altitude limit must be a positive number.';
+    if (!isNum(c.jetAlertRadiusKm) || c.jetAlertRadiusKm <= 0) return 'Private jet radius must be a positive number.';
+    if (c.ntfyTopic && !/^[-_A-Za-z0-9]{1,64}$/.test(String(c.ntfyTopic).trim())) {
+      return 'The ntfy topic can only use letters, numbers, - and _.';
+    }
     if (!isNum(c.watchRadiusKm) || c.watchRadiusKm < c.alertRadiusKm || c.watchRadiusKm > 400) {
       return 'Radar range must be at least the overhead radius and at most 400 km.';
     }
@@ -147,8 +210,7 @@ var Settings = (function () {
   function save() {
     var problem = validate(draft);
     if (problem) {
-      errorEl.textContent = problem;
-      errorEl.className = 'error';
+      message(problem, true);
       return;
     }
     var result = draft;
@@ -156,11 +218,10 @@ var Settings = (function () {
     if (onSave) onSave(result);
   }
 
-  function show(cfg, message, saveCallback) {
+  function show(cfg, intro, saveCallback) {
     draft = JSON.parse(JSON.stringify(cfg));
     onSave = saveCallback;
-    errorEl.textContent = message || '';
-    errorEl.className = '';
+    message(intro || '');
     build();
     root.className = '';
     open = true;

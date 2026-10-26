@@ -150,3 +150,13 @@ function countryForIcao(code) {
   if (!code || code.length !== 4) return '';
   return ICAO_COUNTRIES[code.substr(0, 2)] || ICAO_COUNTRIES_1[code.charAt(0)] || '';
 }
+
+// Airports drawn on the radar when within range.
+var AIRPORT_PINS = [
+  { icao: 'EICK', lat: 51.8413, lon: -8.4911 }, { icao: 'EIDW', lat: 53.4213, lon: -6.2701 },
+  { icao: 'EINN', lat: 52.7020, lon: -8.9248 }, { icao: 'EIKY', lat: 52.1809, lon: -9.5238 },
+  { icao: 'EIKN', lat: 53.9103, lon: -8.8185 }, { icao: 'EIWF', lat: 52.1872, lon: -7.0870 },
+  { icao: 'EGLL', lat: 51.4700, lon: -0.4543 }, { icao: 'EGKK', lat: 51.1481, lon: -0.1903 },
+  { icao: 'EGSS', lat: 51.8850, lon: 0.2350 }, { icao: 'EGCC', lat: 53.3537, lon: -2.2750 },
+  { icao: 'KJFK', lat: 40.6413, lon: -73.7781 }
+];
