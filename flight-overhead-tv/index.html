@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <title>Flight Overhead</title>
+  <link rel="stylesheet" href="css/style.css">
+  <!-- Samsung TV web APIs (only present on the TV; harmless 404 in a desktop browser). -->
+  <script src="$WEBAPIS/webapis/webapis.js"></script>
+</head>
+<body>
+  <div id="stage">
+    <section id="radar-wrap">
+      <canvas id="radar"></canvas>
+    </section>
+
+    <aside id="side">
+      <div id="clock">--:--</div>
+      <div id="place"></div>
+      <div id="summary"></div>
+      <h2>Nearby</h2>
+      <ol id="nearby"></ol>
+      <div id="hint">
+        <span class="key">OK</span> settings / dismiss
+        <span class="key red">&#9679;</span> test alert
+        <span class="key">BACK</span> exit
+      </div>
+      <div id="status"></div>
+    </aside>
+
+    <div id="alerts"></div>
+
+    <div id="settings" class="hidden">
+      <div class="panel">
+        <h1>Settings</h1>
+        <p class="sub">Use &#9650;&#9660; to move, &#9664;&#9654; or OK to change, OK on a number to type it.</p>
+        <div id="settings-rows"></div>
+        <div class="buttons">
+          <button id="settings-save" class="row" tabindex="0">Save</button>
+          <button id="settings-cancel" class="row" tabindex="0">Cancel</button>
+        </div>
+        <div id="settings-error"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/config.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/geo.js"></script>
+  <script src="js/providers.js"></script>
+  <script src="js/demo.js"></script>
+  <script src="js/tracker.js"></script>
+  <script src="js/radar.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/settings.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
