@@ -14,6 +14,8 @@ var Settings = (function () {
     { key: 'sound', label: 'Chime on alert', type: 'bool' },
     { key: 'showRoutes', label: 'Look up routes', type: 'bool' },
     { key: 'showPhotos', label: 'Show aircraft photos', type: 'bool' },
+    { key: 'alertFilter', label: 'Pop up for', type: 'choice', options: ['all', 'private jets'] },
+    { key: 'flightawareKey', label: 'FlightAware API key', type: 'text' },
     { key: 'demo', label: 'Demo mode (simulated planes)', type: 'bool' }
   ];
 

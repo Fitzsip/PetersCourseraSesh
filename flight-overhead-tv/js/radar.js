@@ -132,7 +132,8 @@ var Radar = (function () {
       var x = a.x + a.vx * dt, y = a.y + a.vy * dt;
       if (x * x + y * y > cfg.watchRadiusKm * cfg.watchRadiusKm * 1.05) continue;
       var px = cx + x * scale, py = cy - y * scale;
-      var colour = a.inZone ? '#ffb547' : altitudeColour(a.altFt);
+      var colour = a.flag && a.flag.kind === 'private-jet' ? '#ff7ad9'
+        : a.inZone ? '#ffb547' : altitudeColour(a.altFt);
 
       var trail = state.trails[a.hex];
       if (trail && trail.length > 1) {

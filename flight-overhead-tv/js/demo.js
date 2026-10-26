@@ -17,6 +17,10 @@ var Demo = (function () {
     { hex: 'd0e004', callsign: 'FDX5241', reg: 'N851FD', type: 'B77L', altFt: 33000, gsKt: 470,
       track: 15, offsetKm: -18, periodSec: 240, phase: 0.5,
       route: { origin: { code: 'MEM', city: 'Memphis' }, dest: { code: 'CDG', city: 'Paris' }, plausible: true } },
+    { hex: 'd0e006', callsign: 'VJT612', reg: '9H-VCE', type: 'CL35', altFt: 3000, gsKt: 160,
+      track: 160, offsetKm: -0.8, periodSec: 150, phase: 0.75, route: null,
+      history: { origin: { code: 'FAB', city: 'Farnborough', country: 'United Kingdom' }, airborneMin: 52,
+                 countries: ['Switzerland', 'France', 'United Kingdom'], flightsToday: 3 } },
     { hex: 'd0e005', callsign: 'N172SP', reg: 'N172SP', type: 'C172', altFt: 2500, gsKt: 95,
       track: 300, offsetKm: 6, periodSec: 600, phase: 0.4, route: null }
   ];
@@ -38,7 +42,11 @@ var Demo = (function () {
         hex: f.hex, callsign: f.callsign, reg: f.reg, type: f.type, desc: '',
         lat: pos.lat, lon: pos.lon, altFt: f.altFt, onGround: false, gsKt: f.gsKt,
         track: f.track, vertRateFpm: f.altFt < 8000 ? -700 : 0, squawk: '', ageSec: 0,
-        demoRoute: f.route || { origin: null, dest: null }
+        demoRoute: f.route || { origin: null, dest: null },
+        demoHistory: f.history ? {
+          origin: f.history.origin, departedAt: Date.now() - f.history.airborneMin * 60000,
+          countries: f.history.countries, flightsToday: f.history.flightsToday
+        } : null
       };
     });
   }

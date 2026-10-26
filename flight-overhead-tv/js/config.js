@@ -10,6 +10,7 @@ var DEFAULT_CONFIG = {
   homeLon: null,
   homeName: 'Home',
 
+
   // Data source: 'adsb.lol' (free, no key), 'airplanes.live' (free, no key)
   // or 'opensky' (free, but anonymous use is limited to ~400 requests a day).
   provider: 'adsb.lol',
@@ -22,9 +23,14 @@ var DEFAULT_CONFIG = {
   popupSeconds: 25,        // how long a popup stays on screen
   cooldownMinutes: 20,     // don't re-announce the same aircraft within this time
 
-  units: 'imperial',       // 'imperial' (ft, mph, mi) or 'metric' (m, km/h, km)
+  units: 'metric',         // 'metric' (m, km/h, km) or 'imperial' (ft, mph, mi)
   sound: true,
   showRoutes: true,        // look up origin/destination (adsb.lol route API)
   showPhotos: true,        // look up an aircraft photo (planespotters.net)
-  demo: false              // simulated planes, handy for testing indoors
+  alertFilter: 'all',      // 'all' or 'private jets' (radar still shows everything)
+  demo: false,             // simulated planes, handy for testing indoors
+
+  // Optional FlightAware AeroAPI key. Adds where each plane took off, how long it has
+  // been flying and which countries it has been to today. See README for setup.
+  flightawareKey: ''
 };

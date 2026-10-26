@@ -92,6 +92,7 @@ html, body {
 .alert-route .airport b { font-size: 3.4rem; color: #fff; }
 .alert-route .city { color: #9fb3c8; margin-left: 1rem; }
 .alert-route .arrow { color: #ffb547; margin: 0 2rem; }
+.alert-route .from { color: #9fb3c8; margin-right: 1.2rem; }
 .alert-route .unsure { color: #6f8aa5; font-size: 2rem; margin-left: 1.6rem; }
 .alert-type { font-size: 2.4rem; color: #9fb3c8; margin-top: 0.6rem; }
 .alert-stats { display: flex; margin-top: 2rem; }
@@ -136,3 +137,21 @@ html, body {
 #settings .buttons .row:last-child { margin-right: 0; }
 #settings-error { color: #ffd38a; font-size: 2.2rem; margin-top: 1.6rem; min-height: 2.6rem; }
 #settings-error.error { color: #ff8a7a; }
+
+/* ---- Private jets and other flags ---- */
+.badge {
+  display: inline-block; vertical-align: middle; margin-left: 2rem; padding: 0.4rem 1.4rem;
+  border-radius: 0.8rem; font-size: 2.2rem; font-weight: 800; letter-spacing: 0.2rem;
+  text-transform: uppercase; background: #3d5670; color: #fff;
+}
+.badge.private-jet { background: #ff7ad9; color: #2a0820; }
+.badge.military { background: #8a9a5b; }
+.badge.helicopter { background: #3a8fb7; }
+.alert.private-jet { border-color: #ff7ad9; box-shadow: 0 2rem 6rem rgba(0, 0, 0, 0.6), 0 0 5rem rgba(255, 122, 217, 0.35); }
+.alert.private-jet .alert-timer i { background: #ff7ad9; }
+.alert-owner { font-size: 2.4rem; color: #ffc2ee; margin-top: 0.4rem; }
+.alert-history { font-size: 2.3rem; color: #c5d4e3; margin-top: 0.8rem; line-height: 1.4; }
+.alert-history b { color: #fff; }
+.alert-history .countries { color: #9fb3c8; }
+#nearby li.private-jet { border-left-color: #ff7ad9; }
+.nb-tag { color: #ff7ad9; font-weight: 700; }

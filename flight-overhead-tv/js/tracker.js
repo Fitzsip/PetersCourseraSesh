@@ -30,6 +30,7 @@ Tracker.prototype.update = function (list, cfg, now) {
     if (a.distKm > cfg.watchRadiusKm) continue;
 
     a.bearing = Geo.bearing(a.x, a.y);
+    a.flag = classifyAircraft(a);
     var cpa = Geo.closestApproach(a.x, a.y, v.vx, v.vy);
     a.cpaKm = cpa.km;
     a.cpaSec = cpa.seconds;
@@ -41,7 +42,8 @@ Tracker.prototype.update = function (list, cfg, now) {
 
     if (a.inZone) {
       var last = this.lastInZone[a.hex];
-      if (!last || now - last > cooldownMs) newAlerts.push(a);
+      var wanted = cfg.alertFilter !== 'private jets' || a.flag.kind === 'private-jet';
+      if ((!last || now - last > cooldownMs) && wanted) newAlerts.push(a);
       this.lastInZone[a.hex] = now;
     }
 

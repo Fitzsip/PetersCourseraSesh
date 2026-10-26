@@ -1,7 +1,7 @@
 /*
  * Flight data sources. Every provider returns a list of aircraft normalised to:
  *   { hex, callsign, reg, type, desc, lat, lon, altFt, onGround, gsKt, track,
- *     vertRateFpm, squawk, ageSec }
+ *     vertRateFpm, squawk, category, dbFlags, owner, ageSec }
  */
 var Providers = (function () {
   'use strict';
@@ -63,6 +63,9 @@ var Providers = (function () {
       track: num(a.track) !== null ? a.track : num(a.true_heading),
       vertRateFpm: num(a.baro_rate) !== null ? a.baro_rate : num(a.geom_rate),
       squawk: a.squawk || '',
+      category: a.category || '',
+      dbFlags: a.dbFlags || 0,
+      owner: a.ownOp || '',
       ageSec: num(a.seen_pos) || 0
     };
   }
@@ -96,7 +99,7 @@ var Providers = (function () {
           gsKt: num(s[9]) === null ? null : s[9] * 1.943844,
           track: num(s[10]),
           vertRateFpm: num(s[11]) === null ? null : s[11] * 196.85,
-          squawk: s[14] || '',
+          squawk: s[14] || '', category: '', dbFlags: 0, owner: '',
           ageSec: now && s[3] ? Math.max(0, now - s[3]) : 0
         };
       }).filter(Boolean);

@@ -22,7 +22,7 @@ var UI = (function () {
   'use strict';
   var els = {};
   var cards = [];          // visible popups, newest last
-  var MAX_CARDS = 3;
+  var MAX_CARDS = 2;
   var audioCtx = null;
 
   function $(id) { return document.getElementById(id); }
@@ -59,13 +59,15 @@ var UI = (function () {
 
     els.nearby.innerHTML = '';
     list.slice(0, 7).forEach(function (a) {
-      var li = el('li', a.inZone ? 'hot' : '');
+      var isJet = a.flag && a.flag.kind === 'private-jet';
+      var li = el('li', (a.inZone ? 'hot ' : '') + (isJet ? 'private-jet' : ''));
       var top = el('div', 'nb-top');
       top.appendChild(el('span', 'nb-cs', a.callsign || a.reg || a.hex.toUpperCase()));
       top.appendChild(el('span', 'nb-dist', Fmt.dist(a.distKm, cfg) + ' ' + Geo.compass(a.bearing)));
       var sub = el('div', 'nb-sub',
         [aircraftTypeName(a) || airlineFor(a.callsign), a.onGround ? 'on ground' : Fmt.alt(a.altFt, cfg)]
           .filter(Boolean).join(' · '));
+      if (isJet) sub.insertBefore(el('span', 'nb-tag', 'Private jet \u00b7 '), sub.firstChild);
       li.appendChild(top);
       li.appendChild(sub);
       els.nearby.appendChild(li);
@@ -102,8 +104,14 @@ var UI = (function () {
     card.kicker = el('div', 'alert-kicker');
     var title = el('div', 'alert-title');
     title.appendChild(el('span', 'alert-cs', a.callsign || a.reg || a.hex.toUpperCase()));
+    var flag = a.flag || classifyAircraft(a);
     var airline = airlineFor(a.callsign);
     if (airline) title.appendChild(el('span', 'alert-airline', airline));
+    if (flag.label) title.appendChild(el('span', 'badge ' + flag.kind, flag.label));
+    var ownerName = flag.operator || titleCase(a.owner || '');
+    if (ownerName.toLowerCase() === airline.toLowerCase()) ownerName = '';
+    var owner = el('div', 'alert-owner', ownerName ? 'Operated by ' + ownerName : '');
+    card.history = el('div', 'alert-history');
     card.route = el('div', 'alert-route');
     var typeLine = [aircraftTypeName(a), a.reg && a.reg !== a.callsign ? a.reg : ''].filter(Boolean).join(' · ');
     var type = el('div', 'alert-type', typeLine);
@@ -121,6 +129,8 @@ var UI = (function () {
     body.appendChild(title);
     body.appendChild(card.route);
     if (typeLine) body.appendChild(type);
+    if (ownerName) body.appendChild(owner);
+    body.appendChild(card.history);
     body.appendChild(stats);
     root.appendChild(photo);
     root.appendChild(body);
@@ -132,7 +142,7 @@ var UI = (function () {
     updateCard(card, a, cfg);
     // Let the browser lay out the card before starting the slide-in and timer animations.
     setTimeout(function () {
-      root.className = 'alert show';
+      root.className = 'alert show ' + flag.kind;
       bar.style.transitionDuration = cfg.popupSeconds + 's';
       bar.style.width = '0%';
     }, 30);
@@ -141,6 +151,7 @@ var UI = (function () {
     if (cfg.showRoutes) {
       Providers.lookupRoute(a).then(function (r) {
         if (!r || !r.origin || !r.dest) return;
+        card.hasRoute = true;
         card.route.innerHTML = '';
         appendAirport(card.route, r.origin);
         card.route.appendChild(el('span', 'arrow', '→'));
@@ -148,6 +159,17 @@ var UI = (function () {
         if (!r.plausible) card.route.appendChild(el('span', 'unsure', '(unconfirmed)'));
       });
     }
+    History.lookup(a, cfg).then(function (h) {
+      if (!h) return;
+      card.historyData = h;
+      // Private jets rarely have a published route, so fall back to the take-off airport.
+      if (!card.hasRoute && h.origin) {
+        card.route.innerHTML = '';
+        card.route.appendChild(el('span', 'from', 'From'));
+        appendAirport(card.route, h.origin);
+      }
+      renderHistory(card);
+    });
     if (cfg.showPhotos) {
       Providers.lookupPhoto(a).then(function (p) {
         if (!p) return;
@@ -161,7 +183,29 @@ var UI = (function () {
         img.src = p.src;
       });
     }
-    if (cfg.sound) chime();
+    if (cfg.sound) chime(flag.kind === 'private-jet');
+  }
+
+  function duration(ms) {
+    var mins = Math.max(0, Math.round(ms / 60000));
+    var h = Math.floor(mins / 60), m = mins % 60;
+    return h ? h + ' h ' + m + ' min' : m + ' min';
+  }
+
+  function renderHistory(card) {
+    var h = card.historyData;
+    if (!h) return;
+    card.history.innerHTML = '';
+    if (h.departedAt) {
+      var from = h.origin && h.origin.country ? ' since leaving ' + h.origin.country : '';
+      card.history.appendChild(el('div', '', 'In the air for ' + duration(Date.now() - h.departedAt) + from));
+    }
+    if (h.countries.length) {
+      var n = h.countries.length;
+      card.history.appendChild(el('div', 'countries',
+        'Today: ' + h.countries.join(' \u2192 ') + ' (' + n + (n === 1 ? ' country, ' : ' countries, ') +
+        h.flightsToday + (h.flightsToday === 1 ? ' flight)' : ' flights)')));
+    }
   }
 
   function appendAirport(parent, ap) {
@@ -190,6 +234,7 @@ var UI = (function () {
     card.speed.value.textContent = Fmt.speed(a.gsKt, cfg);
     card.heading.value.textContent = a.track === null ? '—' : Geo.compass(a.track) + ' ' + Math.round(a.track) + '°';
     card.dist.value.textContent = Fmt.dist(a.distKm, cfg);
+    renderHistory(card);
   }
 
   function refreshAlerts(aircraft, cfg) {
@@ -215,13 +260,13 @@ var UI = (function () {
     return true;
   }
 
-  function chime() {
+  function chime(special) {
     try {
       var Ctx = window.AudioContext || window.webkitAudioContext;
       if (!Ctx) return;
       audioCtx = audioCtx || new Ctx();
       var t0 = audioCtx.currentTime;
-      [880, 1318.5].forEach(function (freq, i) {
+      (special ? [1046.5, 1318.5, 1568] : [880, 1318.5]).forEach(function (freq, i) {
         var osc = audioCtx.createOscillator();
         var gain = audioCtx.createGain();
         osc.type = 'sine';

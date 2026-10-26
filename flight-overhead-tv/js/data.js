@@ -82,3 +82,71 @@ function aircraftTypeName(a) {
 function titleCase(s) {
   return String(s).toLowerCase().replace(/\b([a-z])/g, function (m) { return m.toUpperCase(); });
 }
+
+// ---- Private jet detection ----
+
+// ICAO type codes of business jets.
+var BIZJET_TYPES = {};
+('C500 C501 C510 C525 C25A C25B C25C C25M C550 C551 C55B C560 C56X C650 C680 C68A C700 C750 ' +
+ 'E50P E55P E545 E550 E35L LJ31 LJ35 LJ40 LJ45 LJ55 LJ60 LJ70 LJ75 LJ85 ' +
+ 'CL30 CL35 CL60 CL64 GL5T GLEX GL6T GL7T GL8T ' +
+ 'GLF2 GLF3 GLF4 GLF5 GLF6 GA5C GA6C GA7C GA8C G150 G200 G280 GALX ASTR ' +
+ 'FA10 FA20 FA50 FA5X FA6X FA7X FA8X F900 F2TH ' +
+ 'H25A H25B H25C HA4T BE40 PRM1 HDJT SF50 EA50 PC24 MU30 WW24').split(' ').forEach(function (t) { BIZJET_TYPES[t] = true; });
+// Airliner types are only "private" when flown by a private-jet operator (e.g. a Boeing Business Jet).
+var AIRLINER_TYPES = { B737: true, B738: true, B739: true, B38M: true, A318: true, A319: true, A320: true };
+
+// Callsign prefixes of private-jet charter and fractional operators.
+var BIZJET_OPERATORS = {
+  NJE: 'NetJets Europe', EJA: 'NetJets', VJT: 'VistaJet', LXJ: 'Flexjet', AOJ: 'Avcon Jet',
+  JFA: 'Jetfly', XOJ: 'XOJET', TWY: 'Solairus', GAC: 'Global Jet', JCB: 'JCB'
+};
+
+function classifyAircraft(a) {
+  var prefix = /^[A-Z]{3}\d/.test(a.callsign) ? a.callsign.substr(0, 3) : '';
+  if (a.dbFlags & 1) return { kind: 'military', label: 'Military' };
+  if (BIZJET_OPERATORS[prefix]) return { kind: 'private-jet', label: 'Private jet', operator: BIZJET_OPERATORS[prefix] };
+  if (BIZJET_TYPES[a.type]) return { kind: 'private-jet', label: 'Private jet' };
+  // A business-jet-sized airliner flying under its registration instead of an airline callsign.
+  var reg = (a.reg || '').replace('-', '');
+  if (AIRLINER_TYPES[a.type] && reg && a.callsign.replace('-', '') === reg) {
+    return { kind: 'private-jet', label: 'Private jet' };
+  }
+  if (/helicopter/.test(AIRCRAFT_TYPES[a.type] || '') || a.category === 'A7') {
+    return { kind: 'helicopter', label: 'Helicopter' };
+  }
+  if (reg && a.callsign.replace('-', '') === reg) return { kind: 'private', label: 'Private flight' };
+  return { kind: '', label: '' };
+}
+
+// ---- Countries from ICAO airport codes (first two letters, or first one for a few large countries) ----
+var ICAO_COUNTRIES = {
+  EI: 'Ireland', EG: 'United Kingdom', LF: 'France', ED: 'Germany', ET: 'Germany', EH: 'Netherlands',
+  EB: 'Belgium', EL: 'Luxembourg', LS: 'Switzerland', LO: 'Austria', LI: 'Italy', LE: 'Spain',
+  GC: 'Spain', GE: 'Spain', LP: 'Portugal', LX: 'Gibraltar', LN: 'Monaco', EK: 'Denmark', EN: 'Norway',
+  ES: 'Sweden', EF: 'Finland', BI: 'Iceland', BG: 'Greenland', EP: 'Poland', LK: 'Czechia',
+  LZ: 'Slovakia', LH: 'Hungary', LR: 'Romania', LB: 'Bulgaria', LG: 'Greece', LT: 'Turkey',
+  LC: 'Cyprus', LM: 'Malta', LJ: 'Slovenia', LD: 'Croatia', LY: 'Serbia', LQ: 'Bosnia',
+  LW: 'North Macedonia', LA: 'Albania', LU: 'Moldova', EY: 'Lithuania', EV: 'Latvia', EE: 'Estonia',
+  UK: 'Ukraine', UM: 'Belarus', UB: 'Azerbaijan', UG: 'Georgia', UD: 'Armenia', UA: 'Kazakhstan',
+  LL: 'Israel', OJ: 'Jordan', OL: 'Lebanon', OM: 'UAE', OT: 'Qatar', OB: 'Bahrain', OE: 'Saudi Arabia',
+  OK: 'Kuwait', OO: 'Oman', OI: 'Iran', OR: 'Iraq', OS: 'Syria', HE: 'Egypt', GM: 'Morocco',
+  DA: 'Algeria', DT: 'Tunisia', HL: 'Libya', FA: 'South Africa', HK: 'Kenya', HA: 'Ethiopia',
+  HT: 'Tanzania', DN: 'Nigeria', DG: 'Ghana', GO: 'Senegal', FM: 'Madagascar', FI: 'Mauritius',
+  FS: 'Seychelles', GV: 'Cape Verde', VA: 'India', VE: 'India', VI: 'India', VO: 'India',
+  OP: 'Pakistan', VC: 'Sri Lanka', VR: 'Maldives', VT: 'Thailand', WS: 'Singapore', WM: 'Malaysia',
+  WI: 'Indonesia', WA: 'Indonesia', RP: 'Philippines', RJ: 'Japan', RO: 'Japan', RK: 'South Korea',
+  RC: 'Taiwan', VH: 'Hong Kong', VM: 'Macau', VV: 'Vietnam', NZ: 'New Zealand', MM: 'Mexico',
+  MK: 'Jamaica', MY: 'Bahamas', MU: 'Cuba', MD: 'Dominican Republic', MT: 'Haiti', TJ: 'Puerto Rico',
+  TX: 'Bermuda', TN: 'Caribbean Netherlands', TB: 'Barbados', TF: 'French Caribbean', TT: 'Trinidad',
+  MW: 'Cayman Islands', TU: 'British Virgin Islands', MP: 'Panama', MR: 'Costa Rica', MG: 'Guatemala',
+  SB: 'Brazil', SD: 'Brazil', SN: 'Brazil', SW: 'Brazil', SA: 'Argentina', SC: 'Chile', SK: 'Colombia',
+  SP: 'Peru', SE: 'Ecuador', SU: 'Uruguay', SV: 'Venezuela', PA: 'United States', PH: 'United States',
+  PG: 'Guam'
+};
+var ICAO_COUNTRIES_1 = { K: 'United States', C: 'Canada', Y: 'Australia', Z: 'China', U: 'Russia' };
+
+function countryForIcao(code) {
+  if (!code || code.length !== 4) return '';
+  return ICAO_COUNTRIES[code.substr(0, 2)] || ICAO_COUNTRIES_1[code.charAt(0)] || '';
+}

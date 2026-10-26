@@ -17,8 +17,41 @@ with a chime.
   course that will bring it inside that radius within 30 seconds. The early
   alert makes up for API and polling delay.
 * Each aircraft is announced once per pass (20 minute cooldown).
+* **Private jets** get a pink **PRIVATE JET** badge, a pink radar marker and a
+  different chime. They're recognised by business-jet type (Gulfstream,
+  Challenger, Citation, Falcon, Learjet, Phenom…), by private-jet operator
+  callsigns (NetJets, VistaJet, Flexjet…), or by an airliner flying under its
+  registration rather than an airline callsign (e.g. a Boeing Business Jet).
+  Set **Pop up for → private jets** to only be alerted for those.
+  Military aircraft, helicopters and private light aircraft are flagged too.
 * Routes come from the adsb.lol route database and photos from
   planespotters.net. Both are optional and fail quietly.
+
+## Where it came from, flight time and countries visited (optional)
+
+The free APIs only report where planes are *right now*. Airline flights still get
+their route from the adsb.lol route database, but private jets usually don't
+have one. With a free **FlightAware AeroAPI** key the popup also shows:
+
+* where the plane took off (for private jets too),
+* how long it has been in the air,
+* the countries the aircraft has been to today, e.g.
+  `Today: Switzerland → France → United Kingdom (3 countries, 3 flights)`.
+
+Setup:
+
+1. Sign up at <https://www.flightaware.com/aeroapi/> and choose the **Personal**
+   tier. At the time of writing it includes $5 of free queries a month (check
+   the current pricing on that page).
+2. Create an API key in the AeroAPI portal.
+3. On the TV, open Settings → **FlightAware API key** and type it in. Typing is
+   easier with the keyboard in the SmartThings phone app. You can also put it
+   in `flightawareKey` in `js/config.js` before building, but don't commit it
+   to a public repository.
+
+The app makes one query per aircraft that triggers a popup, and caches it for
+30 minutes. Radar-only planes never use any. Aircraft whose owners have asked
+FlightAware to hide them won't have history.
 
 ## Remote control
 
@@ -96,7 +129,9 @@ All settings can be changed on the TV. The defaults are in `js/config.js`.
 | Ignore planes above | 20,000 ft | Skip high cruising traffic you can barely see |
 | Radar range | 30 km | Area shown on the radar and requested from the API |
 | Data source | adsb.lol | `adsb.lol`, `airplanes.live` or `opensky` |
-| Units | imperial | `imperial` (ft, mph, mi) or `metric` (m, km/h, km) |
+| Units | metric | `metric` (m, km/h, km) or `imperial` (ft, mph, mi) |
+| Pop up for | all | `all` or `private jets` |
+| FlightAware API key | (none) | Enables take-off airport, flight time and countries |
 
 Advanced options are only in `js/config.js`: `lookaheadSeconds`, `pollSeconds`,
 `popupSeconds` and `cooldownMinutes`.
@@ -113,12 +148,13 @@ index.html        Page layout
 css/style.css     TV styling (1920x1080, scales to any size)
 js/config.js      Default settings
 js/providers.js   Flight data APIs, route and photo lookups
+js/history.js     FlightAware lookup: take-off airport, flight time, countries
 js/tracker.js     Overhead detection and alert cooldowns
 js/radar.js       Radar drawing
 js/ui.js          Side panel and popups
 js/settings.js    Remote-controlled settings screen
 js/demo.js        Simulated traffic
-js/data.js        Airline and aircraft-type names
+js/data.js        Airline/aircraft names, private-jet detection, airport countries
 ```
 
 Flight data © adsb.lol / airplanes.live / The OpenSky Network contributors.
