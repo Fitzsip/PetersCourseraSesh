@@ -5,7 +5,7 @@ var Settings = (function () {
   var COUNTRY_CODES = { 'Ireland': 'ie', 'United Kingdom': 'gb', 'United States': 'us', 'Anywhere': '' };
 
   var FIELDS = [
-    { key: 'address', label: 'Eircode or address', type: 'text' },
+    { key: 'address', label: 'Eircode, address or coordinates', type: 'text' },
     { key: 'lookupCountry', label: 'Search in', type: 'choice', options: ['Ireland', 'United Kingdom', 'United States', 'Anywhere'] },
     { label: 'Find my house from the address', type: 'action', run: findAddress },
     { key: 'homeLat', label: 'Home latitude', type: 'number' },
@@ -48,21 +48,13 @@ var Settings = (function () {
 
   function findAddress() {
     var q = String(draft.address || '').trim();
-    if (!q) { message('Type your Eircode or address in the row above first.', true); return; }
-    var cc = COUNTRY_CODES[draft.lookupCountry] || '';
+    if (!q) { message('Type your Eircode, address or coordinates in the row above first.', true); return; }
     message('Searching\u2026');
-    Providers.request('GET', 'https://nominatim.openstreetmap.org/search?format=json&limit=1' +
-      (cc ? '&countrycodes=' + cc : '') + '&q=' + encodeURIComponent(q), null, 10000)
-      .then(function (res) {
-        if (!res || !res[0]) {
-          message('No match. Try adding the street and town, or check "Search in".', true);
-          return;
-        }
-        setValue('homeLat', Math.round(res[0].lat * 1e5) / 1e5);
-        setValue('homeLon', Math.round(res[0].lon * 1e5) / 1e5);
-        message('Found: ' + String(res[0].display_name).split(',').slice(0, 3).join(',') +
-          '. Check it, then Save.');
-      }, function () { message('Address lookup failed. Check the internet connection.', true); });
+    Geocode.find(q, COUNTRY_CODES[draft.lookupCountry] || '').then(function (hit) {
+      setValue('homeLat', Math.round(hit.lat * 1e5) / 1e5);
+      setValue('homeLon', Math.round(hit.lon * 1e5) / 1e5);
+      message('Found: ' + hit.label + '. Check it, then Save.');
+    }, function (err) { message(err.message, true); });
   }
 
   function testPush() {

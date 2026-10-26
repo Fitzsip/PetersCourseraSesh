@@ -90,7 +90,10 @@ FlightAware to hide them won't have history.
 | ▲ ▼ ◀ ▶ | Move and change values in settings |
 
 On first launch, Settings opens. Type your Eircode or address, choose **Find my
-house from the address**, check the coordinates and press **Save**. They're
+house from the address**, check the coordinates and press **Save**. The free map
+data has few Eircodes, so if yours isn't found, open Google Maps on your phone,
+search the Eircode, press and hold your roof, and type the numbers shown
+(e.g. `51.91234, -8.46789`) into the same box. They're
 saved on the TV, so the app goes straight to the radar on every later launch.
 Uninstalling the app clears them. You can also turn on **Demo mode** to see
 simulated planes.
@@ -209,6 +212,8 @@ Photos © their photographers via planespotters.net.
 
 ## Changelog
 
+* **1.1.1**: Eircode search only accepts a result with the same Eircode, falls back
+  to Photon, and accepts coordinates or a Google Maps link typed into the address box.
 * **1.1.0**: Phone pushes via ntfy, Eircode/address lookup, adsb.fi with automatic
   fallback, hexdb.io routes, "over the house in" countdown, wider private-jet
   alert radius, airport pins on the radar.

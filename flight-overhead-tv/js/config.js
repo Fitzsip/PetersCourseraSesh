@@ -3,8 +3,10 @@
  * Settings screen (press OK); those changes are saved on the TV and win over
  * these defaults.
  */
-var APP_VERSION = '1.1.0';
+var APP_VERSION = '1.1.1';
 var CHANGELOG = [
+  ['1.1.1', 'Eircode search checks the result really matches, falls back to Photon, ' +
+            'and accepts coordinates or a Google Maps link'],
   ['1.1.0', 'Phone push via ntfy, Eircode lookup, adsb.fi with automatic fallback, ' +
             '"over the house in" countdown, wider private-jet alert radius, airport pins'],
   ['1.0.0', 'Radar, overhead popups, private jet flag, FlightAware history, demo mode']
