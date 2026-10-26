@@ -108,7 +108,20 @@ Use **Enter**, **Esc** and **T** (test popup) in place of the remote buttons.
 If a browser blocks the API with a CORS error, use demo mode. The TV app is
 not affected because Tizen apps are allowed to call these APIs directly.
 
-## Install on your Samsung TV
+## Install from your phone (Apps2Samsung)
+
+1. On the TV: open **Apps**, press `1 2 3 4 5` on the remote, turn **Developer mode**
+   on, enter your **phone's** IP address, and restart the TV.
+2. Get `dist/FlightOverhead.wgt` onto the phone. Rebuild it after code changes
+   with `./build-wgt.sh`.
+3. In Apps2Samsung, pick the TV, choose the custom `.wgt` option, select
+   `FlightOverhead.wgt` and install. Apps2Samsung signs it for your TV.
+
+Install updates the same way. A copy installed with a different tool, such as
+Tizen Studio, has a different certificate and must be uninstalled first, which
+also clears the saved location.
+
+## Install on your Samsung TV (Tizen Studio)
 
 You need a Samsung Tizen TV (2016 or newer) and a computer on the same Wi-Fi.
 

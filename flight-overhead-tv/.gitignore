@@ -1,5 +1,6 @@
 .buildResult/
 *.wgt
+!dist/FlightOverhead.wgt
 .project
 .tproject
 .settings/
