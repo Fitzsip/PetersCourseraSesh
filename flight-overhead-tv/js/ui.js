@@ -29,6 +29,7 @@ var UI = (function () {
   var cards = [];          // visible popups, newest last
   var MAX_CARDS = 2;
   var audioCtx = null;
+  var onNearbyClick = null;
 
   function $(id) { return document.getElementById(id); }
 
@@ -40,7 +41,7 @@ var UI = (function () {
   }
 
   function init() {
-    ['clock', 'place', 'summary', 'nearby', 'status', 'alerts'].forEach(function (id) { els[id] = $(id); });
+    ['clock', 'place', 'summary', 'nearby', 'status', 'alerts', 'details'].forEach(function (id) { els[id] = $(id); });
   }
 
   function pad(n) { return (n < 10 ? '0' : '') + n; }
@@ -65,11 +66,11 @@ var UI = (function () {
     els.nearby.innerHTML = '';
     list.slice(0, 7).forEach(function (a) {
       var isJet = a.flag && a.flag.kind === 'private-jet';
-      var li = el('li', (a.inZone ? 'hot ' : '') + (isJet ? 'private-jet' : ''));
+      var li = el('li', (a.inZone ? 'hot ' : '') + (isJet ? 'private-jet ' : '') +
+        (a.hex === state.selectedHex ? 'selected' : ''));
+      li.onclick = function () { if (onNearbyClick) onNearbyClick(a.hex); };
       var top = el('div', 'nb-top');
       top.appendChild(el('span', 'nb-cs', a.callsign || a.reg || a.hex.toUpperCase()));
-      if (a.overheadNow) top.appendChild(el('span', 'nb-badge', 'Overhead'));
-      else if (a.overHouseIn !== null) top.appendChild(el('span', 'nb-badge eta', 'Over house ' + Fmt.eta(a.overHouseIn)));
       top.appendChild(el('span', 'nb-dist', Fmt.dist(a.distKm, cfg) + ' ' + Geo.compass(a.bearing)));
       var sub = el('div', 'nb-sub',
         [aircraftTypeName(a) || airlineFor(a.callsign), a.onGround ? 'on ground' : Fmt.alt(a.altFt, cfg)]
@@ -77,6 +78,8 @@ var UI = (function () {
       if (isJet) sub.insertBefore(el('span', 'nb-tag', 'Private jet \u00b7 '), sub.firstChild);
       li.appendChild(top);
       li.appendChild(sub);
+      if (a.overheadNow) li.appendChild(el('div', 'nb-badge', 'Overhead now'));
+      else if (a.overHouseIn !== null) li.appendChild(el('div', 'nb-badge eta', 'Over the house in ' + Fmt.eta(a.overHouseIn)));
       els.nearby.appendChild(li);
     });
     if (!list.length) els.nearby.appendChild(el('li', 'empty', 'Clear skies right now'));
@@ -97,13 +100,17 @@ var UI = (function () {
     return { box: box, value: value };
   }
 
-  function showAlert(a, cfg, testLabel) {
+  // opts: { label: fixed kicker text (tests), detail: extra info row, silent: no chime,
+  //         seconds: how long it stays up }
+  function showAlert(a, cfg, opts) {
+    opts = opts || {};
     for (var i = 0; i < cards.length; i++) {
       if (cards[i].hex === a.hex) return;
     }
     while (cards.length >= MAX_CARDS) dismiss(cards[0]);
 
-    var card = { hex: a.hex, testLabel: testLabel || '' };
+    var card = { hex: a.hex, testLabel: opts.label || '', detail: !!opts.detail };
+    var seconds = opts.seconds || cfg.popupSeconds;
     var root = el('div', 'alert');
     var photo = el('div', 'alert-photo');
     photo.appendChild(el('div', 'alert-glyph', '✈'));
@@ -138,22 +145,24 @@ var UI = (function () {
     if (typeLine) body.appendChild(type);
     if (ownerName) body.appendChild(owner);
     body.appendChild(card.history);
+    card.extra = el('div', 'alert-extra');
+    if (card.detail) body.appendChild(card.extra);
     body.appendChild(stats);
     root.appendChild(photo);
     root.appendChild(body);
     root.appendChild(timer);
     card.root = root;
-    els.alerts.appendChild(root);
+    (opts.top ? els.details : els.alerts).appendChild(root);
     cards.push(card);
 
     updateCard(card, a, cfg);
     // Let the browser lay out the card before starting the slide-in and timer animations.
     setTimeout(function () {
       root.className = 'alert show ' + flag.kind;
-      bar.style.transitionDuration = cfg.popupSeconds + 's';
+      bar.style.transitionDuration = seconds + 's';
       bar.style.width = '0%';
     }, 30);
-    card.timeout = setTimeout(function () { dismiss(card); }, cfg.popupSeconds * 1000);
+    card.timeout = setTimeout(function () { dismiss(card); }, seconds * 1000);
 
     if (cfg.showRoutes) {
       Providers.lookupRoute(a).then(function (r) {
@@ -196,7 +205,7 @@ var UI = (function () {
         img.src = p.src;
       });
     }
-    if (cfg.sound) chime(flag.kind === 'private-jet');
+    if (cfg.sound && !opts.silent) chime(flag.kind === 'private-jet');
   }
 
   function duration(ms) {
@@ -250,6 +259,7 @@ var UI = (function () {
       card.kicker.textContent = card.testLabel;
       card.kicker.className = 'alert-kicker test';
     }
+    if (card.detail) card.extra.textContent = detailLine(a, cfg);
     card.alt.value.textContent = a.onGround ? 'Ground' : Fmt.alt(a.altFt, cfg);
     if (a.vertRateFpm !== null && Math.abs(a.vertRateFpm) > 300) {
       card.alt.value.textContent += a.vertRateFpm > 0 ? ' ▲' : ' ▼';
@@ -258,6 +268,38 @@ var UI = (function () {
     card.heading.value.textContent = a.track === null ? '—' : Geo.compass(a.track) + ' ' + Math.round(a.track) + '°';
     card.dist.value.textContent = Fmt.dist(a.distKm, cfg);
     renderHistory(card);
+  }
+
+  function detailLine(a, cfg) {
+    var parts = [];
+    var vr = a.vertRateFpm;
+    if (vr !== null && vr !== undefined && Math.abs(vr) > 300) {
+      parts.push((vr > 0 ? 'Climbing ' : 'Descending ') + (cfg.units === 'metric'
+        ? (Math.abs(vr) * 0.00508).toFixed(1) + ' m/s' : Fmt.thousands(Math.abs(vr)) + ' ft/min'));
+    } else if (!a.onGround) {
+      parts.push('Level flight');
+    }
+    if (a.overheadNow) parts.push('Over the house now');
+    else if (a.overHouseIn !== null) parts.push('Over the house in ~' + Fmt.eta(a.overHouseIn));
+    else if (a.cpaSec > 0 && a.cpaKm < a.distKm - 0.5) {
+      parts.push('Closest ' + Fmt.dist(a.cpaKm, cfg) + ' in ' + Fmt.eta(a.cpaSec));
+    } else parts.push('Moving away');
+    if (a.squawk) parts.push('Squawk ' + a.squawk);
+    parts.push('ICAO ' + String(a.hex).toUpperCase());
+    return parts.join(' · ');
+  }
+
+  function hasCard(hex) {
+    for (var i = 0; i < cards.length; i++) if (cards[i].hex === hex) return cards[i];
+    return null;
+  }
+
+  // OK on a selected plane opens its detail card, or closes it if already open.
+  function toggleDetail(a, cfg) {
+    var open = hasCard(a.hex);
+    if (open) { dismiss(open); return; }
+    // Open at the top when the plane is in the lower half of the radar, so the card doesn't hide it.
+    showAlert(a, cfg, { detail: true, silent: true, seconds: 60, top: a.y < 0 });
   }
 
   function refreshAlerts(aircraft, cfg) {
@@ -307,6 +349,8 @@ var UI = (function () {
 
   return {
     init: init, renderSide: renderSide, renderClock: renderClock, setStatus: setStatus,
-    showAlert: showAlert, refreshAlerts: refreshAlerts, dismissNewest: dismissNewest
+    showAlert: showAlert, refreshAlerts: refreshAlerts, dismissNewest: dismissNewest,
+    toggleDetail: toggleDetail,
+    setNearbyClick: function (fn) { onNearbyClick = fn; }
   };
 })();

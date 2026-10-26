@@ -84,9 +84,10 @@ FlightAware to hide them won't have history.
 
 | Button | Action |
 | --- | --- |
-| **OK** | Open settings, or dismiss the newest popup |
+| ▲ ▼ | Highlight a plane in the Nearby list (ringed on the radar) |
+| **OK** | Details for the highlighted plane (OK again closes them); otherwise dismiss the newest popup or open settings |
 | **Red** | Show a test popup for the nearest plane |
-| **Back** | Dismiss the popup, close settings, or exit |
+| **Back** / ◀ | Dismiss the popup, clear the highlight, close settings, or exit |
 | ▲ ▼ ◀ ▶ | Move and change values in settings |
 
 On first launch, Settings opens. Type your Eircode or address, choose **Find my
@@ -212,6 +213,8 @@ Photos © their photographers via planespotters.net.
 
 ## Changelog
 
+* **1.3.0**: Select planes in the Nearby list (▲▼, OK) for a detail card with climb rate,
+  closest approach and squawk; the radar rings the selected plane.
 * **1.2.0**: With a FlightAware key, popups and pushes show origin → destination for
   private jets and the take-off time.
 * **1.1.3**: Popups only say "Passed over" for planes that actually went over the house.

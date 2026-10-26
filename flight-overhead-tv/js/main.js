@@ -3,10 +3,13 @@
   'use strict';
 
   var STORAGE_KEY = 'flightOverhead.config';
-  var KEY = { ENTER: 13, BACK: 10009, ESC: 27, RED: 403, T: 84 };
+  var KEY = { ENTER: 13, BACK: 10009, ESC: 27, RED: 403, T: 84, LEFT: 37, UP: 38, DOWN: 40 };
+  var NEARBY_SHOWN = 7;           // matches the side panel list length
+  var SELECTION_IDLE_MS = 120000; // drop the highlight after 2 minutes without key presses
 
   var tracker = new Tracker();
-  var state = { cfg: null, aircraft: [], trails: tracker.trails, fetchedAt: Date.now() };
+  var state = { cfg: null, aircraft: [], trails: tracker.trails, fetchedAt: Date.now(), selectedHex: null };
+  var lastKeyAt = 0;
   var pollTimer = null;
   var failures = 0;
 
@@ -69,7 +72,8 @@
         pushAlert(a, cfg);
       });
       UI.refreshAlerts(result.aircraft, cfg);
-      UI.renderSide({ cfg: cfg, aircraft: state.aircraft });
+      if (state.selectedHex && visibleHexes().indexOf(state.selectedHex) < 0) state.selectedHex = null;
+      renderSide();
       UI.setStatus('Updated ' + new Date(now).toLocaleTimeString() + ' · ' + Providers.lastSource(), false);
       failures = 0;
       schedule(pollInterval(cfg));
@@ -133,6 +137,7 @@
     tracker = new Tracker();
     state.trails = tracker.trails;
     state.aircraft = [];
+    state.selectedHex = null;
     failures = 0;
     UI.renderSide({ cfg: effectiveConfig(), aircraft: [] });
     poll();
@@ -155,22 +160,68 @@
       a = new Tracker().update(Demo.aircraft(demoCfg), demoCfg, Date.now()).aircraft[0];
       cfg = demoCfg;
     }
-    if (a) UI.showAlert(a, cfg, label);
+    if (a) UI.showAlert(a, cfg, { label: label });
   }
 
   function exitApp() {
     try { tizen.application.getCurrentApplication().exit(); } catch (e) { /* not on a TV */ }
   }
 
+  // ---- Selecting planes in the Nearby list ----
+
+  function renderSide() {
+    UI.renderSide({ cfg: effectiveConfig(), aircraft: state.aircraft, selectedHex: state.selectedHex });
+  }
+
+  function visibleHexes() {
+    return state.aircraft.slice(0, NEARBY_SHOWN).map(function (a) { return a.hex; });
+  }
+
+  function moveSelection(dir) {
+    var hexes = visibleHexes();
+    if (!hexes.length) return;
+    var i = hexes.indexOf(state.selectedHex);
+    i = i < 0 ? 0 : Math.max(0, Math.min(hexes.length - 1, i + dir));
+    state.selectedHex = hexes[i];
+    renderSide();
+  }
+
+  function clearSelection() {
+    if (!state.selectedHex) return false;
+    state.selectedHex = null;
+    renderSide();
+    return true;
+  }
+
+  function showSelected() {
+    for (var i = 0; i < state.aircraft.length; i++) {
+      if (state.aircraft[i].hex === state.selectedHex) {
+        UI.toggleDetail(state.aircraft[i], effectiveConfig());
+        return;
+      }
+    }
+  }
+
   function onKey(e) {
     if (Settings.handleKey(e)) return;
+    lastKeyAt = Date.now();
     switch (e.keyCode) {
+      case KEY.UP:
+        moveSelection(-1);
+        break;
+      case KEY.DOWN:
+        moveSelection(1);
+        break;
+      case KEY.LEFT:
+        clearSelection();
+        break;
       case KEY.ENTER:
-        if (!UI.dismissNewest()) openSettings();
+        if (state.selectedHex) showSelected();
+        else if (!UI.dismissNewest()) openSettings();
         break;
       case KEY.BACK:
       case KEY.ESC:
-        if (!UI.dismissNewest()) exitApp();
+        if (!UI.dismissNewest() && !clearSelection()) exitApp();
         break;
       case KEY.RED:
       case KEY.T:
@@ -202,7 +253,8 @@
   }
 
   function frame() {
-    Radar.draw({ cfg: effectiveConfig(), aircraft: state.aircraft, trails: state.trails, fetchedAt: state.fetchedAt },
+    Radar.draw({ cfg: effectiveConfig(), aircraft: state.aircraft, trails: state.trails, fetchedAt: state.fetchedAt,
+                 selectedHex: state.selectedHex },
       Date.now());
     // ~25 fps is plenty for a radar and gentler on older TVs.
     setTimeout(function () { window.requestAnimationFrame(frame); }, 40);
@@ -216,6 +268,14 @@
     setupTv();
     antiBurnIn();
     document.addEventListener('keydown', onKey);
+    UI.setNearbyClick(function (hex) {
+      state.selectedHex = hex;
+      renderSide();
+      showSelected();
+    });
+    setInterval(function () {
+      if (state.selectedHex && Date.now() - lastKeyAt > SELECTION_IDLE_MS) clearSelection();
+    }, 10000);
     setInterval(function () { UI.renderClock(state.cfg); }, 10000);
     UI.renderSide({ cfg: effectiveConfig(), aircraft: [] });
     frame();

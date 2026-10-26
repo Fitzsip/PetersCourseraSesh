@@ -37,7 +37,7 @@ html, body {
 .nb-top { display: flex; justify-content: space-between; font-size: 2.6rem; }
 .nb-cs { font-weight: 700; }
 .nb-badge {
-  margin-left: 1rem; margin-right: auto; padding: 0.2rem 0.8rem; border-radius: 0.5rem; align-self: center;
+  display: inline-block; margin-top: 0.6rem; padding: 0.2rem 0.8rem; border-radius: 0.5rem;
   font-size: 1.5rem; font-weight: 700; letter-spacing: 0.1rem; text-transform: uppercase;
   border: 0.2rem solid #ffb547; color: #ffb547;
 }
@@ -56,10 +56,11 @@ html, body {
 #status.error { color: #ff8a7a; }
 
 /* ---- Popups ---- */
-#alerts {
+#alerts, #details {
   position: absolute; left: 4rem; bottom: 4rem; width: 118rem;
   display: flex; flex-direction: column; justify-content: flex-end; pointer-events: none;
 }
+#details { bottom: auto; top: 2rem; }
 .alert {
   position: relative; display: flex; overflow: hidden; margin-top: 2rem;
   min-height: 26rem; border-radius: 2.4rem;
@@ -163,4 +164,7 @@ html, body {
 .alert-history b { color: #fff; }
 .alert-history .countries { color: #9fb3c8; }
 #nearby li.private-jet { border-left-color: #ff7ad9; }
+#nearby li { cursor: pointer; border-top: 0.3rem solid transparent; border-right: 0.3rem solid transparent; border-bottom: 0.3rem solid transparent; }
+#nearby li.selected { border-color: #57c7d4; background: rgba(87, 199, 212, 0.16); }
+.alert-extra { font-size: 2.2rem; color: #7cc4ff; margin-top: 0.6rem; }
 .nb-tag { color: #ff7ad9; font-weight: 700; }

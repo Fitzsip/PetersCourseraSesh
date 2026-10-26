@@ -174,6 +174,15 @@ var Radar = (function () {
         ctx.arc(px, py, 26 + 6 * Math.sin(now / 200), 0, Math.PI * 2);
         ctx.fill();
       }
+      if (a.hex === state.selectedHex) {
+        ctx.strokeStyle = '#57c7d4';
+        ctx.lineWidth = 3;
+        if (ctx.setLineDash) ctx.setLineDash([6, 6]);
+        ctx.beginPath();
+        ctx.arc(px, py, 24, now / 1000 % (Math.PI * 2), now / 1000 % (Math.PI * 2) + Math.PI * 2);
+        ctx.stroke();
+        if (ctx.setLineDash) ctx.setLineDash([]);
+      }
       drawPlane(px, py, a.track, a.inZone ? 18 : 13, colour);
       labels.push({ a: a, x: px + 18, y: py, colour: colour });
     }
