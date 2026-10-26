@@ -224,6 +224,7 @@ var UI = (function () {
 
   function updateCard(card, a, cfg) {
     var where = Fmt.dist(a.distKm, cfg) + ' ' + Geo.compass(a.bearing) + ' of ' + (cfg.homeName || 'home');
+    if (a.overheadNow) card.wasOverhead = true;
     if (a.overheadNow) {
       card.kicker.textContent = '✈  Overhead now · ' + where;
       card.kicker.className = 'alert-kicker now';
@@ -234,7 +235,7 @@ var UI = (function () {
       card.kicker.textContent = 'Nearby · ' + where;
       card.kicker.className = 'alert-kicker soon';
     } else {
-      card.kicker.textContent = 'Passed over · now ' + where;
+      card.kicker.textContent = (card.wasOverhead ? 'Passed over · now ' : 'Now ') + where;
       card.kicker.className = 'alert-kicker past';
     }
     if (card.testLabel) {

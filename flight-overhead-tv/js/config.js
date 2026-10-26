@@ -3,8 +3,9 @@
  * Settings screen (press OK); those changes are saved on the TV and win over
  * these defaults.
  */
-var APP_VERSION = '1.1.2';
+var APP_VERSION = '1.1.3';
 var CHANGELOG = [
+  ['1.1.3', 'Popups only say "Passed over" for planes that actually went over the house'],
   ['1.1.2', 'Test popups are clearly labelled so they are not mistaken for real planes'],
   ['1.1.1', 'Eircode search checks the result really matches, falls back to Photon, ' +
             'and accepts coordinates or a Google Maps link'],
