@@ -145,14 +145,16 @@
   function testAlert() {
     var cfg = effectiveConfig();
     var a = state.aircraft[0];
+    var label = 'Test · nearest plane';
     if (!a) {
+      label = 'Test · sample flight, not a real plane';
       var demoCfg = {};
       for (var k in cfg) demoCfg[k] = cfg[k];
       if (!hasHome(demoCfg)) { demoCfg.homeLat = 51.4775; demoCfg.homeLon = -0.4614; }
       a = new Tracker().update(Demo.aircraft(demoCfg), demoCfg, Date.now()).aircraft[0];
       cfg = demoCfg;
     }
-    if (a) UI.showAlert(a, cfg);
+    if (a) UI.showAlert(a, cfg, label);
   }
 
   function exitApp() {

@@ -97,13 +97,13 @@ var UI = (function () {
     return { box: box, value: value };
   }
 
-  function showAlert(a, cfg) {
+  function showAlert(a, cfg, testLabel) {
     for (var i = 0; i < cards.length; i++) {
       if (cards[i].hex === a.hex) return;
     }
     while (cards.length >= MAX_CARDS) dismiss(cards[0]);
 
-    var card = { hex: a.hex };
+    var card = { hex: a.hex, testLabel: testLabel || '' };
     var root = el('div', 'alert');
     var photo = el('div', 'alert-photo');
     photo.appendChild(el('div', 'alert-glyph', '✈'));
@@ -236,6 +236,10 @@ var UI = (function () {
     } else {
       card.kicker.textContent = 'Passed over · now ' + where;
       card.kicker.className = 'alert-kicker past';
+    }
+    if (card.testLabel) {
+      card.kicker.textContent = card.testLabel;
+      card.kicker.className = 'alert-kicker test';
     }
     card.alt.value.textContent = a.onGround ? 'Ground' : Fmt.alt(a.altFt, cfg);
     if (a.vertRateFpm !== null && Math.abs(a.vertRateFpm) > 300) {

@@ -91,6 +91,7 @@ html, body {
 .alert-kicker.now { color: #ffb547; }
 .alert-kicker.soon { color: #7ee0c3; }
 .alert-kicker.past { color: #8aa0b6; }
+.alert-kicker.test { color: #ff8a7a; }
 .alert-title { margin-top: 0.6rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .alert-cs { font-size: 6.4rem; font-weight: 800; letter-spacing: 0.1rem; }
 .alert-airline { font-size: 3.4rem; color: #c5d4e3; margin-left: 2rem; }

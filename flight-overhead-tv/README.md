@@ -212,6 +212,7 @@ Photos © their photographers via planespotters.net.
 
 ## Changelog
 
+* **1.1.2**: Test popups (red button) are labelled as tests.
 * **1.1.1**: Eircode search only accepts a result with the same Eircode, falls back
   to Photon, and accepts coordinates or a Google Maps link typed into the address box.
 * **1.1.0**: Phone pushes via ntfy, Eircode/address lookup, adsb.fi with automatic
