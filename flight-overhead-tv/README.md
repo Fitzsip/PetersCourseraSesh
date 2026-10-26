@@ -213,6 +213,8 @@ Photos © their photographers via planespotters.net.
 
 ## Changelog
 
+* **1.3.1**: Landmarks on the radar (Cork City, Little Island, Blarney, Ballincollig);
+  edit `LANDMARKS` in `js/data.js` to add your own.
 * **1.3.0**: Select planes in the Nearby list (▲▼, OK) for a detail card with climb rate,
   closest approach and squawk; the radar rings the selected plane.
 * **1.2.0**: With a FlightAware key, popups and pushes show origin → destination for

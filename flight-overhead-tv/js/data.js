@@ -165,3 +165,11 @@ var AIRPORT_PINS = [
   { icao: 'EGSS', lat: 51.8850, lon: 0.2350 }, { icao: 'EGCC', lat: 53.3537, lon: -2.2750 },
   { icao: 'KJFK', lat: 40.6413, lon: -73.7781 }
 ];
+
+// Places drawn on the radar when within range (approximate town centres).
+var LANDMARKS = [
+  { name: 'Cork City', lat: 51.8985, lon: -8.4756 },
+  { name: 'Little Island', lat: 51.9050, lon: -8.3550 },
+  { name: 'Blarney', lat: 51.9336, lon: -8.5667 },
+  { name: 'Ballincollig', lat: 51.8880, lon: -8.5900 }
+];

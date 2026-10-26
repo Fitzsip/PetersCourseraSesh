@@ -3,8 +3,9 @@
  * Settings screen (press OK); those changes are saved on the TV and win over
  * these defaults.
  */
-var APP_VERSION = '1.3.0';
+var APP_VERSION = '1.3.1';
 var CHANGELOG = [
+  ['1.3.1', 'Landmarks on the radar: Cork City, Little Island, Blarney, Ballincollig'],
   ['1.3.0', 'Select planes in the Nearby list with the remote for a detail card'],
   ['1.2.0', 'With a FlightAware key: origin and destination for private jets, take-off time'],
   ['1.1.3', 'Popups only say "Passed over" for planes that actually went over the house'],

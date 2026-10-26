@@ -114,6 +114,22 @@ var Radar = (function () {
     ctx.stroke();
     if (ctx.setLineDash) ctx.setLineDash([]);
 
+    // Landmarks, kept faint so aircraft stand out.
+    ctx.font = (1.5 * rem) + 'px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    for (var lm = 0; lm < LANDMARKS.length; lm++) {
+      var spot = Geo.toLocal(cfg.homeLat, cfg.homeLon, LANDMARKS[lm].lat, LANDMARKS[lm].lon);
+      if (spot.x * spot.x + spot.y * spot.y > cfg.watchRadiusKm * cfg.watchRadiusKm) continue;
+      var lx = cx + spot.x * scale, ly = cy - spot.y * scale;
+      ctx.fillStyle = 'rgba(200, 215, 230, 0.55)';
+      ctx.beginPath();
+      ctx.arc(lx, ly, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(200, 215, 230, 0.6)';
+      ctx.fillText(LANDMARKS[lm].name, lx + 9, ly);
+    }
+
     // Airports.
     ctx.font = (1.5 * rem) + 'px sans-serif';
     ctx.textAlign = 'left';
