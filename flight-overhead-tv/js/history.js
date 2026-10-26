@@ -3,7 +3,7 @@
  * see README). Gives where the current flight took off, how long it has been
  * airborne, and the countries the aircraft has been to today.
  *
- * Result: { origin: {code, name, city, country}, departedAt: ms|null,
+ * Result: { origin: {code, name, city, country}, dest: {...}|null, departedAt: ms|null,
  *           countries: [names...], flightsToday: n } or null.
  */
 var History = (function () {
@@ -79,6 +79,7 @@ var History = (function () {
 
     return {
       origin: airport((current || today[today.length - 1]).origin),
+      dest: current ? airport(current.destination) : null,
       departedAt: current ? time(current.actual_off) : null,
       countries: countries,
       flightsToday: today.length

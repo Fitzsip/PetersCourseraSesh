@@ -212,6 +212,8 @@ Photos © their photographers via planespotters.net.
 
 ## Changelog
 
+* **1.2.0**: With a FlightAware key, popups and pushes show origin → destination for
+  private jets and the take-off time.
 * **1.1.3**: Popups only say "Passed over" for planes that actually went over the house.
 * **1.1.2**: Test popups (red button) are labelled as tests.
 * **1.1.1**: Eircode search only accepts a result with the same Eircode, falls back

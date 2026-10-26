@@ -172,8 +172,14 @@ var UI = (function () {
       // Private jets rarely have a published route, so fall back to the take-off airport.
       if (!card.hasRoute && h.origin) {
         card.route.innerHTML = '';
-        card.route.appendChild(el('span', 'from', 'From'));
-        appendAirport(card.route, h.origin);
+        if (h.dest) {
+          appendAirport(card.route, h.origin);
+          card.route.appendChild(el('span', 'arrow', '→'));
+          appendAirport(card.route, h.dest);
+        } else {
+          card.route.appendChild(el('span', 'from', 'From'));
+          appendAirport(card.route, h.origin);
+        }
       }
       renderHistory(card);
     });
@@ -205,7 +211,9 @@ var UI = (function () {
     card.history.innerHTML = '';
     if (h.departedAt) {
       var from = h.origin && h.origin.country ? ' since leaving ' + h.origin.country : '';
-      card.history.appendChild(el('div', '', 'In the air for ' + duration(Date.now() - h.departedAt) + from));
+      var off = new Date(h.departedAt);
+      card.history.appendChild(el('div', '', 'In the air for ' + duration(Date.now() - h.departedAt) +
+        ' (took off ' + pad(off.getHours()) + ':' + pad(off.getMinutes()) + ')' + from));
     }
     if (h.countries.length) {
       var n = h.countries.length;

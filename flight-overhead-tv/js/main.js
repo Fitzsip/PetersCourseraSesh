@@ -105,7 +105,8 @@
       if (route && route.origin && route.dest) {
         lines.push((route.origin.city || route.origin.code) + ' \u2192 ' + (route.dest.city || route.dest.code));
       } else if (hist && hist.origin) {
-        lines.push('From ' + (hist.origin.city || hist.origin.code));
+        lines.push((hist.origin.city || hist.origin.code) +
+          (hist.dest ? ' → ' + (hist.dest.city || hist.dest.code) : ''));
       }
       var where = Fmt.dist(a.distKm, cfg) + ' ' + Geo.compass(a.bearing) + ' of ' + (cfg.homeName || 'home') +
         ', ' + Fmt.alt(a.altFt, cfg);
