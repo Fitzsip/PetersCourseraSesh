@@ -1,0 +1,597 @@
+<title>Pink Bell EMOM</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Public+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: one narrow phone column; tab bar pinned to the bottom; the session takes over the full screen like a gym clock. */
+:root {
+  --bg: #f5f2f3;
+  --surface: #ffffff;
+  --ink: #221c1f;
+  --muted: #6d6268;
+  --line: #e3dbdf;
+  --bell: #d6337a;          /* 8 kg competition bells are pink */
+  --bell-ink: #ffffff;
+  --bell-soft: #fbe3ee;
+  --rest: #2f7d6d;
+  --rest-soft: #def1ec;
+  --clock-bg: #1d181b;
+  --clock-ink: #fbf6f8;
+  --display: "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
+  --body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #161214; --surface: #211b1e; --ink: #f3ecef; --muted: #a8999f; --line: #362d31;
+    --bell: #f0559a; --bell-ink: #1a0c12; --bell-soft: #3d1b2a; --rest: #5fc2ad; --rest-soft: #173229;
+    --clock-bg: #0e0b0c; --clock-ink: #fbf6f8; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #161214; --surface: #211b1e; --ink: #f3ecef; --muted: #a8999f; --line: #362d31;
+  --bell: #f0559a; --bell-ink: #1a0c12; --bell-soft: #3d1b2a; --rest: #5fc2ad; --rest-soft: #173229;
+  --clock-bg: #0e0b0c; --clock-ink: #fbf6f8; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.5;
+}
+.app {
+  max-width: 34rem; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px calc(96px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column; gap: 20px;
+}
+h1, h2, h3 { font-family: var(--display); font-weight: 800; line-height: 1.05; margin: 0; text-wrap: balance; letter-spacing: 0.01em; }
+h1 { font-size: 2.4rem; text-transform: uppercase; }
+h2 { font-size: 1.6rem; text-transform: uppercase; }
+h3 { font-size: 1.25rem; }
+p { margin: 0; }
+.eyebrow { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); }
+.muted { color: var(--muted); }
+.num { font-variant-numeric: tabular-nums; }
+.stack { display: flex; flex-direction: column; gap: 12px; }
+.row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.spread { justify-content: space-between; }
+
+header.top { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.bell-mark { width: 44px; height: 50px; flex: none; }
+
+.today {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 18px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; }
+.pill.build { background: var(--bell-soft); color: var(--bell); }
+.pill.easy { background: var(--rest-soft); color: var(--rest); }
+.pill.done { background: var(--ink); color: var(--bg); }
+
+.minutes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+.minutes li { display: grid; grid-template-columns: 3.2rem 1fr auto; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); align-items: baseline; }
+.minutes .slot { font-family: var(--display); font-weight: 600; font-size: 1.05rem; color: var(--muted); }
+.minutes .what { font-weight: 600; min-width: 0; }
+.minutes .reps { font-family: var(--display); font-weight: 800; font-size: 1.3rem; }
+.note { font-size: 0.9rem; color: var(--muted); }
+
+button { font: inherit; cursor: pointer; border: 0; }
+button:focus-visible, a:focus-visible, select:focus-visible { outline: 3px solid var(--bell); outline-offset: 2px; }
+.btn { padding: 14px 18px; border-radius: 14px; font-weight: 700; font-size: 1rem; background: var(--surface); color: var(--ink); border: 1px solid var(--line); }
+.btn.primary { background: var(--bell); color: var(--bell-ink); border-color: var(--bell); font-size: 1.15rem; padding: 18px; width: 100%; font-family: var(--display); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 800; }
+.btn.small { padding: 8px 12px; font-size: 0.9rem; border-radius: 10px; }
+
+.progress { display: flex; flex-direction: column; gap: 8px; }
+.ladder { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; }
+.ladder span { height: 10px; border-radius: 3px; background: var(--line); }
+.ladder span.on { background: var(--bell); }
+.ladder span.now { background: repeating-linear-gradient(45deg, var(--bell) 0 4px, var(--bell-soft) 4px 8px); }
+
+.week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; text-align: center; }
+.week div { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 0.75rem; color: var(--muted); }
+.week i { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; font-style: normal; font-weight: 700; color: var(--bg); }
+.week i.b { background: var(--bell); border-color: var(--bell); }
+.week i.e { background: var(--rest); border-color: var(--rest); }
+.week i.t { border-color: var(--ink); }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+.levels { display: flex; flex-direction: column; gap: 10px; }
+.level { border: 1px solid var(--line); border-radius: 14px; padding: 14px; background: var(--surface); display: flex; flex-direction: column; gap: 6px; }
+.level.current { border-color: var(--bell); box-shadow: 0 0 0 1px var(--bell); }
+.level ol { margin: 0; padding-left: 1.3rem; }
+.guide details { border-bottom: 1px solid var(--line); padding: 12px 0; }
+.guide summary { font-weight: 700; cursor: pointer; list-style: none; display: flex; justify-content: space-between; gap: 10px; }
+.guide summary::after { content: "+"; color: var(--bell); font-weight: 800; }
+.guide details[open] summary::after { content: "–"; }
+.guide ul { margin: 8px 0 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 4px; }
+.log { list-style: none; margin: 0; padding: 0; }
+.log li { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.empty { padding: 20px; text-align: center; border: 1px dashed var(--line); border-radius: 14px; color: var(--muted); }
+select { font: inherit; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+
+nav.tabs {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
+  background: var(--surface); border-top: 1px solid var(--line);
+  padding-left: max(8px, env(safe-area-inset-left, 0px));
+  padding-right: max(8px, env(safe-area-inset-right, 0px));
+  padding-top: 6px; padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+  display: grid; grid-template-columns: repeat(4, 1fr);
+}
+nav.tabs button { background: none; padding: 10px 4px; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); border-radius: 10px; }
+nav.tabs button[aria-current="page"] { color: var(--bell); background: var(--bell-soft); }
+
+/* Session: the gym clock */
+.session {
+  position: fixed; inset: 0; z-index: 20; background: var(--clock-bg); color: var(--clock-ink);
+  display: flex; flex-direction: column;
+  padding-top: calc(16px + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.session .bar { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.session .bar .eyebrow { color: color-mix(in srgb, var(--clock-ink) 65%, transparent); }
+.track { display: grid; grid-template-columns: repeat(20, 1fr); gap: 3px; margin-top: 12px; }
+.track span { height: 6px; border-radius: 2px; background: color-mix(in srgb, var(--clock-ink) 18%, transparent); }
+.track span.past { background: var(--bell); }
+.track span.cur { background: var(--clock-ink); }
+.clock { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 10px; min-height: 0; }
+.clock .min { font-family: var(--display); font-weight: 600; font-size: 1.4rem; text-transform: uppercase; letter-spacing: 0.1em; color: color-mix(in srgb, var(--clock-ink) 70%, transparent); }
+.clock .secs { font-family: var(--display); font-weight: 800; font-size: min(42vw, 15rem); line-height: 0.9; font-variant-numeric: tabular-nums; }
+.clock .secs.go { color: var(--bell); }
+.clock .ex { font-family: var(--display); font-weight: 800; font-size: 2.3rem; text-transform: uppercase; line-height: 1; }
+.clock .ex b { color: var(--bell); }
+.clock .cue { max-width: 26rem; font-size: 1rem; color: color-mix(in srgb, var(--clock-ink) 75%, transparent); }
+.next { text-align: center; font-size: 0.95rem; color: color-mix(in srgb, var(--clock-ink) 65%, transparent); padding-bottom: 12px; }
+.session .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.session .btn { background: color-mix(in srgb, var(--clock-ink) 10%, transparent); color: var(--clock-ink); border-color: color-mix(in srgb, var(--clock-ink) 20%, transparent); }
+.session .btn.confirm { background: var(--bell); color: var(--bell-ink); border-color: var(--bell); }
+
+.rate { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.rate .btn { text-align: left; display: flex; flex-direction: column; gap: 2px; }
+.rate .btn span { font-weight: 400; font-size: 0.9rem; opacity: 0.8; }
+.toast { background: var(--bell-soft); color: var(--ink); border-radius: 12px; padding: 12px 14px; font-weight: 600; }
+@media (prefers-reduced-motion: no-preference) {
+  .clock .secs.tick { animation: pulse 0.35s ease-out; }
+  @keyframes pulse { from { transform: scale(1.06); } to { transform: scale(1); } }
+}
+</style>
+
+<div class="app" id="app">
+  <header class="top">
+    <div class="stack" style="gap:4px">
+      <span class="eyebrow">8 kg · 20 min · every day</span>
+      <h1>Pink Bell EMOM</h1>
+    </div>
+    <svg class="bell-mark" viewBox="0 0 44 50" aria-hidden="true">
+      <path d="M12 18 C12 6 32 6 32 18" fill="none" stroke="var(--ink)" stroke-width="5" stroke-linecap="round"/>
+      <circle cx="22" cy="32" r="16" fill="var(--bell)"/>
+      <text x="22" y="37" text-anchor="middle" font-family="Big Shoulders Display, Arial Narrow, sans-serif" font-weight="800" font-size="14" fill="var(--bell-ink)">8</text>
+    </svg>
+  </header>
+
+  <!-- TODAY -->
+  <section id="view-today" class="stack" style="gap:20px">
+    <div id="toast" class="toast" hidden></div>
+    <div class="today">
+      <div class="row spread">
+        <span id="todayType" class="pill build">Build day</span>
+        <span id="todayLevel" class="eyebrow num">Level 1 of 8</span>
+      </div>
+      <div class="stack" style="gap:4px">
+        <h2 id="todayTitle">Foundations</h2>
+        <p id="todaySub" class="note">Each minute: do the reps, then rest until the next beep. 5 rounds of this 4-minute block.</p>
+      </div>
+      <ul class="minutes" id="todayList"></ul>
+      <p class="note" id="todayTip"></p>
+      <button class="btn primary" id="startBtn">Start 20 minutes</button>
+      <p class="note">Warm up first: 1 minute marching on the spot, 10 hip hinges with no bell, 5 slow halos.</p>
+    </div>
+
+    <div class="progress">
+      <div class="row spread">
+        <span class="eyebrow">Progress to next level</span>
+        <span class="eyebrow num" id="pointsLabel">0 / 3</span>
+      </div>
+      <div class="ladder" id="ladder"></div>
+      <p class="note" id="progressNote">Rate each Build day when you finish. Three good Build days move you up a level.</p>
+    </div>
+
+    <div class="stack">
+      <div class="row spread"><span class="eyebrow">Last 7 days</span><span class="eyebrow num" id="streak">Streak 0</span></div>
+      <div class="week" id="week"></div>
+    </div>
+  </section>
+
+  <!-- PLAN -->
+  <section id="view-plan" class="stack" hidden>
+    <h2>The plan</h2>
+    <p>You train every day, but not hard every day. Days alternate: a <b>Build day</b> that pushes you a little, then an <b>Easy day</b> of mobility and core work so your back, hips and grip recover.</p>
+    <p class="muted">Each minute starts with a beep. Do the reps at a steady pace, aiming to finish in 20–35 seconds, then rest for the rest of the minute. If you can't finish inside 45 seconds, drop 1–2 reps for that exercise.</p>
+    <div class="card">
+      <div class="row spread"><span class="eyebrow">Your level</span>
+        <select id="levelPick" aria-label="Choose your level"></select>
+      </div>
+      <p class="note">Change this if a level is clearly too easy or too hard.</p>
+    </div>
+    <div class="levels" id="levels"></div>
+  </section>
+
+  <!-- GUIDE -->
+  <section id="view-guide" class="stack guide" hidden>
+    <h2>Exercise guide</h2>
+    <p class="muted">Quality first. Stop any exercise that gives you sharp or joint pain. If you have a heart, blood pressure or back condition, check with your doctor before starting.</p>
+    <div id="guide"></div>
+  </section>
+
+  <!-- LOG -->
+  <section id="view-log" class="stack" hidden>
+    <h2>Training log</h2>
+    <p class="muted" id="logSummary"></p>
+    <ul class="log" id="log"></ul>
+    <p class="note" id="syncNote"></p>
+  </section>
+</div>
+
+<nav class="tabs" aria-label="Sections">
+  <button data-tab="today" aria-current="page">Today</button>
+  <button data-tab="plan">Plan</button>
+  <button data-tab="guide">Guide</button>
+  <button data-tab="log">Log</button>
+</nav>
+
+<!-- SESSION OVERLAY -->
+<div class="session" id="session" hidden>
+  <div class="bar">
+    <span class="eyebrow" id="sesLabel">Build day · Level 1</span>
+    <span class="eyebrow num" id="sesElapsed">00:00 / 20:00</span>
+  </div>
+  <div class="track" id="track"></div>
+  <div class="clock" id="clockMain">
+    <div class="min num" id="sesMin">Get ready</div>
+    <div class="secs num" id="sesSecs">10</div>
+    <div class="ex" id="sesEx">Pick up the bell</div>
+    <div class="cue" id="sesCue"></div>
+  </div>
+  <div class="next" id="sesNext"></div>
+  <div class="controls" id="sesControls">
+    <button class="btn" id="pauseBtn">Pause</button>
+    <button class="btn" id="endBtn">End early</button>
+  </div>
+  <div class="controls" id="confirmEnd" hidden>
+    <button class="btn confirm" id="endYes">Yes, end and save</button>
+    <button class="btn" id="endNo">Keep going</button>
+  </div>
+  <div class="clock" id="finish" hidden>
+    <div class="min">Done</div>
+    <h2 style="font-size:2.6rem" id="finTitle">20 minutes</h2>
+    <p class="cue" id="finSub">How did that feel?</p>
+    <div class="rate" id="rateBox" style="width:100%;max-width:26rem">
+      <button class="btn" data-rate="easy">Too easy<span>Could have done more reps every minute</span></button>
+      <button class="btn" data-rate="right">About right<span>Hard by the end, but form stayed good</span></button>
+      <button class="btn" data-rate="hard">Too hard<span>Ran out of rest, or form broke down</span></button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ---------- Programme ----------
+  const EX = {
+    deadlift: { name: "Deadlift", cue: "Bell between feet. Push hips back, flat back, stand tall and squeeze glutes.",
+      how: ["Feet hip-width, bell between your arches.", "Push your hips back like closing a car door with your bum; shins stay nearly vertical.", "Grip the handle, chest proud, back flat.", "Drive through your heels and stand up tall. Lower the same way."] },
+    squat: { name: "Goblet squat", cue: "Hold the bell by the horns at your chest. Sit down between your heels, chest up.",
+      how: ["Hold the bell by the horns, close to your chest, elbows pointing down.", "Feet a bit wider than hips, toes slightly out.", "Sit down between your heels as deep as is comfortable. Knees track over toes.", "Stand by pushing the floor away. Use a box or chair behind you to start if needed."] },
+    row: { name: "Bent-over row", cue: "Hinge forward, free hand on your knee. Pull the bell to your hip. Both sides.",
+      how: ["Step one foot back, hinge forward and rest your free hand on your front knee or a chair.", "Let the bell hang under your shoulder.", "Pull your elbow back toward your hip, then lower slowly.", "Do all reps on one side, then switch."] },
+    swing: { name: "Two-hand swing", cue: "Hike it back, snap your hips forward. The bell floats to chest height. Arms are ropes.",
+      how: ["Start with the bell a foot in front of you. Hinge and grip with both hands.", "Hike it back between your thighs like a football snap.", "Snap your hips forward and squeeze your glutes. Your hips move the bell, not your arms.", "Let it float to about chest height, then guide it back down into the next hinge.", "Park it on the floor in front of you when done. Learn the deadlift first: the swing is a fast deadlift."] },
+    bridge: { name: "Glute bridge", cue: "On your back, knees bent. Drive hips up, squeeze for a second at the top.",
+      how: ["Lie on your back, knees bent, feet flat, hip-width.", "Push through your heels and lift your hips until knees, hips and shoulders line up.", "Squeeze your glutes for one second, lower slowly.", "Add the bell resting on your hips once 15 reps is easy."] },
+    pushup: { name: "Incline push-up", cue: "Hands on a bench, table or wall. Body straight as a plank. Chest to the edge.",
+      how: ["Hands on a sturdy table, bench or kitchen counter, a bit wider than shoulders.", "Walk your feet back so your body forms one straight line.", "Lower your chest to the edge, elbows at about 45°, then press away.", "The lower the surface, the harder it is. Move lower as you get stronger."] },
+    press: { name: "Overhead press", cue: "Bell in rack at your shoulder. Brace, press straight up, lock out, lower slowly. Both sides.",
+      how: ["Start with the bell in the rack position: handle in your palm, bell resting on the outside of your forearm, elbow tucked.", "Squeeze your glutes and brace your stomach.", "Press straight up until your arm is locked out next to your ear.", "Lower under control back to the rack. All reps one side, then switch."] },
+    clean: { name: "Single-arm clean", cue: "Small swing, then pull the bell close and let it land softly in the rack. Both sides.",
+      how: ["Start like a one-arm swing.", "As your hips snap forward, keep your elbow close and guide the bell up the body (like zipping up a jacket).", "Let the bell roll around your hand and land softly on your forearm in the rack.", "If it bangs your wrist, the bell is travelling too far from your body."] },
+    cleanpress: { name: "Clean & press", cue: "Clean to the rack, press overhead, lower to rack, back down. Both sides.",
+      how: ["One clean into the rack, then one press overhead.", "Lower to the rack, then let the bell drop back into the hinge for the next clean.", "All reps one side, then switch."] },
+    rest: { name: "Rest minute", cue: "March on the spot, breathe slowly through your nose. Shake out your grip.",
+      how: ["Keep moving gently: march, shake your arms, roll your shoulders.", "Breathe in through your nose, long breath out.", "This minute is part of the plan, not a break from it."] },
+    halo: { name: "Halo", cue: "Hold the bell upside down by the horns. Circle it slowly around your head. Both directions.",
+      how: ["Hold the bell by the horns, bottom up, at chest height.", "Slowly circle it around your head, close to your neck.", "Keep your ribs down and your stomach tight.", "Do the reps one direction, then the other."] },
+    deadbug: { name: "Dead bug", cue: "On your back, arms up, knees over hips. Lower opposite arm and leg, low back flat.",
+      how: ["Lie on your back, arms pointing to the ceiling, knees bent at 90° over your hips.", "Press your lower back into the floor.", "Slowly reach one arm overhead and straighten the opposite leg toward the floor.", "Return and switch sides. Go only as low as your back stays flat."] },
+    suitcase: { name: "Suitcase hold", cue: "Hold the bell at your side, stand tall without leaning. Switch hands halfway.",
+      how: ["Deadlift the bell up at your side like a suitcase.", "Stand tall, shoulders level, don't lean toward or away from the bell.", "Hold, or march slowly on the spot, for the time shown. Switch hands halfway."] },
+    pausesquat: { name: "Pause goblet squat", cue: "Sit to the bottom, hold 3 seconds, stand. Breathe at the bottom.",
+      how: ["Same as the goblet squat.", "Hold at the bottom for 3 slow seconds, using your elbows to gently push your knees out.", "Great for hips and ankles."] },
+    sldl: { name: "Single-leg deadlift", cue: "Bell in one hand. Balance on the opposite leg, hinge forward, stand. Both sides.",
+      how: ["Hold the bell in one hand, stand on the opposite leg with a soft knee.", "Hinge forward as the free leg reaches back, keeping your hips level.", "Stand back up by squeezing the standing-leg glute.", "Touch a wall with your free hand for balance at first."] },
+    plank: { name: "Plank", cue: "Forearms down, body in a straight line, squeeze glutes and brace.",
+      how: ["Forearms on the floor, elbows under shoulders.", "Body in one straight line from head to heels. Knees down is fine.", "Squeeze your glutes and pull your belly button in. Breathe."] }
+  };
+
+  // Each level: a 4-minute block repeated 5 times = 20 minutes.
+  const LEVELS = [
+    { name: "Foundations", build: [["deadlift","5"],["squat","4"],["row","4 / side"],["rest",""]],
+      tip: "Learn the shapes. Move slowly. You should finish each minute with plenty in the tank." },
+    { name: "Grooving", build: [["deadlift","6"],["squat","5"],["row","5 / side"],["rest",""]],
+      tip: "Same moves, one more rep. Keep the deadlift slow and crisp." },
+    { name: "Less rest", build: [["deadlift","8"],["squat","6"],["row","6 / side"],["bridge","10"]],
+      tip: "The rest minute becomes glute bridges. Practise the swing hike in your warm-up." },
+    { name: "First swings", build: [["swing","8"],["squat","6"],["row","6 / side"],["pushup","5"]],
+      tip: "Swings arrive. If they feel wrong, swap back to deadlifts for that minute." },
+    { name: "Building engine", build: [["swing","10"],["squat","8"],["row","8 / side"],["pushup","6"]],
+      tip: "Breathing gets harder now. Sharp exhale on each swing." },
+    { name: "Overhead", build: [["swing","12"],["squat","8"],["press","4 / side"],["row","8 / side"]],
+      tip: "Pressing starts. Clean the bell by deadlifting it to your shoulder with two hands if cleans aren't learned yet." },
+    { name: "Cleans", build: [["swing","15"],["squat","10"],["clean","4 / side"],["press","5 / side"]],
+      tip: "Cleans join. Keep the bell close so it lands softly." },
+    { name: "Full EMOM", build: [["swing","15"],["squat","10"],["cleanpress","5 / side"],["pushup","8"]],
+      tip: "This is the target. Once it feels good, it's time for a 12 kg bell." }
+  ];
+  const EASY = [
+    { from: 0, block: [["halo","3 / way"],["bridge","8"],["suitcase","30 s"],["deadbug","5 / side"]] },
+    { from: 3, block: [["halo","4 / way"],["pausesquat","4"],["suitcase","40 s"],["deadbug","6 / side"]] },
+    { from: 6, block: [["halo","5 / way"],["sldl","4 / side"],["suitcase","50 s"],["plank","30 s"]] }
+  ];
+  const easyFor = lv => EASY.filter(e => lv >= e.from).pop().block;
+  const POINTS_TO_LEVEL = 3;
+  const ROUNDS = 5, MINUTES = 20, READY = 10;
+
+  // ---------- State ----------
+  const defaultState = () => ({ level: 0, points: 0, hardRun: 0, history: [] });
+  let state = defaultState();
+  const LS = "pinkbell-emom-v1";
+  try { const s = JSON.parse(localStorage.getItem(LS) || "null"); if (s && Array.isArray(s.history)) state = Object.assign(defaultState(), s); } catch (e) {}
+  let dbRef = null;
+
+  async function connectStore() {
+    try {
+      let claude = window.claude;
+      for (let i = 0; i < 20 && !(claude && claude.use); i++) { await new Promise(r => setTimeout(r, 250)); claude = window.claude; }
+      if (!claude || !claude.use) return setSync(false);
+      const [db, user] = await Promise.all([claude.use("db"), claude.use("user")]);
+      if (!db || !user) return setSync(false);
+      const id = await user.id(); if (!id) return setSync(false);
+      dbRef = db.doc("data/users/" + id + "/emom");
+      const snap = await dbRef.get();
+      if (snap.exists) {
+        const remote = snap.data();
+        if (remote && Array.isArray(remote.history) && remote.history.length >= state.history.length) {
+          state = Object.assign(defaultState(), JSON.parse(JSON.stringify(remote)));
+          saveLocal(); render();
+        } else save();
+      } else if (state.history.length) save();
+      setSync(true);
+    } catch (e) { setSync(false); }
+  }
+  function setSync(ok) {
+    document.getElementById("syncNote").textContent = ok
+      ? "Your log is saved to your Claude account, so it follows you between devices."
+      : "Your log is saved on this device only.";
+  }
+  function saveLocal() { try { localStorage.setItem(LS, JSON.stringify(state)); } catch (e) {} }
+  function save() {
+    saveLocal();
+    if (dbRef) dbRef.set(JSON.parse(JSON.stringify(state))).catch(() => setSync(false));
+  }
+
+  // ---------- Dates ----------
+  const dayKey = d => { const x = new Date(d); return x.getFullYear() + "-" + String(x.getMonth()+1).padStart(2,"0") + "-" + String(x.getDate()).padStart(2,"0"); };
+  const todayKey = () => dayKey(Date.now());
+
+  function nextType() {
+    const last = state.history[state.history.length - 1];
+    if (last && last.day === todayKey()) return last.type; // already trained today
+    return last && last.type === "build" ? "easy" : "build";
+  }
+  const trainedToday = () => state.history.some(h => h.day === todayKey());
+  function blockFor(type, lv) { return type === "build" ? LEVELS[lv].build : easyFor(lv); }
+  function streak() {
+    const days = new Set(state.history.map(h => h.day));
+    let n = 0; const d = new Date();
+    if (!days.has(dayKey(d))) d.setDate(d.getDate() - 1);
+    while (days.has(dayKey(d))) { n++; d.setDate(d.getDate() - 1); }
+    return n;
+  }
+
+  // ---------- Render ----------
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+  function minutesHTML(block) {
+    return block.map(([k, r], i) => `<li><span class="slot num">Min ${i+1}</span><span class="what">${esc(EX[k].name)}</span><span class="reps num">${esc(r || "—")}</span></li>`).join("");
+  }
+
+  function render() {
+    const lv = state.level, type = nextType(), done = trainedToday();
+    const pill = $("todayType");
+    pill.className = "pill " + (done ? "done" : type);
+    pill.textContent = done ? "Done today" : type === "build" ? "Build day" : "Easy day";
+    $("todayLevel").textContent = `Level ${lv + 1} of ${LEVELS.length}`;
+    $("todayTitle").textContent = type === "build" ? LEVELS[lv].name : "Move & recover";
+    $("todaySub").textContent = type === "build"
+      ? "Each minute: do the reps, then rest until the next beep. 5 rounds of this 4-minute block."
+      : "Easy pace. Same 20-minute clock, gentler work. Leave feeling better than you started.";
+    $("todayList").innerHTML = minutesHTML(blockFor(type, lv));
+    $("todayTip").textContent = type === "build" ? LEVELS[lv].tip : "Easy days keep the daily habit without wearing you down. Don't add reps.";
+    $("startBtn").textContent = done ? "Train again anyway" : "Start 20 minutes";
+
+    $("pointsLabel").textContent = lv === LEVELS.length - 1 ? "Top level" : `${state.points} / ${POINTS_TO_LEVEL}`;
+    $("ladder").innerHTML = LEVELS.map((_, i) => `<span class="${i < lv ? "on" : i === lv ? "now" : ""}" title="Level ${i+1}"></span>`).join("");
+
+    const days = []; const d = new Date(); d.setDate(d.getDate() - 6);
+    for (let i = 0; i < 7; i++) {
+      const k = dayKey(d), h = state.history.filter(x => x.day === k).pop();
+      days.push(`<div><i class="${h ? (h.type === "build" ? "b" : "e") : ""} ${i === 6 ? "t" : ""}">${h ? "✓" : ""}</i>${"SMTWTFS"[d.getDay()]}</div>`);
+      d.setDate(d.getDate() + 1);
+    }
+    $("week").innerHTML = days.join("");
+    $("streak").textContent = `Streak ${streak()}`;
+
+    $("levelPick").innerHTML = LEVELS.map((L, i) => `<option value="${i}" ${i === lv ? "selected" : ""}>Level ${i+1}: ${esc(L.name)}</option>`).join("");
+    $("levels").innerHTML = LEVELS.map((L, i) => `<div class="level ${i === lv ? "current" : ""}">
+      <div class="row spread"><h3>Level ${i+1} · ${esc(L.name)}</h3>${i === lv ? '<span class="pill build">You</span>' : ""}</div>
+      <ol>${L.build.map(([k, r]) => `<li>${esc(EX[k].name)}${r ? " — " + esc(r) : ""}</li>`).join("")}</ol>
+      <p class="note">${esc(L.tip)}</p></div>`).join("") +
+      `<div class="level"><h3>Easy days</h3><p class="note">Levels 1–3: ${easyFor(0).map(([k,r]) => esc(EX[k].name) + " " + esc(r)).join(", ")}.</p>
+       <p class="note">Levels 4–6: ${easyFor(3).map(([k,r]) => esc(EX[k].name) + " " + esc(r)).join(", ")}.</p>
+       <p class="note">Levels 7–8: ${easyFor(6).map(([k,r]) => esc(EX[k].name) + " " + esc(r)).join(", ")}.</p></div>`;
+
+    const total = state.history.length, builds = state.history.filter(h => h.type === "build").length;
+    $("logSummary").textContent = total ? `${total} sessions · ${builds} Build · ${total - builds} Easy · ${Math.round(state.history.reduce((a, h) => a + h.minutes, 0))} minutes in total` : "";
+    $("log").innerHTML = total ? state.history.slice().reverse().slice(0, 60).map(h => `<li>
+      <strong>${new Date(h.ts).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })} · ${h.type === "build" ? "Build" : "Easy"}</strong>
+      <span class="num muted">${h.minutes} min</span>
+      <span class="note">Level ${h.level + 1}${h.rate ? " · felt " + ({ easy: "too easy", right: "about right", hard: "too hard" }[h.rate]) : ""}</span></li>`).join("")
+      : `<li class="empty" style="display:block">No sessions yet. Your first one shows up here when you finish it.</li>`;
+  }
+
+  const guide = Object.entries(EX).map(([k, e]) => `<details><summary>${esc(e.name)}</summary><ul>${e.how.map(s => `<li>${esc(s)}</li>`).join("")}</ul></details>`).join("");
+  $("guide").innerHTML = guide;
+
+  $("levelPick").addEventListener("change", e => { state.level = +e.target.value; state.points = 0; state.hardRun = 0; save(); render(); });
+
+  // Tabs
+  document.querySelectorAll("nav.tabs button").forEach(b => b.addEventListener("click", () => {
+    document.querySelectorAll("nav.tabs button").forEach(x => x.removeAttribute("aria-current"));
+    b.setAttribute("aria-current", "page");
+    ["today","plan","guide","log"].forEach(t => $("view-" + t).hidden = t !== b.dataset.tab);
+    window.scrollTo(0, 0);
+  }));
+
+  // ---------- Sound ----------
+  let ac = null;
+  function beep(freq, dur, vol) {
+    if (!ac) return;
+    try {
+      const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime;
+      o.type = "square"; o.frequency.value = freq;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol || 0.25, t + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g).connect(ac.destination); o.start(t); o.stop(t + dur + 0.02);
+    } catch (e) {}
+  }
+  const buzz = p => { try { navigator.vibrate && navigator.vibrate(p); } catch (e) {} };
+  let wake = null;
+  async function lockScreen() { try { wake = await navigator.wakeLock.request("screen"); } catch (e) { wake = null; } }
+  document.addEventListener("visibilitychange", () => { if (run && !run.paused && document.visibilityState === "visible") lockScreen(); });
+
+  // ---------- Session ----------
+  let run = null;
+  $("track").innerHTML = Array.from({ length: MINUTES }, () => "<span></span>").join("");
+
+  function start() {
+    try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); ac.resume(); } catch (e) { ac = null; }
+    const type = nextType(), lv = state.level;
+    run = { type, lv, block: blockFor(type, lv), startAt: performance.now(), pausedFor: 0, paused: false, pauseAt: 0, lastWhole: null, finished: false };
+    $("sesLabel").textContent = `${type === "build" ? "Build day" : "Easy day"} · Level ${lv + 1}`;
+    $("session").hidden = false; $("clockMain").hidden = false; $("finish").hidden = true;
+    $("sesControls").hidden = false; $("confirmEnd").hidden = true; $("pauseBtn").textContent = "Pause";
+    lockScreen(); beep(660, 0.12); loop();
+  }
+  const elapsed = () => ((run.paused ? run.pauseAt : performance.now()) - run.startAt - run.pausedFor) / 1000;
+
+  function loop() {
+    if (!run || run.finished) return;
+    const t = elapsed() - READY;
+    const total = MINUTES * 60;
+    if (t >= total) return finish(MINUTES);
+    let secsLeft, minute;
+    if (t < 0) {
+      minute = -1; secsLeft = Math.ceil(-t);
+      $("sesMin").textContent = "Get ready";
+      const [k, r] = run.block[0];
+      $("sesEx").innerHTML = `First up: ${esc(EX[k].name)}`;
+      $("sesCue").textContent = r ? r + " reps · " + EX[k].cue : EX[k].cue;
+      $("sesNext").textContent = "";
+    } else {
+      minute = Math.floor(t / 60); secsLeft = 60 - Math.floor(t % 60);
+      const [k, r] = run.block[minute % run.block.length];
+      const [nk, nr] = run.block[(minute + 1) % run.block.length];
+      $("sesMin").textContent = `Minute ${minute + 1} of ${MINUTES} · Round ${Math.floor(minute / run.block.length) + 1} of ${ROUNDS}`;
+      $("sesEx").innerHTML = r ? `<b>${esc(r)}</b> ${esc(EX[k].name)}` : esc(EX[k].name);
+      $("sesCue").textContent = EX[k].cue;
+      $("sesNext").textContent = minute + 1 < MINUTES ? `Next: ${EX[nk].name}${nr ? " · " + nr : ""}` : "Last minute. Finish strong.";
+    }
+    const whole = minute + ":" + secsLeft;
+    if (whole !== run.lastWhole) {
+      const prevMinute = run.lastWhole ? +run.lastWhole.split(":")[0] : -2;
+      run.lastWhole = whole;
+      const el = $("sesSecs");
+      el.textContent = secsLeft; el.classList.toggle("go", minute >= 0 && secsLeft >= 55);
+      el.classList.remove("tick"); void el.offsetWidth; el.classList.add("tick");
+      if (minute !== prevMinute && minute >= 0) { beep(990, 0.45, 0.3); buzz([250]); }
+      else if (secsLeft <= 3) { beep(660, 0.12); buzz(60); }
+      const spans = $("track").children;
+      for (let i = 0; i < MINUTES; i++) spans[i].className = i < minute ? "past" : i === minute ? "cur" : "";
+      const e = Math.max(0, t), mm = n => String(Math.floor(n / 60)).padStart(2, "0") + ":" + String(Math.floor(n % 60)).padStart(2, "0");
+      $("sesElapsed").textContent = `${mm(e)} / 20:00`;
+    }
+    run.raf = requestAnimationFrame(loop);
+  }
+
+  $("pauseBtn").addEventListener("click", () => {
+    if (!run) return;
+    if (run.paused) { run.pausedFor += performance.now() - run.pauseAt; run.paused = false; $("pauseBtn").textContent = "Pause"; lockScreen(); loop(); }
+    else { run.paused = true; run.pauseAt = performance.now(); cancelAnimationFrame(run.raf); $("pauseBtn").textContent = "Resume"; }
+  });
+  $("endBtn").addEventListener("click", () => { $("sesControls").hidden = true; $("confirmEnd").hidden = false; });
+  $("endNo").addEventListener("click", () => { $("sesControls").hidden = false; $("confirmEnd").hidden = true; });
+  $("endYes").addEventListener("click", () => {
+    const mins = Math.max(0, Math.round((elapsed() - READY) / 60 * 10) / 10);
+    if (mins < 1) { closeSession(); return; }
+    finish(mins);
+  });
+
+  function finish(mins) {
+    run.finished = true; cancelAnimationFrame(run.raf);
+    try { wake && wake.release(); } catch (e) {}
+    beep(990, 0.2); setTimeout(() => beep(1320, 0.5), 220); buzz([200, 100, 400]);
+    run.entry = { ts: Date.now(), day: todayKey(), type: run.type, level: run.lv, minutes: mins, rate: null };
+    state.history.push(run.entry);
+    if (state.history.length > 400) state.history = state.history.slice(-400);
+    save();
+    $("clockMain").hidden = true; $("sesControls").hidden = true; $("confirmEnd").hidden = true; $("finish").hidden = false;
+    $("sesNext").textContent = "";
+    $("finTitle").textContent = mins >= MINUTES ? "20 minutes" : `${mins} minutes`;
+    $("finSub").textContent = run.type === "build" ? "How did that feel? This decides when you level up." : "How did that feel?";
+  }
+
+  document.querySelectorAll("#rateBox button").forEach(b => b.addEventListener("click", () => {
+    const rate = b.dataset.rate, e = run.entry; e.rate = rate;
+    let msg = "";
+    if (run.type === "build" && e.minutes >= MINUTES) {
+      if (rate === "hard") {
+        state.hardRun++;
+        if (state.hardRun >= 2 && state.level > 0) { state.level--; state.points = 0; state.hardRun = 0; msg = `Two hard days in a row, so you're back on Level ${state.level + 1} to consolidate. That's normal.`; }
+        else msg = "Logged. Repeat this level next Build day. If it's too hard twice running, the app steps you back.";
+      } else {
+        state.hardRun = 0;
+        state.points += rate === "easy" ? 2 : 1;
+        if (state.points >= POINTS_TO_LEVEL && state.level < LEVELS.length - 1) {
+          state.level++; state.points = 0; msg = `Level up! Next Build day is Level ${state.level + 1}: ${LEVELS[state.level].name}.`;
+        } else if (state.level === LEVELS.length - 1 && state.points >= POINTS_TO_LEVEL) {
+          msg = "You've owned the full EMOM. Time to think about a 12 kg bell.";
+        } else msg = `Nice. ${POINTS_TO_LEVEL - state.points} more to the next level.`;
+      }
+    } else if (run.type === "easy") msg = "Easy day logged. Build day tomorrow.";
+    else msg = "Logged. Only full 20-minute Build days count toward levelling up.";
+    save(); closeSession(msg);
+  }));
+
+  function closeSession(msg) {
+    if (run) { run.finished = true; cancelAnimationFrame(run.raf); }
+    try { wake && wake.release(); } catch (e) {}
+    run = null; $("session").hidden = true;
+    const t = $("toast"); t.hidden = !msg; t.textContent = msg || "";
+    render();
+  }
+
+  $("startBtn").addEventListener("click", start);
+  render();
+  connectStore();
+})();
+</script>
