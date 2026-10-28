@@ -34,6 +34,7 @@
   --clock-bg: #0e0b0c; --clock-ink: #fbf6f8; color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { height: 100%; }
 body {
   background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 16px; line-height: 1.5;
@@ -138,7 +139,7 @@ nav.tabs button[aria-current="page"] { color: var(--bell); background: var(--bel
 .track span.cur { background: var(--clock-ink); }
 .clock { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 10px; min-height: 0; }
 .clock .min { font-family: var(--display); font-weight: 600; font-size: 1.4rem; text-transform: uppercase; letter-spacing: 0.1em; color: color-mix(in srgb, var(--clock-ink) 70%, transparent); }
-.clock .secs { font-family: var(--display); font-weight: 800; font-size: min(42vw, 15rem); line-height: 0.9; font-variant-numeric: tabular-nums; }
+.clock .secs { font-family: var(--display); font-weight: 800; font-size: min(30vw, 9rem); line-height: 0.9; font-variant-numeric: tabular-nums; }
 .clock .secs.go { color: var(--bell); }
 .clock .ex { font-family: var(--display); font-weight: 800; font-size: 2.3rem; text-transform: uppercase; line-height: 1; }
 .clock .ex b { color: var(--bell); }
@@ -151,6 +152,22 @@ nav.tabs button[aria-current="page"] { color: var(--bell); background: var(--bel
 .rate { display: grid; grid-template-columns: 1fr; gap: 10px; }
 .rate .btn { text-align: left; display: flex; flex-direction: column; gap: 2px; }
 .rate .btn span { font-weight: 400; font-size: 0.9rem; opacity: 0.8; }
+.rate .btn { flex-direction: row; align-items: center; gap: 12px; padding: 11px 14px; }
+.rate .btn .n { font-family: var(--display); font-weight: 800; font-size: 1.6rem; opacity: 1; width: 1.2rem; text-align: center; }
+.rate .btn .t { display: flex; flex-direction: column; opacity: 1; font-weight: 700; font-size: 1rem; }
+.rate .btn .t small { font-weight: 400; font-size: 0.85rem; opacity: 0.8; }
+.rate .btn.target { border-color: var(--bell); box-shadow: 0 0 0 1px var(--bell); }
+.rate .btn .tag { margin-left: auto; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--bell); opacity: 1; }
+.fig { display: block; overflow: visible; }
+.fig .ground { stroke: currentColor; opacity: 0.2; stroke-width: 2; }
+.fig .limb { fill: none; stroke: currentColor; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
+.fig .back { opacity: 0.4; }
+.fig .head { fill: currentColor; }
+.fig .kb { fill: var(--bell); }
+.fig .kb-handle { stroke: var(--bell); stroke-width: 3; stroke-linecap: round; }
+.fig .prop { fill: none; stroke: currentColor; stroke-width: 3; opacity: 0.45; stroke-linecap: round; }
+.clock .fig { width: min(52vw, 13rem); height: auto; max-height: 26vh; }
+.guide .fig { width: 10rem; max-width: 100%; height: auto; margin: 8px 0 4px; color: var(--ink); }
 .toast { background: var(--bell-soft); color: var(--ink); border-radius: 12px; padding: 12px 14px; font-weight: 600; }
 @media (prefers-reduced-motion: no-preference) {
   .clock .secs.tick { animation: pulse 0.35s ease-out; }
@@ -195,7 +212,7 @@ nav.tabs button[aria-current="page"] { color: var(--bell); background: var(--bel
         <span class="eyebrow num" id="pointsLabel">0 / 3</span>
       </div>
       <div class="ladder" id="ladder"></div>
-      <p class="note" id="progressNote">Rate each Build day when you finish. Three good Build days move you up a level.</p>
+      <p class="note" id="progressNote">After every session you rate how hard it felt. Build days should feel hard (4 of 5). If one feels easier than that, you move up faster, or straight away.</p>
     </div>
 
     <div class="stack">
@@ -208,6 +225,12 @@ nav.tabs button[aria-current="page"] { color: var(--bell); background: var(--bel
   <section id="view-plan" class="stack" hidden>
     <h2>The plan</h2>
     <p>You train every day, but not hard every day. Days alternate: a <b>Build day</b> that pushes you a little, then an <b>Easy day</b> of mobility and core work so your back, hips and grip recover.</p>
+    <div class="card">
+      <span class="eyebrow">How the plan adapts</span>
+      <p>At the end of every session you rate it from 1 (very easy) to 5 (too hard).</p>
+      <p><b>Build days should feel hard: 4.</b> Rate a 4 and you earn 1 point; 3 points moves you up a level. A 3 earns 2 points. A 1 or 2 means the level is too easy, so you move up straight away. Two 5s in a row move you back a level.</p>
+      <p><b>Easy days should feel easy: 2–3.</b> If one feels hard (4–5), your next Easy days get gentler. If one feels very easy (1), they get a little harder.</p>
+    </div>
     <p class="muted">Each minute starts with a beep. Do the reps at a steady pace, aiming to finish in 20–35 seconds, then rest for the rest of the minute. If you can't finish inside 45 seconds, drop 1–2 reps for that exercise.</p>
     <div class="card">
       <div class="row spread"><span class="eyebrow">Your level</span>
@@ -250,6 +273,7 @@ nav.tabs button[aria-current="page"] { color: var(--bell); background: var(--bel
   <div class="track" id="track"></div>
   <div class="clock" id="clockMain">
     <div class="min num" id="sesMin">Get ready</div>
+    <svg class="fig" id="sesFig" viewBox="0 -12 120 126" aria-hidden="true"></svg>
     <div class="secs num" id="sesSecs">10</div>
     <div class="ex" id="sesEx">Pick up the bell</div>
     <div class="cue" id="sesCue"></div>
@@ -268,9 +292,11 @@ nav.tabs button[aria-current="page"] { color: var(--bell); background: var(--bel
     <h2 style="font-size:2.6rem" id="finTitle">20 minutes</h2>
     <p class="cue" id="finSub">How did that feel?</p>
     <div class="rate" id="rateBox" style="width:100%;max-width:26rem">
-      <button class="btn" data-rate="easy">Too easy<span>Could have done more reps every minute</span></button>
-      <button class="btn" data-rate="right">About right<span>Hard by the end, but form stayed good</span></button>
-      <button class="btn" data-rate="hard">Too hard<span>Ran out of rest, or form broke down</span></button>
+      <button class="btn" data-rate="1"><span class="n">1</span><span class="t">Very easy<small>Barely broke a sweat</small></span></button>
+      <button class="btn" data-rate="2"><span class="n">2</span><span class="t">Easy<small>Comfortable all the way through</small></span></button>
+      <button class="btn" data-rate="3"><span class="n">3</span><span class="t">Moderate<small>Working, but plenty left in the tank</small></span></button>
+      <button class="btn" data-rate="4"><span class="n">4</span><span class="t">Hard<small>Last rounds were tough, form stayed good</small></span></button>
+      <button class="btn" data-rate="5"><span class="n">5</span><span class="t">Too hard<small>Ran out of rest, or form broke down</small></span></button>
     </div>
   </div>
 </div>
@@ -338,11 +364,137 @@ nav.tabs button[aria-current="page"] { color: var(--bell); background: var(--bel
     { from: 6, block: [["halo","5 / way"],["sldl","4 / side"],["suitcase","50 s"],["plank","30 s"]] }
   ];
   const easyFor = lv => EASY.filter(e => lv >= e.from).pop().block;
+  // ---------- Stick-figure animations ----------
+  // Side view, facing right. Angles in degrees: 0 points up, 90 points forward.
+  // Leg 1 is rooted at the ankle (feet stay planted) unless root is "hip".
+  const FL = { shin: 22, thigh: 22, torso: 28, ua: 16, fa: 15, head: 11 };
+  const S = { at: [58, 106], sh: 0, th: 0, to: 0, hd: 0, ua: 180, fa: 180, bell: null };
+  const P = o => Object.assign({}, S, o);
+  const STAND = P({}), STAND_KB = P({ bell: "hand" });
+  const DL_BOT = P({ sh: 15, th: -50, to: 70, bell: "hand" });
+  const GOB_TOP = P({ ua: 165, fa: 15, bell: [3, 6] });
+  const GOB_BOT = P({ sh: 35, th: -85, to: 25, ua: 150, fa: 5, bell: [3, 6] });
+  const ROW = { at: [72, 106], sh: 10, th: -30, to: 72, th2: 200, sh2: 185, ua2: 205, fa2: 212, bell: "hand" };
+  const SW_BOT = P({ sh: 12, th: -45, to: 72, ua: 198, fa: 200, bell: "hand" });
+  const SW_TOP = P({ ua: 92, fa: 92, bell: "hand" });
+  const CL_BOT = P({ sh: 12, th: -45, to: 72, ua: 198, fa: 200, ua2: 190, fa2: 190, bell: "hand" });
+  const RACK = P({ ua: 165, fa: 10, ua2: 180, fa2: 180, bell: "hand" });
+  const OVER = P({ ua: 5, fa: 0, ua2: 180, fa2: 180, bell: "hand" });
+  const BR = { at: [82, 106], sh: -30, ua: 92, fa: 90 };
+  const PU = { at: [20, 106], foot: 150 };
+  const DB = { root: "hip", at: [60, 103], to: 270, th: 0, sh: 90, th2: 0, sh2: 90, ua: 0, fa: 0, ua2: 0, fa2: 0 };
+  const PL = { at: [18, 104], ua: 180, fa: 90, foot: 170 };
+  const FIGS = {
+    deadlift: [[STAND_KB, .9, .4], [DL_BOT, 1, .3]],
+    squat: [[GOB_TOP, 1, .3], [GOB_BOT, 1.1, .3]],
+    pausesquat: [[GOB_TOP, 1, .3], [GOB_BOT, 1.1, 2.2]],
+    row: [[P(Object.assign({}, ROW, { ua: 180, fa: 180 })), .8, .2], [P(Object.assign({}, ROW, { ua: 290, fa: 180 })), .8, .4]],
+    swing: [[SW_BOT, .55, .05], [SW_TOP, .55, .15]],
+    bridge: [[P(Object.assign({}, BR, { th: 222, to: 270 })), .9, .3], [P(Object.assign({}, BR, { th: 255, to: 247, hd: 23, ua: 95 })), .9, .8]],
+    pushup: [[P(Object.assign({}, PU, { sh: 50, th: 50, to: 50 })), .9, .3], [P(Object.assign({}, PU, { sh: 58, th: 58, to: 58, ua: 241, fa: 153 })), .9, .3]],
+    press: [[RACK, .9, .4], [OVER, .9, .4]],
+    clean: [[CL_BOT, .6, .1], [RACK, .6, .6]],
+    cleanpress: [[CL_BOT, .6, .1], [RACK, .6, .3], [OVER, .8, .3], [RACK, .7, .2]],
+    rest: [[P({ th2: 105, sh2: 185, ua: 155, fa: 140, ua2: 205, fa2: 200 }), .5, .1], [STAND, .5, .1]],
+    halo: [[P({ ua: 150, fa: 20, bell: "hand" }), .9, .1], [P({ ua: 10, fa: -150, bell: "hand" }), .9, .1]],
+    deadbug: [[P(DB), .8, .2], [P(Object.assign({}, DB, { th: 85, ua2: -80, fa2: -80 })), 1, .4],
+              [P(DB), .8, .2], [P(Object.assign({}, DB, { th2: 85, ua: -80, fa: -80 })), 1, .4]],
+    suitcase: [[P({ th2: 110, sh2: 185, ua2: 200, fa2: 195, bell: "hand" }), .7, .1], [P({ ua2: 165, fa2: 165, bell: "hand" }), .7, .1]],
+    sldl: [[P({ at: [62, 106], th2: 185, sh2: 180, bell: "hand" }), 1, .3], [P({ at: [62, 106], sh: 8, th: -15, to: 85, th2: 262, sh2: 265, bell: "hand" }), 1.1, .4]],
+    plank: [[P(Object.assign({}, PL, { sh: 80, th: 80, to: 80 })), 1.5, .5], [P(Object.assign({}, PL, { sh: 81, th: 79, to: 80 })), 1.5, .5]]
+  };
+  const NUMK = ["sh", "th", "to", "hd", "ua", "fa", "th2", "sh2", "ua2", "fa2"];
+  Object.values(FIGS).forEach(frames => frames.forEach(f => {
+    const q = Object.assign({}, f[0]), hip = q.root === "hip";
+    q.mirror = q.th2 == null && q.sh2 == null;
+    if (q.th2 == null) q.th2 = hip ? q.th : q.th + 180;
+    if (q.sh2 == null) q.sh2 = hip ? q.sh : q.sh + 180;
+    if (q.ua2 == null) q.ua2 = q.ua;
+    if (q.fa2 == null) q.fa2 = q.fa;
+    f[0] = q;
+  }));
+  const dv = (a, l) => { const r = a * Math.PI / 180; return [Math.sin(r) * l, -Math.cos(r) * l]; };
+  const add = (a, b) => [a[0] + b[0], a[1] + b[1]];
+  const ease = u => u < .5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
+  function lerpPose(a, b, u) {
+    const p = Object.assign({}, u < .5 ? a : b);
+    NUMK.forEach(k => p[k] = a[k] + (b[k] - a[k]) * u);
+    p.at = [a.at[0] + (b.at[0] - a.at[0]) * u, a.at[1] + (b.at[1] - a.at[1]) * u];
+    if (Array.isArray(a.bell) && Array.isArray(b.bell)) p.bell = [a.bell[0] + (b.bell[0] - a.bell[0]) * u, a.bell[1] + (b.bell[1] - a.bell[1]) * u];
+    return p;
+  }
+  const reduceMotion = (() => { try { return matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) { return false; } })();
+  function poseAt(frames, t) {
+    if (reduceMotion) return frames[frames.length > 1 ? 1 : 0][0];
+    const n = frames.length, cycle = frames.reduce((a, f) => a + f[1] + f[2], 0);
+    t %= cycle;
+    for (let i = 0; i < n; i++) {
+      const [cur, m, h] = frames[i];
+      if (t < m) return lerpPose(frames[(i - 1 + n) % n][0], cur, ease(t / m));
+      t -= m;
+      if (t < h) return cur;
+      t -= h;
+    }
+    return frames[0][0];
+  }
+  function solve(p) {
+    let hip, knee, ankle, foot;
+    if (p.root === "hip") { hip = p.at; knee = add(hip, dv(p.th, FL.thigh)); ankle = add(knee, dv(p.sh, FL.shin)); foot = p.sh - 90; }
+    else { ankle = p.at; knee = add(ankle, dv(p.sh, FL.shin)); hip = add(knee, dv(p.th, FL.thigh)); foot = p.foot != null ? p.foot : 90; }
+    const sh = add(hip, dv(p.to, FL.torso)), ha = p.to + p.hd;
+    const knee2 = add(hip, dv(p.th2, FL.thigh)), ankle2 = add(knee2, dv(p.sh2, FL.shin));
+    const el = add(sh, dv(p.ua, FL.ua)), wr = add(el, dv(p.fa, FL.fa));
+    const el2 = add(sh, dv(p.ua2, FL.ua)), wr2 = add(el2, dv(p.fa2, FL.fa));
+    let bell = null;
+    if (p.bell === "hand") bell = add(wr, dv(p.fa, 7));
+    else if (Array.isArray(p.bell)) bell = add(wr, p.bell);
+    return {
+      toe: add(ankle, dv(foot, 6)), ankle, knee, hip, sh, neck: add(sh, dv(ha, 4)), head: add(sh, dv(ha, FL.head)),
+      toe2: add(ankle2, dv(p.mirror ? foot : p.sh2 - 90, 6)), ankle2, knee2, el, wr, el2, wr2, bell
+    };
+  }
+  const pt = a => a[0].toFixed(1) + "," + a[1].toFixed(1);
+  const line = pts => "M" + pts.map(pt).join("L");
+  const FIGLIST = [];
+  function mountFig(svg, key) {
+    svg.innerHTML = '<line class="ground" x1="0" y1="110" x2="120" y2="110"/><path class="prop"/>' +
+      '<path class="limb back"/><path class="limb body"/><circle class="head" r="6.5"/>' +
+      '<line class="kb-handle"/><circle class="kb" r="6"/><path class="limb arm"/>';
+    const q = c => svg.querySelector("." + c);
+    const f = { svg, key: null, back: q("back"), body: q("body"), arm: q("arm"), head: q("head"), kb: q("kb"), handle: q("kb-handle"), prop: q("prop") };
+    setFig(f, key); FIGLIST.push(f); return f;
+  }
+  function setFig(f, key) {
+    if (f.key === key) return;
+    f.key = FIGS[key] ? key : "rest";
+    f.prop.setAttribute("d", f.key === "pushup" ? "M66,92.5H102M70,92.5V110M98,92.5V110" : "");
+    drawFig(f, poseAt(FIGS[f.key], performance.now() / 1000));
+  }
+  function drawFig(f, p) {
+    const s = solve(p);
+    f.back.setAttribute("d", line([s.hip, s.knee2, s.ankle2, s.toe2]) + line([s.sh, s.el2, s.wr2]));
+    f.body.setAttribute("d", line([s.toe, s.ankle, s.knee, s.hip, s.sh, s.neck]));
+    f.arm.setAttribute("d", line([s.sh, s.el, s.wr]));
+    f.head.setAttribute("cx", s.head[0].toFixed(1)); f.head.setAttribute("cy", s.head[1].toFixed(1));
+    f.kb.style.display = f.handle.style.display = s.bell ? "" : "none";
+    if (s.bell) {
+      f.kb.setAttribute("cx", s.bell[0].toFixed(1)); f.kb.setAttribute("cy", s.bell[1].toFixed(1));
+      f.handle.setAttribute("x1", s.wr[0].toFixed(1)); f.handle.setAttribute("y1", s.wr[1].toFixed(1));
+      f.handle.setAttribute("x2", s.bell[0].toFixed(1)); f.handle.setAttribute("y2", s.bell[1].toFixed(1));
+    }
+  }
+  function figLoop(now) {
+    for (const f of FIGLIST) if (f.svg.getClientRects().length) drawFig(f, poseAt(FIGS[f.key], now / 1000));
+    requestAnimationFrame(figLoop);
+  }
+  requestAnimationFrame(figLoop);
+
   const POINTS_TO_LEVEL = 3;
+  const FEEL = { 1: "very easy (1)", 2: "easy (2)", 3: "moderate (3)", 4: "hard (4)", 5: "too hard (5)", easy: "too easy", right: "about right", hard: "too hard" };
   const ROUNDS = 5, MINUTES = 20, READY = 10;
 
   // ---------- State ----------
-  const defaultState = () => ({ level: 0, points: 0, hardRun: 0, history: [] });
+  const defaultState = () => ({ level: 0, points: 0, hardRun: 0, easyAdj: 0, history: [] });
   let state = defaultState();
   const LS = "pinkbell-emom-v1";
   try { const s = JSON.parse(localStorage.getItem(LS) || "null"); if (s && Array.isArray(s.history)) state = Object.assign(defaultState(), s); } catch (e) {}
@@ -389,7 +541,9 @@ nav.tabs button[aria-current="page"] { color: var(--bell); background: var(--bel
     return last && last.type === "build" ? "easy" : "build";
   }
   const trainedToday = () => state.history.some(h => h.day === todayKey());
-  function blockFor(type, lv) { return type === "build" ? LEVELS[lv].build : easyFor(lv); }
+  const baseTier = lv => EASY.indexOf(EASY.filter(e => lv >= e.from).pop());
+  const easyTier = lv => Math.max(0, Math.min(EASY.length - 1, baseTier(lv) + (state.easyAdj || 0)));
+  function blockFor(type, lv) { return type === "build" ? LEVELS[lv].build : EASY[easyTier(lv)].block; }
   function streak() {
     const days = new Set(state.history.map(h => h.day));
     let n = 0; const d = new Date();
@@ -445,12 +599,14 @@ nav.tabs button[aria-current="page"] { color: var(--bell); background: var(--bel
     $("log").innerHTML = total ? state.history.slice().reverse().slice(0, 60).map(h => `<li>
       <strong>${new Date(h.ts).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })} · ${h.type === "build" ? "Build" : "Easy"}</strong>
       <span class="num muted">${h.minutes} min</span>
-      <span class="note">Level ${h.level + 1}${h.rate ? " · felt " + ({ easy: "too easy", right: "about right", hard: "too hard" }[h.rate]) : ""}</span></li>`).join("")
+      <span class="note">Level ${h.level + 1}${h.rate ? " · felt " + (FEEL[h.rate] || h.rate) : ""}</span></li>`).join("")
       : `<li class="empty" style="display:block">No sessions yet. Your first one shows up here when you finish it.</li>`;
   }
 
-  const guide = Object.entries(EX).map(([k, e]) => `<details><summary>${esc(e.name)}</summary><ul>${e.how.map(s => `<li>${esc(s)}</li>`).join("")}</ul></details>`).join("");
+  const guide = Object.entries(EX).map(([k, e]) => `<details><summary>${esc(e.name)}</summary><svg class="fig" data-fig="${k}" viewBox="0 -12 120 126" role="img" aria-label="${esc(e.name)} animation"></svg><ul>${e.how.map(s => `<li>${esc(s)}</li>`).join("")}</ul></details>`).join("");
   $("guide").innerHTML = guide;
+  document.querySelectorAll("svg[data-fig]").forEach(svg => mountFig(svg, svg.dataset.fig));
+  const sesFig = mountFig($("sesFig"), "deadlift");
 
   $("levelPick").addEventListener("change", e => { state.level = +e.target.value; state.points = 0; state.hardRun = 0; save(); render(); });
 
@@ -504,6 +660,7 @@ nav.tabs button[aria-current="page"] { color: var(--bell); background: var(--bel
       minute = -1; secsLeft = Math.ceil(-t);
       $("sesMin").textContent = "Get ready";
       const [k, r] = run.block[0];
+      setFig(sesFig, k);
       $("sesEx").innerHTML = `First up: ${esc(EX[k].name)}`;
       $("sesCue").textContent = r ? r + " reps · " + EX[k].cue : EX[k].cue;
       $("sesNext").textContent = "";
@@ -511,6 +668,7 @@ nav.tabs button[aria-current="page"] { color: var(--bell); background: var(--bel
       minute = Math.floor(t / 60); secsLeft = 60 - Math.floor(t % 60);
       const [k, r] = run.block[minute % run.block.length];
       const [nk, nr] = run.block[(minute + 1) % run.block.length];
+      setFig(sesFig, k);
       $("sesMin").textContent = `Minute ${minute + 1} of ${MINUTES} · Round ${Math.floor(minute / run.block.length) + 1} of ${ROUNDS}`;
       $("sesEx").innerHTML = r ? `<b>${esc(r)}</b> ${esc(EX[k].name)}` : esc(EX[k].name);
       $("sesCue").textContent = EX[k].cue;
@@ -557,28 +715,62 @@ nav.tabs button[aria-current="page"] { color: var(--bell); background: var(--bel
     $("clockMain").hidden = true; $("sesControls").hidden = true; $("confirmEnd").hidden = true; $("finish").hidden = false;
     $("sesNext").textContent = "";
     $("finTitle").textContent = mins >= MINUTES ? "20 minutes" : `${mins} minutes`;
-    $("finSub").textContent = run.type === "build" ? "How did that feel? This decides when you level up." : "How did that feel?";
+    $("finSub").textContent = run.type === "build"
+      ? "How hard did that feel? Build days should feel hard (4). Your answer adjusts the plan."
+      : "How hard did that feel? Easy days should feel easy (2–3). Your answer adjusts the plan.";
+    const target = run.type === "build" ? ["4"] : ["2", "3"];
+    document.querySelectorAll("#rateBox button").forEach(b => {
+      const on = target.includes(b.dataset.rate);
+      b.classList.toggle("target", on);
+      const old = b.querySelector(".tag"); if (old) old.remove();
+      if (on) b.insertAdjacentHTML("beforeend", '<span class="tag">Target</span>');
+    });
   }
 
-  document.querySelectorAll("#rateBox button").forEach(b => b.addEventListener("click", () => {
-    const rate = b.dataset.rate, e = run.entry; e.rate = rate;
-    let msg = "";
-    if (run.type === "build" && e.minutes >= MINUTES) {
-      if (rate === "hard") {
-        state.hardRun++;
-        if (state.hardRun >= 2 && state.level > 0) { state.level--; state.points = 0; state.hardRun = 0; msg = `Two hard days in a row, so you're back on Level ${state.level + 1} to consolidate. That's normal.`; }
-        else msg = "Logged. Repeat this level next Build day. If it's too hard twice running, the app steps you back.";
-      } else {
-        state.hardRun = 0;
-        state.points += rate === "easy" ? 2 : 1;
-        if (state.points >= POINTS_TO_LEVEL && state.level < LEVELS.length - 1) {
-          state.level++; state.points = 0; msg = `Level up! Next Build day is Level ${state.level + 1}: ${LEVELS[state.level].name}.`;
-        } else if (state.level === LEVELS.length - 1 && state.points >= POINTS_TO_LEVEL) {
-          msg = "You've owned the full EMOM. Time to think about a 12 kg bell.";
-        } else msg = `Nice. ${POINTS_TO_LEVEL - state.points} more to the next level.`;
+  function levelUp(reason) {
+    state.points = 0; state.hardRun = 0;
+    if (state.level >= LEVELS.length - 1) return reason + " You're on the top level, so it's time for a 12 kg bell.";
+    state.level++;
+    return `${reason} Level up! Next Build day is Level ${state.level + 1}: ${LEVELS[state.level].name}.`;
+  }
+  function adaptBuild(rate, full) {
+    if (!full && rate < 4) return "Logged. Only full 20-minute Build days move your level, so this one doesn't change the plan.";
+    if (!full || rate === 5) {
+      state.hardRun++; state.points = 0;
+      if (state.hardRun >= 2 && state.level > 0) {
+        state.level--; state.hardRun = 0;
+        return `Two too-hard Build days in a row, so you're back on Level ${state.level + 1} to consolidate. That's normal.`;
       }
-    } else if (run.type === "easy") msg = "Easy day logged. Build day tomorrow.";
-    else msg = "Logged. Only full 20-minute Build days count toward levelling up.";
+      return "Too hard, so you'll repeat this level next Build day. If the next one is too hard too, you'll step back a level.";
+    }
+    state.hardRun = 0;
+    if (rate <= 2) return levelUp("Build days should feel hard, and that one didn't.");
+    state.points += rate === 3 ? 2 : 1;
+    if (state.points >= POINTS_TO_LEVEL) return levelUp(rate === 3 ? "Easier than a Build day should be." : "That's three solid Build days at this level.");
+    const left = POINTS_TO_LEVEL - state.points;
+    return rate === 3
+      ? `Moderate, but Build days should feel hard, so you're moving up faster: ${left} point to the next level.`
+      : `Right on target. ${left} more good Build day${left > 1 ? "s" : ""} to the next level.`;
+  }
+  function adaptEasy(rate) {
+    const before = easyTier(state.level);
+    if (rate >= 4) {
+      state.easyAdj = (state.easyAdj || 0) - 1;
+      if (easyTier(state.level) === before) state.easyAdj++;
+      return easyTier(state.level) < before
+        ? "Easy days shouldn't feel hard, so your next ones are gentler. Take longer rests between minutes if you need to."
+        : "Easy days shouldn't feel hard. They're already at the gentlest version, so slow down and take longer rests. Check you're sleeping and eating enough too.";
+    }
+    if (rate === 1) {
+      state.easyAdj = (state.easyAdj || 0) + 1;
+      if (easyTier(state.level) === before) state.easyAdj--;
+      return easyTier(state.level) > before ? "Very easy, so your next Easy days get a little harder." : "Very easy. That's fine on an Easy day. Build day tomorrow.";
+    }
+    return "Right where an Easy day should be. Build day tomorrow.";
+  }
+  document.querySelectorAll("#rateBox button").forEach(b => b.addEventListener("click", () => {
+    const rate = +b.dataset.rate, e = run.entry; e.rate = rate;
+    const msg = run.type === "build" ? adaptBuild(rate, e.minutes >= MINUTES) : adaptEasy(rate);
     save(); closeSession(msg);
   }));
 
