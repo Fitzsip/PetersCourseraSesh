@@ -632,7 +632,10 @@ nav.tabs button[aria-current="page"] { color: var(--bell); background: var(--bel
   }
   const buzz = p => { try { navigator.vibrate && navigator.vibrate(p); } catch (e) {} };
   let wake = null;
-  async function lockScreen() { try { wake = await navigator.wakeLock.request("screen"); } catch (e) { wake = null; } }
+  // In the Android app, the native wrapper keeps the screen on; in a browser, use the Wake Lock API.
+  const nativeAwake = on => { try { window.AndroidApp && window.AndroidApp.keepAwake(on); } catch (e) {} };
+  async function lockScreen() { nativeAwake(true); try { wake = await navigator.wakeLock.request("screen"); } catch (e) { wake = null; } }
+  function releaseScreen() { nativeAwake(false); try { wake && wake.release(); } catch (e) {} }
   document.addEventListener("visibilitychange", () => { if (run && !run.paused && document.visibilityState === "visible") lockScreen(); });
 
   // ---------- Session ----------
@@ -706,7 +709,7 @@ nav.tabs button[aria-current="page"] { color: var(--bell); background: var(--bel
 
   function finish(mins) {
     run.finished = true; cancelAnimationFrame(run.raf);
-    try { wake && wake.release(); } catch (e) {}
+    releaseScreen();
     beep(990, 0.2); setTimeout(() => beep(1320, 0.5), 220); buzz([200, 100, 400]);
     run.entry = { ts: Date.now(), day: todayKey(), type: run.type, level: run.lv, minutes: mins, rate: null };
     state.history.push(run.entry);
@@ -776,7 +779,7 @@ nav.tabs button[aria-current="page"] { color: var(--bell); background: var(--bel
 
   function closeSession(msg) {
     if (run) { run.finished = true; cancelAnimationFrame(run.raf); }
-    try { wake && wake.release(); } catch (e) {}
+    releaseScreen();
     run = null; $("session").hidden = true;
     const t = $("toast"); t.hidden = !msg; t.textContent = msg || "";
     render();
