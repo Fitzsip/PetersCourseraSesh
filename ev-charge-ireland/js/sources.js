@@ -7,6 +7,7 @@ const CACHE_KEY = 'evie.stations.v1';
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 const OCM_URL = 'https://api.openchargemap.io/v3/poi/';
+const OVERPASS_TIMEOUT_MS = 45 * 1000; // per mirror; the public servers can be slow
 const OVERPASS_URLS = [
   'https://overpass-api.de/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
@@ -14,7 +15,7 @@ const OVERPASS_URLS = [
 
 // The whole island: ROI (IE) plus Northern Ireland (GB-NIR).
 const OVERPASS_QUERY = `
-[out:json][timeout:90];
+[out:json][timeout:60];
 (
   area["ISO3166-1"="IE"][admin_level=2];
   area["ISO3166-2"="GB-NIR"];
@@ -44,38 +45,58 @@ export async function fetchOverpass() {
       const data = await getJson(url, {
         method: 'POST',
         body: new URLSearchParams({ data: OVERPASS_QUERY }),
+        signal: AbortSignal.timeout(OVERPASS_TIMEOUT_MS),
       });
       return data.elements.map(fromOverpass);
     } catch (e) {
-      lastErr = e;
+      lastErr = e.name === 'TimeoutError' ? new Error('timed out') : e;
     }
   }
   throw lastErr;
 }
 
-// Loads from every source that works, merges, and reports which ones failed.
-export async function loadStations({ ocmKey, force = false } = {}) {
+// Loads from every source that works and merges them. Calls onUpdate with the
+// merged stations each time a source finishes, so fast sources show up without
+// waiting for slow ones.
+export async function loadStations({ ocmKey, force = false, onUpdate = () => {} } = {}) {
   if (!force) {
     const cached = readCache();
     if (cached) return { ...cached, fromCache: true };
   }
 
-  const tasks = [
-    ['Open Charge Map', fetchOpenChargeMap(ocmKey)],
-    ['OpenStreetMap', fetchOverpass()],
+  // Order matters: earlier sources win when the same site is merged.
+  const sources = [
+    ['Open Charge Map', () => fetchOpenChargeMap(ocmKey)],
+    ['OpenStreetMap', fetchOverpass],
   ];
-  const results = await Promise.allSettled(tasks.map(([, p]) => p));
-
-  const lists = [];
+  const lists = sources.map(() => null);
   const errors = [];
-  results.forEach((r, i) => {
-    if (r.status === 'fulfilled') lists.push(r.value);
-    else errors.push(`${tasks[i][0]}: ${r.reason.message}`);
-  });
-  if (!lists.length) throw new Error(`No data sources could be reached.\n${errors.join('\n')}`);
+  let pending = sources.length;
 
-  const result = { stations: mergeStations(lists), errors, fetchedAt: Date.now() };
-  writeCache(result);
+  const snapshot = () => ({
+    stations: mergeStations(lists.filter(Boolean)),
+    errors: [...errors],
+    pending: sources.filter((_, i) => !lists[i] && !errors.some((e) => e.startsWith(sources[i][0]))).map(([n]) => n),
+    fetchedAt: Date.now(),
+  });
+
+  await Promise.all(
+    sources.map(async ([name, fetchFn], i) => {
+      try {
+        lists[i] = await fetchFn();
+      } catch (e) {
+        errors.push(`${name}: ${e.message}`);
+      }
+      pending--;
+      if (pending) onUpdate(snapshot());
+    }),
+  );
+
+  if (!lists.some(Boolean)) throw new Error(`No data sources could be reached.\n${errors.join('\n')}`);
+
+  const result = snapshot();
+  // Only cache complete data, so a slow source gets another chance next visit.
+  if (!errors.length) writeCache(result);
   return { ...result, fromCache: false };
 }
 

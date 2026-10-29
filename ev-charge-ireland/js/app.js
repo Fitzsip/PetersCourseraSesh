@@ -247,21 +247,28 @@ $('#settings').addEventListener('close', () => {
 
 // ---------- startup ----------
 
+let loadId = 0;
+
 async function init(force = false) {
+  const id = ++loadId;
   setStatus('Loading charging stations…');
-  try {
-    const { stations, errors, fromCache, fetchedAt } = await loadStations({ ocmKey: getKey(), force });
+  const show = ({ stations, errors, fromCache, fetchedAt, pending = [] }) => {
+    if (id !== loadId) return; // a newer load (e.g. after changing the key) has started
     state.stations = stations;
     markers.clear();
     const notes = [];
+    if (pending.length) notes.push(`Still loading ${pending.join(', ')}…`);
     if (fromCache) notes.push(`Data from ${new Date(fetchedAt).toLocaleTimeString('en-IE')}.`);
     if (errors.length) notes.push(`Some sources were unavailable:\n${errors.join('\n')}`);
     if (!getKey()) notes.push('Tip: add a free Open Charge Map key in ⚙︎ Settings for fuller coverage.');
     state.notice = notes.join('\n');
     populateOperators();
     render();
+  };
+  try {
+    show(await loadStations({ ocmKey: getKey(), force, onUpdate: show }));
   } catch (err) {
-    setStatus(err.message, true);
+    if (id === loadId) setStatus(err.message, true);
   }
 }
 
