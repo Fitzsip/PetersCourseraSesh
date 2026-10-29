@@ -44,6 +44,23 @@ It's published to **https://fitzsip.github.io/PetersCourseraSesh/** by
 `.github/workflows/pages.yml` on every push to `master` (one-time setup: repo
 **Settings → Pages → Source: GitHub Actions**).
 
+## Android app
+
+The same app is wrapped as an Android APK with [Capacitor](https://capacitorjs.com).
+`.github/workflows/android.yml` builds it on GitHub (this repo needs no Android tools locally)
+and, on every push to `master`, publishes it as the latest release:
+
+**<https://github.com/Fitzsip/PetersCourseraSesh/releases/latest/download/charge-ireland.apk>**
+
+Open that link on an Android phone, open the downloaded file, and allow "install unknown apps"
+for your browser when asked. It's a debug build for testing: each GitHub build is signed with a
+new temporary key, so to update, uninstall the old app first (your car and key settings will need
+re-entering). A permanent signing key fixes that and is needed for the Play Store anyway.
+
+To build the web part locally: `npm ci && npm run build:web` (output in `www/`). The Android
+project is generated in CI by `npx cap add android` plus `scripts/configure-android.mjs`
+(location permissions, version number, icon from `android-res/`).
+
 ## How the data is combined
 
 | Source | Coverage | Notes |
@@ -93,5 +110,8 @@ js/profile.js     saving the car and battery settings
 js/routing.js     road distances (OSRM)
 js/shared.js      "heading here" data (Supabase)
 supabase/         database setup for "heading here"
+scripts/          Android build helpers
+android-res/      Android app icons
+capacitor.config.json  Android app id, name and settings
 test/             node --test unit tests
 ```
