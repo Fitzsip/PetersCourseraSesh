@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b7a4b" />
   <title>Charge Ireland</title>
   <meta name="description" content="Every public EV charging point in Ireland on one map, whichever network runs it." />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
@@ -17,20 +18,63 @@
       <input id="search-input" type="search" placeholder="Town, Eircode or address" aria-label="Search for a place" />
       <button type="submit">Go</button>
     </form>
-    <button id="locate" type="button" title="Show chargers near me">📍 Near me</button>
-    <button id="settings-btn" type="button" title="Settings" aria-label="Settings">⚙︎</button>
+    <div class="actions">
+      <button id="locate" type="button" class="icon-btn" title="Use my location" aria-label="Use my location">📍</button>
+      <button id="car-btn" type="button" class="car-btn" title="My car">🚗 <span id="car-label">Add car</span></button>
+      <button id="settings-btn" type="button" class="icon-btn" title="Settings" aria-label="Settings">⚙︎</button>
+    </div>
   </header>
+
+  <section id="tripbar" class="tripbar" aria-label="Battery and range">
+    <div id="trip-empty" class="trip-empty">
+      <span>Add your car to see which chargers you can reach and how long charging will take.</span>
+      <button id="trip-add-car" type="button" class="primary">Add my car</button>
+    </div>
+    <div id="trip-controls" class="trip-controls" hidden>
+      <label class="battery">
+        <span class="battery-label">🔋</span>
+        <input id="battery" type="range" min="1" max="100" step="1" aria-label="Battery percentage" />
+        <output id="battery-out">50%</output>
+        <span id="range-out" class="range-out"></span>
+      </label>
+      <label class="km-left">or
+        <input id="km-left" type="number" inputmode="numeric" min="0" max="800" placeholder="km" aria-label="Range shown on your dashboard, in km" />
+        km left
+      </label>
+      <select id="conditions" aria-label="Driving conditions"></select>
+    </div>
+  </section>
 
   <main class="layout">
     <aside class="panel" id="panel">
-      <button id="panel-toggle" class="panel-toggle" type="button" aria-expanded="true">Filters &amp; list</button>
+      <div class="sheet-handle" id="sheet-handle" role="button" tabindex="0" aria-label="Expand or collapse panel"></div>
+      <nav class="tabs" role="tablist">
+        <button role="tab" data-tab="foryou" aria-selected="true">Best for you</button>
+        <button role="tab" data-tab="nearby" aria-selected="false">Nearby</button>
+        <button role="tab" data-tab="filters" aria-selected="false">Filters</button>
+      </nav>
       <div class="panel-body">
-        <section class="filters" aria-label="Filters">
+        <div id="status" class="status" role="status">Loading charging stations…</div>
+
+        <section id="tab-foryou" class="tab" role="tabpanel">
+          <div id="foryou"></div>
+          <p class="footnote">
+            “Likely free” is an <strong>estimate</strong> from the number of plugs, typical busy times and other
+            Charge Ireland drivers heading there. It isn't live data from the charger.
+            Ranges and charge times are approximate.
+          </p>
+        </section>
+
+        <section id="tab-nearby" class="tab" role="tabpanel" hidden>
+          <ol id="list" class="list" aria-label="Nearest chargers"></ol>
+        </section>
+
+        <section id="tab-filters" class="tab filters" role="tabpanel" hidden>
+          <label class="check"><input id="only-compatible" type="checkbox" checked /> Only chargers my car can use</label>
           <fieldset>
             <legend>Connector</legend>
             <div id="connector-filters" class="chips"></div>
           </fieldset>
-
           <label class="field">Minimum power
             <select id="min-kw">
               <option value="0">Any</option>
@@ -40,22 +84,66 @@
               <option value="100">100 kW+ (ultra-rapid)</option>
             </select>
           </label>
-
           <label class="field">Network / operator
             <select id="operator"><option value="">All networks</option></select>
           </label>
-
           <label class="check"><input id="hide-offline" type="checkbox" checked /> Hide chargers reported out of service</label>
         </section>
-
-        <div id="status" class="status" role="status">Loading charging stations…</div>
-
-        <ol id="list" class="list" aria-label="Nearest chargers to the map centre"></ol>
       </div>
     </aside>
 
     <div id="map" class="map" aria-label="Map of charging stations"></div>
   </main>
+
+  <dialog id="car-dialog">
+    <form method="dialog" id="car-form">
+      <h2>My car</h2>
+      <p class="hint">Used to work out your range and charging times. Saved on this device only.</p>
+      <div class="grid2">
+        <label class="field">Make
+          <select id="car-make"></select>
+        </label>
+        <label class="field">Year
+          <input id="car-year" type="number" inputmode="numeric" min="2010" max="2030" placeholder="e.g. 2021" />
+        </label>
+      </div>
+      <label class="field">Model
+        <select id="car-model"></select>
+      </label>
+      <details id="car-details">
+        <summary>Battery and charging details</summary>
+        <p class="hint">Filled in from the model you pick. Adjust if you know your car's real figures.</p>
+        <div class="grid2">
+          <label class="field">Usable battery (kWh)
+            <input id="car-kwh" type="number" step="0.1" min="10" max="200" required />
+          </label>
+          <label class="field">Use (kWh/100 km)
+            <input id="car-use" type="number" step="0.1" min="8" max="40" required />
+          </label>
+          <label class="field">Max rapid (DC) kW
+            <input id="car-dc" type="number" step="1" min="0" max="400" required />
+          </label>
+          <label class="field">Max AC kW
+            <input id="car-ac" type="number" step="0.1" min="2" max="22" required />
+          </label>
+          <label class="field">Rapid plug
+            <select id="car-plug">
+              <option value="CCS">CCS</option>
+              <option value="CHAdeMO">CHAdeMO</option>
+              <option value="">None</option>
+            </select>
+          </label>
+          <label class="field">Keep in reserve (%)
+            <input id="car-reserve" type="number" step="1" min="0" max="40" required />
+          </label>
+        </div>
+      </details>
+      <menu>
+        <button value="cancel" type="submit" formnovalidate>Cancel</button>
+        <button value="save" type="submit" class="primary">Save car</button>
+      </menu>
+    </form>
+  </dialog>
 
   <dialog id="settings">
     <form method="dialog">
@@ -70,7 +158,7 @@
       </label>
       <menu>
         <button value="cancel" type="submit">Cancel</button>
-        <button id="settings-save" value="save" type="submit">Save &amp; reload data</button>
+        <button id="settings-save" value="save" type="submit" class="primary">Save &amp; reload data</button>
       </menu>
     </form>
   </dialog>
