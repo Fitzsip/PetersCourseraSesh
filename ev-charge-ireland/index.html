@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Charge Ireland</title>
+  <meta name="description" content="Every public EV charging point in Ireland on one map, whichever network runs it." />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.min.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>⚡ Charge Ireland</h1>
+    <form id="search" class="search" role="search">
+      <input id="search-input" type="search" placeholder="Town, Eircode or address" aria-label="Search for a place" />
+      <button type="submit">Go</button>
+    </form>
+    <button id="locate" type="button" title="Show chargers near me">📍 Near me</button>
+    <button id="settings-btn" type="button" title="Settings" aria-label="Settings">⚙︎</button>
+  </header>
+
+  <main class="layout">
+    <aside class="panel" id="panel">
+      <button id="panel-toggle" class="panel-toggle" type="button" aria-expanded="true">Filters &amp; list</button>
+      <div class="panel-body">
+        <section class="filters" aria-label="Filters">
+          <fieldset>
+            <legend>Connector</legend>
+            <div id="connector-filters" class="chips"></div>
+          </fieldset>
+
+          <label class="field">Minimum power
+            <select id="min-kw">
+              <option value="0">Any</option>
+              <option value="7">7 kW+</option>
+              <option value="22">22 kW+</option>
+              <option value="50">50 kW+ (rapid)</option>
+              <option value="100">100 kW+ (ultra-rapid)</option>
+            </select>
+          </label>
+
+          <label class="field">Network / operator
+            <select id="operator"><option value="">All networks</option></select>
+          </label>
+
+          <label class="check"><input id="hide-offline" type="checkbox" checked /> Hide chargers reported out of service</label>
+        </section>
+
+        <div id="status" class="status" role="status">Loading charging stations…</div>
+
+        <ol id="list" class="list" aria-label="Nearest chargers to the map centre"></ol>
+      </div>
+    </aside>
+
+    <div id="map" class="map" aria-label="Map of charging stations"></div>
+  </main>
+
+  <dialog id="settings">
+    <form method="dialog">
+      <h2>Settings</h2>
+      <p>
+        Open Charge Map has the most complete Irish data, including ESB ecars, but needs a free API key.
+        Get one at <a href="https://openchargemap.org/site/develop/api" target="_blank" rel="noopener">openchargemap.org</a>.
+        Without a key, the map shows OpenStreetMap data only.
+      </p>
+      <label class="field">Open Charge Map API key
+        <input id="ocm-key" type="text" autocomplete="off" spellcheck="false" />
+      </label>
+      <menu>
+        <button value="cancel" type="submit">Cancel</button>
+        <button id="settings-save" value="save" type="submit">Save &amp; reload data</button>
+      </menu>
+    </form>
+  </dialog>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.min.js"></script>
+  <script src="config.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
