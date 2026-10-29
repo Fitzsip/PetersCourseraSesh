@@ -25,6 +25,7 @@ need to switch between apps.
   get the plug.
 - Filters by connector, minimum power and network, place/Eircode search, and following your
   location while the app is open.
+
 ## Running it
 
 It's a static site with no build step. Open Charge Map needs a free API key; without one, the map
@@ -33,7 +34,7 @@ falls back to OpenStreetMap data only.
 ```bash
 cd ev-charge-ireland
 npm start          # serves on http://localhost:8080
-npm test           # unit tests for parsing and de-duplication
+npm test           # unit tests for parsing, merging and trip planning
 ```
 
 Get a key at <https://openchargemap.org/site/develop/api>, then either paste it into ⚙︎ Settings
