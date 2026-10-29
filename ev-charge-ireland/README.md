@@ -30,7 +30,9 @@ npm test           # unit tests for parsing and de-duplication
 Get a key at <https://openchargemap.org/site/develop/api>, then either paste it into ⚙︎ Settings
 in the app (saved in that browser), or put it in `config.js` so every visitor uses it.
 
-To publish it, any static host works, for example GitHub Pages pointed at this folder.
+It's published to **https://fitzsip.github.io/PetersCourseraSesh/** by
+`.github/workflows/pages.yml` on every push to `master` (one-time setup: repo
+**Settings → Pages → Source: GitHub Actions**).
 
 ## How the data is combined
 
