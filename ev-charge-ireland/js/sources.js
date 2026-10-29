@@ -3,26 +3,26 @@
 
 import { fromOpenChargeMap, fromOverpass, mergeStations } from './normalize.js';
 
-const CACHE_KEY = 'evie.stations.v1';
+const CACHE_KEY = 'evie.stations.v2';
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+const PARTIAL_CACHE_TTL_MS = 15 * 60 * 1000; // retry failed sources sooner
 
 const OCM_URL = 'https://api.openchargemap.io/v3/poi/';
 const OVERPASS_TIMEOUT_MS = 45 * 1000; // per mirror; the public servers can be slow
 const OVERPASS_URLS = [
   'https://overpass-api.de/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
 ];
 
-// The whole island: ROI (IE) plus Northern Ireland (GB-NIR).
+// A bounding box around the island is much lighter for the public servers
+// than an area lookup. It clips a corner of Scotland, removed in fetchOverpass.
 const OVERPASS_QUERY = `
 [out:json][timeout:60];
-(
-  area["ISO3166-1"="IE"][admin_level=2];
-  area["ISO3166-2"="GB-NIR"];
-)->.island;
-nwr["amenity"="charging_station"](area.island);
+nwr["amenity"="charging_station"](51.3,-10.8,55.45,-5.3);
 out center tags;
 `;
+const inScotland = (s) => s.lat > 55.2 && s.lon > -6.05;
 
 export async function fetchOpenChargeMap(apiKey) {
   if (!apiKey) throw new Error('No Open Charge Map API key set');
@@ -47,9 +47,11 @@ export async function fetchOverpass() {
         body: new URLSearchParams({ data: OVERPASS_QUERY }),
         signal: AbortSignal.timeout(OVERPASS_TIMEOUT_MS),
       });
-      return data.elements.map(fromOverpass);
+      return data.elements.map(fromOverpass).filter((st) => !inScotland(st));
     } catch (e) {
-      lastErr = e.name === 'TimeoutError' ? new Error('timed out') : e;
+      if (e.name === 'TimeoutError') lastErr = new Error('timed out');
+      else if (e instanceof TypeError) lastErr = new Error('server busy or unreachable');
+      else lastErr = e;
     }
   }
   throw lastErr;
@@ -95,8 +97,7 @@ export async function loadStations({ ocmKey, force = false, onUpdate = () => {} 
   if (!lists.some(Boolean)) throw new Error(`No data sources could be reached.\n${errors.join('\n')}`);
 
   const result = snapshot();
-  // Only cache complete data, so a slow source gets another chance next visit.
-  if (!errors.length) writeCache(result);
+  writeCache(result);
   return { ...result, fromCache: false };
 }
 
@@ -111,7 +112,9 @@ function readCache() {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
     const c = JSON.parse(raw);
-    return Date.now() - c.fetchedAt < CACHE_TTL_MS ? c : null;
+    // Data missing a source is kept briefly, so the failed source is retried soon.
+    const ttl = c.errors?.length ? PARTIAL_CACHE_TTL_MS : CACHE_TTL_MS;
+    return Date.now() - c.fetchedAt < ttl ? c : null;
   } catch {
     return null;
   }
