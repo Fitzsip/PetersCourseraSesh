@@ -1,11 +1,19 @@
 {
   "name": "charge-ireland",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Every public EV charging point in Ireland on one map, whichever network runs it.",
   "type": "module",
   "scripts": {
     "start": "npx --yes serve -l 8080 .",
-    "test": "node --test"
+    "test": "node --test \"test/*.test.js\"",
+    "build:web": "node scripts/build-web.mjs"
+  },
+  "devDependencies": {
+    "@capacitor/android": "8.6.0",
+    "@capacitor/cli": "8.6.0",
+    "@capacitor/core": "8.6.0",
+    "leaflet": "1.9.4",
+    "leaflet.markercluster": "1.5.3"
   }
 }

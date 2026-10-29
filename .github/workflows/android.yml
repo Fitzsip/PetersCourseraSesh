@@ -1,0 +1,84 @@
+# Builds the Charge Ireland Android app (APK) from ev-charge-ireland/ using
+# Capacitor. Pull requests just check that it builds; pushes to master also
+# publish the APK as the latest GitHub release, downloadable at:
+# https://github.com/Fitzsip/PetersCourseraSesh/releases/latest/download/charge-ireland.apk
+name: Build Android app
+
+on:
+  push:
+    branches: [master]
+    paths: ['ev-charge-ireland/**', '.github/workflows/android.yml']
+  pull_request:
+    paths: ['ev-charge-ireland/**', '.github/workflows/android.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ev-charge-ireland
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ev-charge-ireland/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build web assets
+        run: npm run build:web
+
+      - name: Create and configure Android project
+        run: |
+          npx cap add android
+          node scripts/configure-android.mjs ${{ github.run_number }}
+          npx cap sync android
+
+      - name: Build APK
+        working-directory: ev-charge-ireland/android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Collect APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk charge-ireland.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: charge-ireland-apk
+          path: ev-charge-ireland/charge-ireland.apk
+
+      - name: Publish release
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-build-${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          name: Charge Ireland for Android (build ${{ github.run_number }})
+          make_latest: true
+          files: ev-charge-ireland/charge-ireland.apk
+          body: |
+            Android test build of Charge Ireland, built from ${{ github.sha }}.
+
+            **Install:** download `charge-ireland.apk` on your Android phone, open it, and allow
+            "install unknown apps" for your browser when asked.
+
+            This is a debug build for testing, not a Play Store release.

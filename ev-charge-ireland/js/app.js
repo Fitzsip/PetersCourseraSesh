@@ -557,6 +557,17 @@ $('#car-dialog').addEventListener('close', () => {
 
 // ---------- buttons inside cards and popups ----------
 
+// In the Android app there are no browser tabs: navigating to an outside link
+// hands it to the system, so Directions opens in Google Maps.
+if (window.Capacitor?.isNativePlatform?.()) {
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest('a[target="_blank"]');
+    if (!a) return;
+    e.preventDefault();
+    window.location.href = a.href;
+  });
+}
+
 document.addEventListener('click', async (e) => {
   const el = e.target.closest('[data-action]');
   if (!el) return;

@@ -1,0 +1,12 @@
+{
+  "appId": "ie.chargeireland.app",
+  "appName": "Charge Ireland",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https",
+    "hostname": "app.chargeireland.ie"
+  },
+  "android": {
+    "backgroundColor": "#0b7a4b"
+  }
+}
