@@ -34,7 +34,7 @@ cp -r res/* build/app/res/
 cp AndroidManifest.xml build/app/
 
 javac -nowarn --release 8 -Xlint:-options -cp "$TOOLS/android-all-29.jar" -d build/classes $(find src -name '*.java')
-java -jar "$TOOLS/dx.jar" --dex --min-sdk-version=26 --output=build/app/classes.dex build/classes
+java -cp "$TOOLS/dx.jar" com.android.dx.command.Main --dex --min-sdk-version=26 --output=build/app/classes.dex build/classes
 
 cat > build/app/apktool.yml <<YML
 version: 2.10.0
