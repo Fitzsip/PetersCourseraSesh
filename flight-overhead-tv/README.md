@@ -213,6 +213,8 @@ Photos © their photographers via planespotters.net.
 
 ## Changelog
 
+* **1.4.0**: Shared with the new Android phone app (`../flight-overhead-android`):
+  touch layout, phone location, notifications when the app is closed.
 * **1.3.1**: Landmarks on the radar (Cork City, Little Island, Blarney, Ballincollig);
   edit `LANDMARKS` in `js/data.js` to add your own.
 * **1.3.0**: Select planes in the Nearby list (▲▼, OK) for a detail card with climb rate,

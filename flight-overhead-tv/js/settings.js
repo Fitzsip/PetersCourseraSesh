@@ -8,6 +8,7 @@ var Settings = (function () {
     { key: 'address', label: 'Eircode, address or coordinates', type: 'text' },
     { key: 'lookupCountry', label: 'Search in', type: 'choice', options: ['Ireland', 'United Kingdom', 'United States', 'Anywhere'] },
     { label: 'Find my house from the address', type: 'action', run: findAddress },
+    { label: "Use this phone's location", type: 'action', run: useDeviceLocation, only: 'android' },
     { key: 'homeLat', label: 'Home latitude', type: 'number' },
     { key: 'homeLon', label: 'Home longitude', type: 'number' },
     { key: 'homeName', label: 'Location name', type: 'text' },
@@ -21,10 +22,12 @@ var Settings = (function () {
     { key: 'showRoutes', label: 'Look up routes', type: 'bool' },
     { key: 'showPhotos', label: 'Show aircraft photos', type: 'bool' },
     { key: 'alertFilter', label: 'Pop up for', type: 'choice', options: ['all', 'private jets'] },
-    { key: 'ntfyTopic', label: 'Phone push topic (ntfy)', type: 'text' },
-    { key: 'pushFor', label: 'Push to phone for', type: 'choice', options: ['private jets', 'all alerts'] },
-    { key: 'quietHours', label: 'No pushes 22:00\u201308:00', type: 'bool' },
-    { label: 'Send a test push', type: 'action', run: testPush },
+    { key: 'ntfyTopic', label: 'Phone push topic (ntfy)', type: 'text', only: 'tv' },
+    { key: 'pushFor', label: 'Push to phone for', type: 'choice', options: ['private jets', 'all alerts'], only: 'tv' },
+    { key: 'backgroundAlerts', label: 'Notify when the app is closed', type: 'bool', only: 'android' },
+    { key: 'notifyFor', label: 'Notifications for', type: 'choice', options: ['private jets', 'all alerts'], only: 'android' },
+    { key: 'quietHours', label: 'Quiet 22:00\u201308:00', type: 'bool' },
+    { label: 'Send a test push', type: 'action', run: testPush, only: 'tv' },
     { key: 'flightawareKey', label: 'FlightAware API key', type: 'text' },
     { key: 'demo', label: 'Demo mode (simulated planes)', type: 'bool' }
   ];
@@ -57,6 +60,20 @@ var Settings = (function () {
     }, function (err) { message(err.message, true); });
   }
 
+  function useDeviceLocation() {
+    if (!navigator.geolocation) { message('This device cannot share its location.', true); return; }
+    message('Finding this phone\u2026');
+    navigator.geolocation.getCurrentPosition(function (pos) {
+      setValue('homeLat', Math.round(pos.coords.latitude * 1e5) / 1e5);
+      setValue('homeLon', Math.round(pos.coords.longitude * 1e5) / 1e5);
+      message('Set to where this phone is (accurate to about ' + Math.round(pos.coords.accuracy) +
+        ' m). Check it, then Save.');
+    }, function (err) {
+      message(err.code === 1 ? 'Location permission was refused. Allow it in Android settings, or use the address.'
+        : 'Could not get a location fix. Try near a window, or use the address.', true);
+    }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+  }
+
   function testPush() {
     if (!String(draft.ntfyTopic || '').trim()) { message('Enter an ntfy topic first.', true); return; }
     message('Sending\u2026');
@@ -72,8 +89,8 @@ var Settings = (function () {
     errorEl = document.getElementById('settings-error');
     document.getElementById('settings-save').onclick = save;
     document.getElementById('settings-cancel').onclick = close;
-    document.getElementById('settings-version').textContent = 'Flight Overhead v' + APP_VERSION + ' · ' +
-      CHANGELOG.map(function (c) { return 'v' + c[0] + ': ' + c[1]; }).join(' · ');
+    document.getElementById('settings-version').textContent = 'Flight Overhead v' + APP_VERSION +
+      ' \u00b7 new: ' + CHANGELOG[0][1];
   }
 
   function display(f) {
@@ -87,6 +104,7 @@ var Settings = (function () {
     rowsEl.innerHTML = '';
     rows = [];
     FIELDS.forEach(function (f) {
+      if (f.only && f.only !== PLATFORM) return;
       var row = document.createElement('div');
       row.className = 'row field';
       row.tabIndex = 0;

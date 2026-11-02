@@ -3,8 +3,12 @@
  * Settings screen (press OK); those changes are saved on the TV and win over
  * these defaults.
  */
-var APP_VERSION = '1.3.1';
+// 'android' when running inside the phone app (it loads index.html?platform=android).
+var PLATFORM = /[?&]platform=android\b/.test(location.search) ? 'android' : 'tv';
+
+var APP_VERSION = '1.4.0';
 var CHANGELOG = [
+  ['1.4.0', 'Android phone app: touch layout, phone location, notifications when the app is closed'],
   ['1.3.1', 'Landmarks on the radar: Cork City, Little Island, Blarney, Ballincollig'],
   ['1.3.0', 'Select planes in the Nearby list with the remote for a detail card'],
   ['1.2.0', 'With a FlightAware key: origin and destination for private jets, take-off time'],
@@ -52,6 +56,10 @@ var DEFAULT_CONFIG = {
   ntfyTopic: '',
   pushFor: 'private jets', // 'private jets' or 'all alerts'
   quietHours: true,        // no pushes between 22:00 and 08:00
+
+  // Phone app only: keep watching and show Android notifications when the app is closed.
+  backgroundAlerts: true,
+  notifyFor: 'private jets', // 'private jets' or 'all alerts'
 
   demo: false,             // simulated planes, handy for testing indoors
 

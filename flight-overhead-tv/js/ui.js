@@ -152,6 +152,7 @@ var UI = (function () {
     root.appendChild(body);
     root.appendChild(timer);
     card.root = root;
+    root.onclick = function () { dismiss(card); };
     (opts.top ? els.details : els.alerts).appendChild(root);
     cards.push(card);
 

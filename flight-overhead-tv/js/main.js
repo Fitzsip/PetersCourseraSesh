@@ -96,7 +96,8 @@
 
   function pushAlert(a, cfg) {
     var isJet = a.flag.kind === 'private-jet';
-    if (cfg.demo || !cfg.ntfyTopic || (cfg.pushFor !== 'all alerts' && !isJet)) return;
+    // The phone app notifies natively instead.
+    if (PLATFORM === 'android' || cfg.demo || !cfg.ntfyTopic || (cfg.pushFor !== 'all alerts' && !isJet)) return;
     Promise.all([
       withTimeout(cfg.showRoutes ? Providers.lookupRoute(a) : Promise.resolve(null), 4000),
       withTimeout(History.lookup(a, cfg), 4000)
@@ -134,6 +135,7 @@
   function applyConfig(cfg) {
     state.cfg = cfg;
     saveConfig(cfg);
+    syncAndroid();
     tracker = new Tracker();
     state.trails = tracker.trails;
     state.aircraft = [];
@@ -164,8 +166,43 @@
   }
 
   function exitApp() {
+    if (window.AndroidBridge) { AndroidBridge.exit(); return; }
     try { tizen.application.getCurrentApplication().exit(); } catch (e) { /* not on a TV */ }
   }
+
+  // ---- Phone app (Android) ----
+
+  // Hands settings and lookup tables to the Android side, which watches for planes
+  // and posts notifications while the app is closed.
+  function syncAndroid() {
+    if (!window.AndroidBridge) return;
+    try {
+      AndroidBridge.saveConfig(JSON.stringify(state.cfg));
+    } catch (e) { /* bridge unavailable */ }
+  }
+
+  function setupAndroid() {
+    window.addEventListener('orientationchange', function () { setTimeout(Radar.resize, 300); });
+    document.getElementById('btn-settings').onclick = function () { openSettings(); };
+    document.getElementById('btn-test').onclick = testAlert;
+    if (!window.AndroidBridge) return;
+    try {
+      AndroidBridge.setTables(JSON.stringify({
+        bizjetTypes: Object.keys(BIZJET_TYPES), airlinerTypes: Object.keys(AIRLINER_TYPES),
+        operators: BIZJET_OPERATORS, typeNames: AIRCRAFT_TYPES, airlines: AIRLINES
+      }));
+    } catch (e) { /* bridge unavailable */ }
+    syncAndroid();
+  }
+
+  // Called by the phone's Back button. Returns true when the app used it.
+  window.appBack = function () {
+    if (Settings.isOpen()) {
+      Settings.handleKey({ keyCode: 10009, preventDefault: function () {} });
+      return true;
+    }
+    return UI.dismissNewest() || clearSelection();
+  };
 
   // ---- Selecting planes in the Nearby list ----
 
@@ -262,11 +299,17 @@
 
   function start() {
     state.cfg = loadConfig();
+    // Apply the phone layout before the radar measures its canvas.
+    if (PLATFORM === 'android') document.documentElement.className += ' android';
     UI.init();
     Settings.init();
     Radar.init(document.getElementById('radar'));
-    setupTv();
-    antiBurnIn();
+    if (PLATFORM === 'android') {
+      setupAndroid();
+    } else {
+      setupTv();
+      antiBurnIn();
+    }
     document.addEventListener('keydown', onKey);
     UI.setNearbyClick(function (hex) {
       state.selectedHex = hex;
