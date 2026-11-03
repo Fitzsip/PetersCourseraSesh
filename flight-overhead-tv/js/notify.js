@@ -23,7 +23,8 @@ var Notify = (function () {
     var url = 'https://ntfy.sh/' + encodeURIComponent(topic) +
       '?title=' + encodeURIComponent(title) +
       '&tags=' + encodeURIComponent(opts.tags || 'small_airplane') +
-      '&priority=' + (opts.priority || 'high');
+      '&priority=' + (opts.priority || 'high') +
+      (opts.click ? '&click=' + encodeURIComponent(opts.click) : '');
     return new Promise(function (resolve, reject) {
       var xhr = new XMLHttpRequest();
       xhr.open('POST', url, true);

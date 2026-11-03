@@ -25,12 +25,15 @@ final class AlertLogic {
         final String title;
         final String body;
         final boolean privateJet;
+        /** Flightradar24 page for the flight, or "" if there is nothing to look it up by. */
+        final String trackingUrl;
 
-        Alert(String hex, String title, String body, boolean privateJet) {
+        Alert(String hex, String title, String body, boolean privateJet, String trackingUrl) {
             this.hex = hex;
             this.title = title;
             this.body = body;
             this.privateJet = privateJet;
+            this.trackingUrl = trackingUrl;
         }
     }
 
@@ -156,7 +159,7 @@ final class AlertLogic {
             if (!Double.isNaN(alt)) body.append(", ").append(altitude(alt, cfg));
             if (overheadNow) body.append(", overhead now");
             else if (willPass && cpaSec <= 900) body.append(", over the house in ~").append(eta(cpaSec));
-            out.add(new Alert(hex, title, body.toString(), jet));
+            out.add(new Alert(hex, title, body.toString(), jet, trackingUrl(callsign, reg)));
         }
 
         Iterator<Map.Entry<String, Long>> it = lastInZone.entrySet().iterator();
@@ -164,6 +167,20 @@ final class AlertLogic {
             if (now - it.next().getValue() > cooldownMs) it.remove();
         }
         return out;
+    }
+
+    /** Same as trackingUrl() in js/data.js. */
+    static String trackingUrl(String callsign, String reg) {
+        try {
+            if (callsign.length() > 0) return "https://www.flightradar24.com/" + java.net.URLEncoder.encode(callsign, "UTF-8");
+            if (reg.length() > 0) {
+                return "https://www.flightradar24.com/data/aircraft/"
+                        + java.net.URLEncoder.encode(reg.toLowerCase(Locale.ROOT), "UTF-8");
+            }
+        } catch (java.io.UnsupportedEncodingException e) {
+            // UTF-8 is always available
+        }
+        return "";
     }
 
     static String compass(double deg) {

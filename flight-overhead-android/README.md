@@ -5,6 +5,8 @@ phones, with:
 
 * a portrait touch layout: tap a plane in the list for details, tap a popup to close it,
   and the Back button closes settings and popups;
+* **Track on Flightradar24** on every popup, and on each notification, to follow the
+  flight live in the Flightradar24 app or website;
 * **Use this phone's location** in Settings to set your home position from the phone's
   GPS while you're at home;
 * **notifications when the app is closed**: a small background service checks for planes

@@ -173,3 +173,10 @@ var LANDMARKS = [
   { name: 'Blarney', lat: 51.9336, lon: -8.5667 },
   { name: 'Ballincollig', lat: 51.8880, lon: -8.5900 }
 ];
+
+// Flightradar24 page for an aircraft: the live flight by callsign, else the registration's history.
+function trackingUrl(a) {
+  if (a.callsign) return 'https://www.flightradar24.com/' + encodeURIComponent(a.callsign);
+  if (a.reg) return 'https://www.flightradar24.com/data/aircraft/' + encodeURIComponent(a.reg.toLowerCase());
+  return '';
+}

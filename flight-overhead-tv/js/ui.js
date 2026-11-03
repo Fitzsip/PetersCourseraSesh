@@ -150,6 +150,26 @@ var UI = (function () {
     body.appendChild(stats);
     root.appendChild(photo);
     root.appendChild(body);
+    var url = trackingUrl(a);
+    if (url && PLATFORM === 'android') {
+      var track = el('button', 'track-btn', 'Track on Flightradar24 \u203a');
+      track.type = 'button';
+      track.onclick = function (e) {
+        e.stopPropagation();
+        if (window.AndroidBridge && AndroidBridge.openUrl) AndroidBridge.openUrl(url);
+        else window.open(url, '_blank');
+      };
+      body.insertBefore(track, stats.nextSibling);
+    } else if (url) {
+      var qr = el('div', 'alert-qr');
+      var code = document.createElement('canvas');
+      code.width = 200;
+      if (QR.draw(code, url)) {
+        qr.appendChild(code);
+        qr.appendChild(el('div', 'qr-caption', 'Scan to track on Flightradar24'));
+        root.appendChild(qr);
+      }
+    }
     root.appendChild(timer);
     card.root = root;
     root.onclick = function () { dismiss(card); };

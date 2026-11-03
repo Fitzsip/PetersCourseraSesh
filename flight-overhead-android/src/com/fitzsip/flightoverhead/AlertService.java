@@ -8,6 +8,7 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -153,16 +154,23 @@ public class AlertService extends Service {
         if (appVisible || AlertLogic.inQuietHours(cfg, Calendar.getInstance())) return true;
         NotificationManager nm = getSystemService(NotificationManager.class);
         for (AlertLogic.Alert a : alerts) {
-            Notification n = new Notification.Builder(this, CHANNEL_ALERTS)
+            Notification.Builder b = new Notification.Builder(this, CHANNEL_ALERTS)
                     .setSmallIcon(icon())
                     .setContentTitle(a.title)
                     .setContentText(a.body.split("\n")[0])
                     .setStyle(new Notification.BigTextStyle().bigText(a.body))
                     .setColor(a.privateJet ? 0xffff7ad9 : 0xffffb547)
                     .setContentIntent(openApp())
-                    .setAutoCancel(true)
-                    .build();
-            nm.notify(a.hex.hashCode(), n);
+                    .setAutoCancel(true);
+            if (a.trackingUrl.length() > 0) {
+                // Opens the Flightradar24 app if installed, otherwise the website.
+                Intent view = new Intent(Intent.ACTION_VIEW, Uri.parse(a.trackingUrl))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                PendingIntent track = PendingIntent.getActivity(this, a.hex.hashCode(), view,
+                        PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+                b.addAction(new Notification.Action.Builder(null, "Track on Flightradar24", track).build());
+            }
+            nm.notify(a.hex.hashCode(), b.build());
         }
         return true;
     }

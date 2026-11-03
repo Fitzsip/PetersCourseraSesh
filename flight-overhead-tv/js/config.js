@@ -6,8 +6,9 @@
 // 'android' when running inside the phone app (it loads index.html?platform=android).
 var PLATFORM = /[?&]platform=android\b/.test(location.search) ? 'android' : 'tv';
 
-var APP_VERSION = '1.4.0';
+var APP_VERSION = '1.5.0';
 var CHANGELOG = [
+  ['1.5.0', 'Track any flight on Flightradar24: QR code on the TV, button on the phone, tap a notification'],
   ['1.4.0', 'Android phone app: touch layout, phone location, notifications when the app is closed'],
   ['1.3.1', 'Landmarks on the radar: Cork City, Little Island, Blarney, Ballincollig'],
   ['1.3.0', 'Select planes in the Nearby list with the remote for a detail card'],

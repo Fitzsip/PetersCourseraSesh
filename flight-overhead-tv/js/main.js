@@ -123,7 +123,7 @@
         lines.push('In the air ' + (mins >= 60 ? Math.floor(mins / 60) + ' h ' : '') + (mins % 60) + ' min' +
           (hist.countries.length ? ' \u00b7 Today: ' + hist.countries.join(' \u2192 ') : ''));
       }
-      return Notify.send(cfg, title, lines.join('\n'));
+      return Notify.send(cfg, title, lines.join('\n'), { click: trackingUrl(a) });
     }).then(null, function (e) { UI.setStatus('Phone push failed: ' + e.message, true); });
   }
 

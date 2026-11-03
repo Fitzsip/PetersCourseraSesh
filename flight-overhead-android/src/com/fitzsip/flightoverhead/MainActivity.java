@@ -2,8 +2,11 @@ package com.fitzsip.flightoverhead;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.ActivityNotFoundException;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
+import android.net.Uri;
 import android.os.Bundle;
 import android.webkit.GeolocationPermissions;
 import android.webkit.JavascriptInterface;
@@ -120,6 +123,23 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void setTables(String json) {
             getSharedPreferences(AlertService.PREFS, MODE_PRIVATE).edit().putString("tables", json).apply();
+        }
+
+        /** Opens a Flightradar24 link in its app, or the browser. */
+        @JavascriptInterface
+        public void openUrl(String url) {
+            if (url == null || !url.startsWith("https://")) return;
+            final Intent view = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        startActivity(view);
+                    } catch (ActivityNotFoundException e) {
+                        // no app can open links
+                    }
+                }
+            });
         }
 
         @JavascriptInterface
