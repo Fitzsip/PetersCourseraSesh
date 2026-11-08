@@ -180,3 +180,10 @@ function trackingUrl(a) {
   if (a.reg) return 'https://www.flightradar24.com/data/aircraft/' + encodeURIComponent(a.reg.toLowerCase());
   return '';
 }
+
+// For a jet seen earlier: its registration page lists recent flights and where they came from,
+// which still works after the flight has landed.
+function historyUrl(e) {
+  if (e.reg) return 'https://www.flightradar24.com/data/aircraft/' + encodeURIComponent(String(e.reg).toLowerCase());
+  return trackingUrl(e);
+}

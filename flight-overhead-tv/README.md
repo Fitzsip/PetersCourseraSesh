@@ -87,6 +87,7 @@ FlightAware to hide them won't have history.
 | ▲ ▼ | Highlight a plane in the Nearby list (ringed on the radar) |
 | **OK** | Details for the highlighted plane (OK again closes them); otherwise dismiss the newest popup or open settings |
 | **Red** | Show a test popup for the nearest plane |
+| **Green** | Private jets from the last 24 hours, each with a Flightradar24 QR code |
 | **Back** / ◀ | Dismiss the popup, clear the highlight, close settings, or exit |
 | ▲ ▼ ◀ ▶ | Move and change values in settings |
 
@@ -213,6 +214,8 @@ Photos © their photographers via planespotters.net.
 
 ## Changelog
 
+* **1.6.0**: Private jets from the last 24 hours, with Flightradar24 links: press the
+  **green** button on the TV (a QR code per jet), or **Jets (24h)** on the phone.
 * **1.5.0**: Every popup links to the flight on Flightradar24: a QR code to scan on the
   TV, a button on the phone, and tapping an ntfy push opens it.
 * **1.4.0**: Shared with the new Android phone app (`../flight-overhead-android`):

@@ -151,6 +151,10 @@ public class AlertService extends Service {
         JSONArray ac = fetch(cfg);
         if (ac == null) return false;
         List<AlertLogic.Alert> alerts = logic.evaluate(ac, cfg, System.currentTimeMillis());
+        if (!appVisible) {
+            // The app records jets itself while it is open.
+            for (JSONObject jet : logic.jetsInZone) JetLog.record(this, jet);
+        }
         if (appVisible || AlertLogic.inQuietHours(cfg, Calendar.getInstance())) return true;
         NotificationManager nm = getSystemService(NotificationManager.class);
         for (AlertLogic.Alert a : alerts) {

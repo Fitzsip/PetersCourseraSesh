@@ -16,6 +16,8 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
+import org.json.JSONObject;
+
 /** Shows the same app as the TV (bundled in assets/www) in a full-screen WebView. */
 public class MainActivity extends Activity {
 
@@ -123,6 +125,20 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void setTables(String json) {
             getSharedPreferences(AlertService.PREFS, MODE_PRIVATE).edit().putString("tables", json).apply();
+        }
+
+        @JavascriptInterface
+        public void recordJet(String json) {
+            try {
+                JetLog.record(MainActivity.this, new JSONObject(json));
+            } catch (Exception e) {
+                // ignore malformed entries
+            }
+        }
+
+        @JavascriptInterface
+        public String getJetLog() {
+            return JetLog.read(MainActivity.this).toString();
         }
 
         /** Opens a Flightradar24 link in its app, or the browser. */

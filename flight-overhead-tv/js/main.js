@@ -3,7 +3,7 @@
   'use strict';
 
   var STORAGE_KEY = 'flightOverhead.config';
-  var KEY = { ENTER: 13, BACK: 10009, ESC: 27, RED: 403, T: 84, LEFT: 37, UP: 38, DOWN: 40 };
+  var KEY = { ENTER: 13, BACK: 10009, ESC: 27, RED: 403, GREEN: 404, T: 84, J: 74, LEFT: 37, UP: 38, DOWN: 40 };
   var NEARBY_SHOWN = 7;           // matches the side panel list length
   var SELECTION_IDLE_MS = 120000; // drop the highlight after 2 minutes without key presses
 
@@ -71,6 +71,11 @@
         UI.showAlert(a, cfg);
         pushAlert(a, cfg);
       });
+      if (!cfg.demo) {
+        result.aircraft.forEach(function (a) {
+          if (a.inZone && a.flag.kind === 'private-jet') JetLog.record(a);
+        });
+      }
       UI.refreshAlerts(result.aircraft, cfg);
       if (state.selectedHex && visibleHexes().indexOf(state.selectedHex) < 0) state.selectedHex = null;
       renderSide();
@@ -185,6 +190,7 @@
     window.addEventListener('orientationchange', function () { setTimeout(Radar.resize, 300); });
     document.getElementById('btn-settings').onclick = function () { openSettings(); };
     document.getElementById('btn-test').onclick = testAlert;
+    document.getElementById('btn-jets').onclick = function () { JetLog.show(effectiveConfig()); };
     if (!window.AndroidBridge) return;
     try {
       AndroidBridge.setTables(JSON.stringify({
@@ -197,6 +203,10 @@
 
   // Called by the phone's Back button. Returns true when the app used it.
   window.appBack = function () {
+    if (JetLog.isOpen()) {
+      JetLog.close();
+      return true;
+    }
     if (Settings.isOpen()) {
       Settings.handleKey({ keyCode: 10009, preventDefault: function () {} });
       return true;
@@ -208,6 +218,9 @@
 
   function renderSide() {
     UI.renderSide({ cfg: effectiveConfig(), aircraft: state.aircraft, selectedHex: state.selectedHex });
+    var jets = JetLog.count();
+    var jc = document.getElementById('jetcount');
+    jc.textContent = jets ? jets + ' private jet' + (jets === 1 ? '' : 's') + ' in the last 24 h \u203a' : '';
   }
 
   function visibleHexes() {
@@ -241,6 +254,7 @@
 
   function onKey(e) {
     if (Settings.handleKey(e)) return;
+    if (JetLog.handleKey(e, effectiveConfig())) return;
     lastKeyAt = Date.now();
     switch (e.keyCode) {
       case KEY.UP:
@@ -264,6 +278,10 @@
       case KEY.T:
         testAlert();
         break;
+      case KEY.GREEN:
+      case KEY.J:
+        JetLog.show(effectiveConfig());
+        break;
       default:
         return;
     }
@@ -273,6 +291,7 @@
   function setupTv() {
     try {
       tizen.tvinputdevice.registerKey('ColorF0Red');
+      tizen.tvinputdevice.registerKey('ColorF1Green');
     } catch (e) { /* not on a TV */ }
     try {
       // Keep the TV's screen saver from kicking in while the radar is showing.
@@ -303,6 +322,8 @@
     if (PLATFORM === 'android') document.documentElement.className += ' android';
     UI.init();
     Settings.init();
+    JetLog.init();
+    document.getElementById('jetcount').onclick = function () { JetLog.show(effectiveConfig()); };
     Radar.init(document.getElementById('radar'));
     if (PLATFORM === 'android') {
       setupAndroid();

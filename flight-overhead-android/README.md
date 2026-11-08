@@ -7,6 +7,8 @@ phones, with:
   and the Back button closes settings and popups;
 * **Track on Flightradar24** on every popup, and on each notification, to follow the
   flight live in the Flightradar24 app or website;
+* **Jets (24h)**: private jets from the last 24 hours, including ones the background
+  watcher saw while the app was closed; tap one to open it in Flightradar24;
 * **Use this phone's location** in Settings to set your home position from the phone's
   GPS while you're at home;
 * **notifications when the app is closed**: a small background service checks for planes

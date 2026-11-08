@@ -89,9 +89,13 @@ final class AlertLogic {
         return airlinerTypes.contains(type) && r.length() > 0 && callsign.replace("-", "").equals(r);
     }
 
+    /** Private jets in the alert zone during the last evaluate(), for the 24-hour list. */
+    final List<JSONObject> jetsInZone = new ArrayList<JSONObject>();
+
     /** Returns the aircraft (from a readsb "ac" array) that should be announced now. */
     List<Alert> evaluate(JSONArray ac, JSONObject cfg, long now) {
         List<Alert> out = new ArrayList<Alert>();
+        jetsInZone.clear();
         double homeLat = cfg.optDouble("homeLat"), homeLon = cfg.optDouble("homeLon");
         double radius = cfg.optDouble("alertRadiusKm", 2.5);
         double jetRadius = Math.max(radius, cfg.optDouble("jetAlertRadiusKm", 10));
@@ -141,6 +145,22 @@ final class AlertLogic {
                     || (altOk && jet && dist <= jetRadius);
             if (!inZone) continue;
 
+            String typeName = typeNames.containsKey(type) ? typeNames.get(type) : a.optString("desc", type);
+            if (jet) {
+                // Same fields as js/jetlog.js.
+                JSONObject entry = new JSONObject();
+                try {
+                    entry.put("hex", hex).put("callsign", callsign).put("reg", reg).put("type", typeName)
+                            .put("operator", a.optString("ownOp", ""))
+                            .put("closestKm", Math.round(dist * 10) / 10.0)
+                            .put("altFt", Double.isNaN(alt) ? JSONObject.NULL : (Object) alt)
+                            .put("firstSeen", now).put("lastSeen", now);
+                } catch (Exception ignored) {
+                    // never thrown for these values
+                }
+                jetsInZone.add(entry);
+            }
+
             Long last = lastInZone.get(hex);
             lastInZone.put(hex, now);
             if ((last != null && now - last <= cooldownMs) || (jetsOnly && !jet)) continue;
@@ -151,7 +171,6 @@ final class AlertLogic {
             body.append(name);
             String airline = callsign.matches("^[A-Z]{3}\\d.*") ? airlines.get(callsign.substring(0, 3)) : null;
             if (airline != null) body.append(" · ").append(airline);
-            String typeName = typeNames.containsKey(type) ? typeNames.get(type) : a.optString("desc", type);
             if (typeName.length() > 0) body.append(" · ").append(typeName);
             if (reg.length() > 0 && !reg.equals(callsign)) body.append(" · ").append(reg);
             body.append('\n').append(dist(dist, cfg)).append(' ').append(compass(Math.toDegrees(Math.atan2(x, y))))
