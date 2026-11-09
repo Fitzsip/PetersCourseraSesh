@@ -40,8 +40,25 @@ frozen when it isn't.
 - If it still never finishes: force-close WhatsApp, restart the phone, and try again.
 - Choose a plain destination (*Save to Files* on iPhone, or Google Drive on Android) rather than
   email or another chat app. Those can choke on a big attachment.
-- Some versions of WhatsApp have capped how many messages one export contains. After loading,
-  check that the **first message date** in the Overview matches when you really started chatting.
+- WhatsApp's built-in export is widely reported to include only the **most recent ~40,000
+  messages** (about 10,000 with media), with no warning. After loading, check the **first
+  message date** in the Overview. For a long relationship it will likely be recent, not the
+  real start.
+
+### Getting the full history (beyond ~40,000 messages)
+
+WhatsApp's own export can't do it, and it has no way to pick a date range. The full history is
+in the phone's WhatsApp database, which you can read from a backup on your own computer with the
+open-source [WhatsApp Chat Exporter](https://github.com/KnugiHK/Whatsapp-Chat-Exporter). It runs
+locally, so the chat stays private.
+
+- **iPhone:** make a Finder/iTunes backup of the phone to your Mac/PC, then run the exporter in
+  iOS mode against that backup. Encrypted backups are supported.
+- **Android:** in WhatsApp turn on **end-to-end encrypted backup** using the **64-digit key**
+  option (write the key down), let it back up, copy `msgstore.db.crypt15` from the phone to your
+  computer, and run the exporter with that key.
+
+Follow the exporter's README for the exact commands. It outputs HTML and JSON.
 
 ## What it shows
 
