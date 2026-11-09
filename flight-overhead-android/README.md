@@ -9,6 +9,8 @@ phones, with:
   flight live in the Flightradar24 app or website;
 * **Jets & helis**: private jets and helicopters from the last 24 hours, including ones the background
   watcher saw while the app was closed; tap one to open it in Flightradar24;
+* aircraft linked to **celebrities and other well-known people** (gold ★, notified like
+  private jets), from the same list as the TV app;
 * **Use this phone's location** in Settings to set your home position from the phone's
   GPS while you're at home;
 * **notifications when the app is closed**: a small background service checks for planes

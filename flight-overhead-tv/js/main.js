@@ -115,10 +115,12 @@
       withTimeout(History.lookup(a, cfg), 4000)
     ]).then(function (extra) {
       var route = extra[0], hist = extra[1];
-      var what = isJet ? 'Private jet' : isHeli ? 'Helicopter' : 'Flight';
+      var what = a.flag.person ? '\u2b50 ' + a.flag.label + (isHeli ? ' helicopter' : ' jet')
+        : isJet ? 'Private jet' : isHeli ? a.flag.label : 'Flight';
       var title = what + (a.overheadNow ? ' overhead' : ' approaching') + (isHeli ? ' \ud83d\ude81' : ' \u2708\ufe0f');
       var lines = [[a.callsign || a.reg, aircraftTypeName(a), a.reg !== a.callsign ? a.reg : '']
         .filter(Boolean).join(' \u00b7 ')];
+      if (a.flag.person) lines.unshift('Associated with ' + a.flag.person);
       if (route && route.origin && route.dest) {
         lines.push((route.origin.city || route.origin.code) + ' \u2192 ' + (route.dest.city || route.dest.code));
       } else if (hist && hist.origin) {
@@ -203,7 +205,7 @@
     try {
       AndroidBridge.setTables(JSON.stringify({
         bizjetTypes: Object.keys(BIZJET_TYPES), airlinerTypes: Object.keys(AIRLINER_TYPES),
-        operators: BIZJET_OPERATORS, typeNames: AIRCRAFT_TYPES, airlines: AIRLINES
+        operators: BIZJET_OPERATORS, typeNames: AIRCRAFT_TYPES, airlines: AIRLINES, notable: NOTABLE
       }));
     } catch (e) { /* bridge unavailable */ }
     syncAndroid();

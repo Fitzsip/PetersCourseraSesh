@@ -115,7 +115,17 @@ var BIZJET_OPERATORS = {
 function classifyAircraft(a) {
   var prefix = /^[A-Z]{3}\d/.test(a.callsign) ? a.callsign.substr(0, 3) : '';
   var helicopter = /helicopter/.test(AIRCRAFT_TYPES[a.type] || '') || a.category === 'A7';
-  if (helicopter) return { kind: 'helicopter', label: a.dbFlags & 1 ? 'Military helicopter' : 'Helicopter' };
+  // Known aircraft from plane-alert-db (js/notable.js): [name, label, 1 = linked to a person].
+  var known = typeof NOTABLE !== 'undefined' ? NOTABLE[a.hex] : null;
+  if (known && known[2]) {
+    // Linked to a well-known person: alerted like a private jet (or a helicopter).
+    return { kind: helicopter ? 'helicopter' : 'private-jet', label: known[1], person: known[0] };
+  }
+  if (helicopter) {
+    if (known) return { kind: 'helicopter', label: known[1] + ' helicopter', operator: known[0] };
+    return { kind: 'helicopter', label: a.dbFlags & 1 ? 'Military helicopter' : 'Helicopter' };
+  }
+  if (known) return { kind: '', label: known[1], operator: known[0] };
   if (a.dbFlags & 1) return { kind: 'military', label: 'Military' };
   if (BIZJET_OPERATORS[prefix]) return { kind: 'private-jet', label: 'Private jet', operator: BIZJET_OPERATORS[prefix] };
   if (BIZJET_TYPES[a.type]) return { kind: 'private-jet', label: 'Private jet' };

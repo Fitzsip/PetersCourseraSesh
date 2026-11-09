@@ -207,13 +207,41 @@ js/ui.js          Side panel and popups
 js/settings.js    Remote-controlled settings screen
 js/demo.js        Simulated traffic
 js/data.js        Airline/aircraft names, private-jet detection, airport countries
+js/notable.js     Aircraft linked to well-known people, and service aircraft (generated)
+tools/            build-notable.py, which regenerates js/notable.js
 ```
 
 Flight data © adsb.lol / airplanes.live / The OpenSky Network contributors.
 Photos © their photographers via planespotters.net.
 
+## Well-known aircraft
+
+`js/notable.js` lists about 2,400 aircraft by their transponder (ICAO) code:
+
+* about 170 linked to well-known people (celebrities, billionaires, sports owners,
+  royals, heads of state). They alert like private jets, with a gold **★** badge and
+  "Associated with …";
+* coast guard, air ambulance and police aircraft, which are named (e.g. "Irish
+  Coastguard") but not alerted on.
+
+It is an extract of [plane-alert-db](https://github.com/sdr-enthusiasts/plane-alert-db),
+© SDR-Enthusiasts and contributors, under the
+[Open Database License](http://opendatacommons.org/licenses/odbl/1.0/); the extract is
+under the same licence. The database's humorous tags are not used. To refresh it:
+
+```sh
+git clone --depth 1 https://github.com/sdr-enthusiasts/plane-alert-db.git /tmp/pad
+python3 tools/build-notable.py /tmp/pad/plane-alert-db.csv
+```
+
+Ownership data can be out of date, and the person may not be on board. Aircraft using
+privacy programmes that change their transponder code can't be matched.
+
 ## Changelog
 
+* **1.8.0**: Spots aircraft linked to celebrities and other well-known people (gold ★,
+  alerts and pushes like private jets), and names coast guard, air ambulance and police
+  aircraft, from plane-alert-db.
 * **1.7.0**: Helicopters are treated like private jets: alerts within 5 km at any altitude,
   phone pushes (🚁), a lime-green helicopter icon on the radar, and the 24-hour list. Saved
   "private jets" settings become "jets & helicopters".

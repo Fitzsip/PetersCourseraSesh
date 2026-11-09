@@ -6,8 +6,9 @@
 // 'android' when running inside the phone app (it loads index.html?platform=android).
 var PLATFORM = /[?&]platform=android\b/.test(location.search) ? 'android' : 'tv';
 
-var APP_VERSION = '1.7.0';
+var APP_VERSION = '1.8.0';
 var CHANGELOG = [
+  ['1.8.0', 'Spots aircraft linked to celebrities and other well-known people, and names coast guard, air ambulance and police aircraft'],
   ['1.7.0', 'Helicopter alerts and notifications, like private jets, and helicopters in the 24-hour list'],
   ['1.6.0', 'Private jets from the last 24 hours, with Flightradar24 links (green button / Jets button)'],
   ['1.5.0', 'Track any flight on Flightradar24: QR code on the TV, button on the phone, tap a notification'],

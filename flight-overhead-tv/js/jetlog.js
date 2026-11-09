@@ -31,6 +31,7 @@ var JetLog = (function () {
   function record(a) {
     var entry = {
       hex: a.hex, kind: a.flag ? a.flag.kind : '', callsign: a.callsign, reg: a.reg, type: aircraftTypeName(a),
+      person: (a.flag && a.flag.person) || '',
       operator: (a.flag && a.flag.operator) || titleCase(a.owner || ''),
       closestKm: Math.round(a.distKm * 10) / 10, altFt: a.altFt,
       firstSeen: Date.now(), lastSeen: Date.now()
@@ -103,7 +104,8 @@ var JetLog = (function () {
       top.appendChild(el('span', 'jl-cs', e.callsign || e.reg || String(e.hex).toUpperCase()));
       top.appendChild(el('span', 'jl-dist', 'closest ' + Fmt.dist(e.closestKm, cfg)));
       li.appendChild(top);
-      li.appendChild(el('div', 'jl-sub', [e.type, e.reg && e.reg !== e.callsign ? e.reg : '', e.operator]
+      li.appendChild(el('div', 'jl-sub', [e.person ? '\u2605 ' + e.person : '', e.type,
+        e.reg && e.reg !== e.callsign ? e.reg : '', e.person ? '' : e.operator]
         .filter(Boolean).join(' · ')));
       li.onclick = function () {
         index = i;

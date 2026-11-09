@@ -48,6 +48,8 @@ final class AlertLogic {
     private final Map<String, String> operators = new HashMap<String, String>();
     private final Map<String, String> typeNames = new HashMap<String, String>();
     private final Map<String, String> airlines = new HashMap<String, String>();
+    /** js/notable.js: ICAO hex -> [name, label, 1 if linked to a well-known person]. */
+    private final Map<String, JSONArray> notable = new HashMap<String, JSONArray>();
     private final Map<String, Long> lastInZone = new HashMap<String, Long>();
 
     AlertLogic(JSONObject tables) {
@@ -57,6 +59,15 @@ final class AlertLogic {
         putAll(operators, tables.optJSONObject("operators"));
         putAll(typeNames, tables.optJSONObject("typeNames"));
         putAll(airlines, tables.optJSONObject("airlines"));
+        JSONObject known = tables.optJSONObject("notable");
+        if (known != null) {
+            Iterator<String> keys = known.keys();
+            while (keys.hasNext()) {
+                String k = keys.next();
+                JSONArray v = known.optJSONArray(k);
+                if (v != null) notable.put(k, v);
+            }
+        }
     }
 
     private static void addAll(Set<String> set, JSONArray arr) {
@@ -139,10 +150,12 @@ final class AlertLogic {
             double cpaSec = v2 > 0 ? Math.max(0, -(x * vx + y * vy) / v2) : 0;
             double cpaKm = Math.hypot(x + vx * cpaSec, y + vy * cpaSec);
 
-            boolean jet = isPrivateJet(callsign, type, reg);
-            // Same test as classifyAircraft() in js/data.js: a helicopter type or the rotorcraft category.
-            boolean heli = !jet && (String.valueOf(typeNames.get(type)).contains("helicopter")
-                    || "A7".equals(a.optString("category")));
+            // Same tests as classifyAircraft() in js/data.js.
+            JSONArray known = notable.get(hex);
+            String person = known != null && known.optInt(2) == 1 ? known.optString(0) : "";
+            boolean heli = String.valueOf(typeNames.get(type)).contains("helicopter")
+                    || "A7".equals(a.optString("category"));
+            boolean jet = !heli && (person.length() > 0 || isPrivateJet(callsign, type, reg));
             boolean altOk = !onGround && (jet || heli || Double.isNaN(alt) || alt <= maxAlt);
             boolean willPass = hasVelocity && cpaKm <= radius && cpaSec > 0;
             boolean overheadNow = altOk && dist <= radius;
@@ -158,7 +171,9 @@ final class AlertLogic {
                 JSONObject entry = new JSONObject();
                 try {
                     entry.put("hex", hex).put("kind", jet ? "private-jet" : "helicopter").put("callsign", callsign).put("reg", reg).put("type", typeName)
-                            .put("operator", a.optString("ownOp", ""))
+                            .put("person", person)
+                            .put("operator", person.length() > 0 ? ""
+                                    : known != null ? known.optString(0) : a.optString("ownOp", ""))
                             .put("closestKm", Math.round(dist * 10) / 10.0)
                             .put("altFt", Double.isNaN(alt) ? JSONObject.NULL : (Object) alt)
                             .put("firstSeen", now).put("lastSeen", now);
@@ -174,10 +189,12 @@ final class AlertLogic {
                     : "jets & helicopters".equals(notifyFor) ? jet || heli : true;
             if ((last != null && now - last <= cooldownMs) || !wanted) continue;
 
-            String title = (jet ? "Private jet" : heli ? "Helicopter" : "Flight")
-                    + (overheadNow ? " overhead" : " approaching") + (heli ? " \uD83D\uDE81" : " \u2708\uFE0F");
+            String what = person.length() > 0 ? "\u2B50 " + known.optString(1) + (heli ? " helicopter" : " jet")
+                    : jet ? "Private jet" : heli ? (known != null ? known.optString(1) + " helicopter" : "Helicopter") : "Flight";
+            String title = what + (overheadNow ? " overhead" : " approaching") + (heli ? " \uD83D\uDE81" : " \u2708\uFE0F");
             StringBuilder body = new StringBuilder();
             String name = callsign.length() > 0 ? callsign : reg.length() > 0 ? reg : hex.toUpperCase(Locale.ROOT);
+            if (person.length() > 0) body.append("Associated with ").append(person).append('\n');
             body.append(name);
             String airline = callsign.matches("^[A-Z]{3}\\d.*") ? airlines.get(callsign.substring(0, 3)) : null;
             if (airline != null) body.append(" · ").append(airline);

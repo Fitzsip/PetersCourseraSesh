@@ -76,8 +76,13 @@ var UI = (function () {
       var sub = el('div', 'nb-sub',
         [aircraftTypeName(a) || airlineFor(a.callsign), a.onGround ? 'on ground' : Fmt.alt(a.altFt, cfg)]
           .filter(Boolean).join(' · '));
-      if (isJet) sub.insertBefore(el('span', 'nb-tag', 'Private jet \u00b7 '), sub.firstChild);
-      if (isHeli) sub.insertBefore(el('span', 'nb-tag heli', a.flag.label + ' \u00b7 '), sub.firstChild);
+      if (a.flag && a.flag.person) {
+        sub.insertBefore(el('span', 'nb-tag celeb', '\u2605 ' + a.flag.person + ' \u00b7 '), sub.firstChild);
+      } else if (isJet) {
+        sub.insertBefore(el('span', 'nb-tag', 'Private jet \u00b7 '), sub.firstChild);
+      } else if (isHeli) {
+        sub.insertBefore(el('span', 'nb-tag heli', a.flag.label + ' \u00b7 '), sub.firstChild);
+      }
       li.appendChild(top);
       li.appendChild(sub);
       if (a.overheadNow) li.appendChild(el('div', 'nb-badge', 'Overhead now'));
@@ -134,10 +139,11 @@ var UI = (function () {
     title.appendChild(el('span', 'alert-cs', a.callsign || a.reg || a.hex.toUpperCase()));
     var airline = airlineFor(a.callsign);
     if (airline) title.appendChild(el('span', 'alert-airline', airline));
-    if (flag.label) title.appendChild(el('span', 'badge ' + flag.kind, flag.label));
-    var ownerName = flag.operator || titleCase(a.owner || '');
+    if (flag.label) title.appendChild(el('span', 'badge ' + (flag.person ? 'celebrity' : flag.kind),
+      (flag.person ? '\u2605 ' : '') + flag.label));
+    var ownerName = flag.person || flag.operator || titleCase(a.owner || '');
     if (ownerName.toLowerCase() === airline.toLowerCase()) ownerName = '';
-    var owner = el('div', 'alert-owner', ownerName ? 'Operated by ' + ownerName : '');
+    var owner = el('div', 'alert-owner', ownerName ? (flag.person ? 'Associated with ' : 'Operated by ') + ownerName : '');
     card.history = el('div', 'alert-history');
     card.route = el('div', 'alert-route');
     var typeLine = [aircraftTypeName(a), a.reg && a.reg !== a.callsign ? a.reg : ''].filter(Boolean).join(' · ');
@@ -192,7 +198,7 @@ var UI = (function () {
     updateCard(card, a, cfg);
     // Let the browser lay out the card before starting the slide-in and timer animations.
     setTimeout(function () {
-      root.className = 'alert show ' + flag.kind;
+      root.className = 'alert show ' + flag.kind + (flag.person ? ' celebrity' : '');
       bar.style.transitionDuration = seconds + 's';
       bar.style.width = '0%';
     }, 30);

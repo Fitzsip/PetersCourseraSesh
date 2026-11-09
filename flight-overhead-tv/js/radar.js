@@ -197,7 +197,7 @@ var Radar = (function () {
       if (x * x + y * y > cfg.watchRadiusKm * cfg.watchRadiusKm * 1.05) continue;
       var px = cx + x * scale, py = cy - y * scale;
       var kind = a.flag ? a.flag.kind : '';
-      var colour = kind === 'private-jet' ? '#ff7ad9' : kind === 'helicopter' ? '#a6e22e'
+      var colour = a.flag && a.flag.person ? '#ffd34d' : kind === 'private-jet' ? '#ff7ad9' : kind === 'helicopter' ? '#a6e22e'
         : a.inZone ? '#ffb547' : altitudeColour(a.altFt);
 
       var trail = state.trails[a.hex];

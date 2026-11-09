@@ -273,3 +273,11 @@ html.android { font-size: calc(100vw / 140); }
 #jetlog h1 { color: #e6eef6; }
 .alert-glyph-heli { width: 16rem; height: 16rem; }
 .android .alert-glyph-heli { width: 9rem; height: 9rem; }
+
+/* ---- Aircraft linked to well-known people (gold) ---- */
+.badge.celebrity { background: #ffd34d; color: #2a1f00; }
+.nb-tag.celeb { color: #ffd34d; }
+.alert.celebrity { border-color: #ffd34d; box-shadow: 0 2rem 6rem rgba(0, 0, 0, 0.6), 0 0 5rem rgba(255, 211, 77, 0.35); }
+.alert.celebrity .alert-timer i, .alert.celebrity .track-btn { background: #ffd34d; color: #2a1f00; }
+.alert.celebrity .alert-owner { color: #ffd34d; }
+.alert.helicopter .alert-owner { color: #c8f07a; }
