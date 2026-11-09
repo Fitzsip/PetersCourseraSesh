@@ -78,6 +78,11 @@ def main(path):
         f.write("var NOTABLE = ")
         json.dump(out, f, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
         f.write(";\n")
+        # The app refreshes the list from plane-alert-db itself (js/notable-live.js) with these rules.
+        f.write("var NOTABLE_RULES = ")
+        json.dump({"people": PEOPLE, "services": SERVICES, "fronts": FRONT_COMPANIES}, f,
+                  ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+        f.write(";\n")
     print(f"Wrote {len(out)} aircraft ({people} associated with people) to js/notable.js")
 
 

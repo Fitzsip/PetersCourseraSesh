@@ -90,8 +90,7 @@ var Settings = (function () {
     errorEl = document.getElementById('settings-error');
     document.getElementById('settings-save').onclick = save;
     document.getElementById('settings-cancel').onclick = close;
-    document.getElementById('settings-version').textContent = 'Flight Overhead v' + APP_VERSION +
-      ' \u00b7 new: ' + CHANGELOG[0][1];
+
   }
 
   function display(f) {
@@ -234,6 +233,8 @@ var Settings = (function () {
     draft = JSON.parse(JSON.stringify(cfg));
     onSave = saveCallback;
     message(intro || '');
+    document.getElementById('settings-version').textContent = 'Flight Overhead v' + APP_VERSION + ' \u00b7 ' +
+      NotableLive.describe() + ' \u00b7 new: ' + CHANGELOG[0][1];
     build();
     root.className = '';
     open = true;

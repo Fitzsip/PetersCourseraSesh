@@ -202,13 +202,25 @@
     document.getElementById('btn-test').onclick = testAlert;
     document.getElementById('btn-jets').onclick = function () { JetLog.show(effectiveConfig()); };
     if (!window.AndroidBridge) return;
+    sendTables();
+    syncAndroid();
+  }
+
+  function sendTables() {
+    if (!window.AndroidBridge) return;
     try {
       AndroidBridge.setTables(JSON.stringify({
         bizjetTypes: Object.keys(BIZJET_TYPES), airlinerTypes: Object.keys(AIRLINER_TYPES),
         operators: BIZJET_OPERATORS, typeNames: AIRCRAFT_TYPES, airlines: AIRLINES, notable: NOTABLE
       }));
     } catch (e) { /* bridge unavailable */ }
-    syncAndroid();
+  }
+
+  // Refresh the well-known aircraft list in the background (weekly); never during start-up.
+  function startNotableUpdates() {
+    function check() { NotableLive.refresh(sendTables); }
+    setTimeout(check, 30000);
+    setInterval(check, 6 * 3600 * 1000);
   }
 
   // Called by the phone's Back button. Returns true when the app used it.
@@ -330,6 +342,7 @@
 
   function start() {
     state.cfg = loadConfig();
+    NotableLive.load();
     // Apply the phone layout before the radar measures its canvas.
     if (PLATFORM === 'android') document.documentElement.className += ' android';
     UI.init();
@@ -355,6 +368,7 @@
     setInterval(function () { UI.renderClock(state.cfg); }, 10000);
     UI.renderSide({ cfg: effectiveConfig(), aircraft: [] });
     frame();
+    startNotableUpdates();
 
     if (!hasHome(state.cfg) && !state.cfg.demo) {
       openSettings('Welcome! Enter the latitude and longitude of your house to get started, ' +
