@@ -1,5 +1,5 @@
 /*
- * Private jets seen in the last 24 hours, with Flightradar24 links, so they can be
+ * Private jets and helicopters seen in the last 24 hours, with Flightradar24 links, so they can be
  * looked up after the popup or notification has gone. Stored on the TV, or in the
  * phone app's storage (shared with its background watcher) when running on Android.
  */
@@ -30,7 +30,7 @@ var JetLog = (function () {
   // Adds the jet, or updates it if it was already seen in the last 24 hours.
   function record(a) {
     var entry = {
-      hex: a.hex, callsign: a.callsign, reg: a.reg, type: aircraftTypeName(a),
+      hex: a.hex, kind: a.flag ? a.flag.kind : '', callsign: a.callsign, reg: a.reg, type: aircraftTypeName(a),
       operator: (a.flag && a.flag.operator) || titleCase(a.owner || ''),
       closestKm: Math.round(a.distKm * 10) / 10, altFt: a.altFt,
       firstSeen: Date.now(), lastSeen: Date.now()
@@ -54,8 +54,13 @@ var JetLog = (function () {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(list)); } catch (e) { /* storage full */ }
   }
 
-  function count() {
-    return load().length;
+  function counts() {
+    var c = { jets: 0, helicopters: 0 };
+    load().forEach(function (e) {
+      if (e.kind === 'helicopter') c.helicopters++;
+      else c.jets++;
+    });
+    return c;
   }
 
   // ---- The list screen ----
@@ -86,13 +91,13 @@ var JetLog = (function () {
   function render(cfg) {
     listEl.innerHTML = '';
     if (!entries.length) {
-      listEl.appendChild(el('li', 'empty', 'No private jets in the last 24 hours.'));
+      listEl.appendChild(el('li', 'empty', 'No private jets or helicopters in the last 24 hours.'));
       qrCanvas.style.visibility = 'hidden';
       qrCaption.textContent = '';
       return;
     }
     entries.forEach(function (e, i) {
-      var li = el('li', i === index ? 'selected' : '');
+      var li = el('li', (i === index ? 'selected ' : '') + (e.kind === 'helicopter' ? 'helicopter' : ''));
       var top = el('div', 'jl-top');
       top.appendChild(el('span', 'jl-time', when(e.firstSeen)));
       top.appendChild(el('span', 'jl-cs', e.callsign || e.reg || String(e.hex).toUpperCase()));
@@ -148,7 +153,7 @@ var JetLog = (function () {
   }
 
   return {
-    init: init, record: record, count: count, show: show, close: close, handleKey: handleKey,
+    init: init, record: record, counts: counts, show: show, close: close, handleKey: handleKey,
     isOpen: function () { return open; }
   };
 })();

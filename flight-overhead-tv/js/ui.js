@@ -66,7 +66,8 @@ var UI = (function () {
     els.nearby.innerHTML = '';
     list.slice(0, 7).forEach(function (a) {
       var isJet = a.flag && a.flag.kind === 'private-jet';
-      var li = el('li', (a.inZone ? 'hot ' : '') + (isJet ? 'private-jet ' : '') +
+      var isHeli = a.flag && a.flag.kind === 'helicopter';
+      var li = el('li', (a.inZone ? 'hot ' : '') + (isJet ? 'private-jet ' : '') + (isHeli ? 'helicopter ' : '') +
         (a.hex === state.selectedHex ? 'selected' : ''));
       li.onclick = function () { if (onNearbyClick) onNearbyClick(a.hex); };
       var top = el('div', 'nb-top');
@@ -76,6 +77,7 @@ var UI = (function () {
         [aircraftTypeName(a) || airlineFor(a.callsign), a.onGround ? 'on ground' : Fmt.alt(a.altFt, cfg)]
           .filter(Boolean).join(' · '));
       if (isJet) sub.insertBefore(el('span', 'nb-tag', 'Private jet \u00b7 '), sub.firstChild);
+      if (isHeli) sub.insertBefore(el('span', 'nb-tag heli', a.flag.label + ' \u00b7 '), sub.firstChild);
       li.appendChild(top);
       li.appendChild(sub);
       if (a.overheadNow) li.appendChild(el('div', 'nb-badge', 'Overhead now'));
@@ -107,18 +109,29 @@ var UI = (function () {
     for (var i = 0; i < cards.length; i++) {
       if (cards[i].hex === a.hex) return;
     }
-    while (cards.length >= MAX_CARDS) dismiss(cards[0]);
+    var flag = a.flag || classifyAircraft(a);
+    var replace = cards.length >= MAX_CARDS ? cardToReplace() : null;
+    // An ordinary flight never bumps a private jet or helicopter (tests and detail cards always show).
+    if (replace && isSpecial(replace.kind) && !isSpecial(flag.kind) && !opts.label && !opts.detail) return;
+    while (cards.length >= MAX_CARDS) dismiss(cardToReplace());
 
-    var card = { hex: a.hex, testLabel: opts.label || '', detail: !!opts.detail };
+    var card = { hex: a.hex, testLabel: opts.label || '', detail: !!opts.detail, kind: flag.kind };
     var seconds = opts.seconds || cfg.popupSeconds;
     var root = el('div', 'alert');
     var photo = el('div', 'alert-photo');
-    photo.appendChild(el('div', 'alert-glyph', '✈'));
+    if (flag.kind === 'helicopter') {
+      var heli = document.createElement('canvas');
+      heli.className = 'alert-glyph-heli';
+      heli.width = heli.height = 220;
+      Radar.helicopterIcon(heli, 'rgba(166, 226, 46, 0.85)');
+      photo.appendChild(heli);
+    } else {
+      photo.appendChild(el('div', 'alert-glyph', '✈'));
+    }
     var body = el('div', 'alert-body');
     card.kicker = el('div', 'alert-kicker');
     var title = el('div', 'alert-title');
     title.appendChild(el('span', 'alert-cs', a.callsign || a.reg || a.hex.toUpperCase()));
-    var flag = a.flag || classifyAircraft(a);
     var airline = airlineFor(a.callsign);
     if (airline) title.appendChild(el('span', 'alert-airline', airline));
     if (flag.label) title.appendChild(el('span', 'badge ' + flag.kind, flag.label));
@@ -226,7 +239,7 @@ var UI = (function () {
         img.src = p.src;
       });
     }
-    if (cfg.sound && !opts.silent) chime(flag.kind === 'private-jet');
+    if (cfg.sound && !opts.silent) chime(flag.kind === 'private-jet' || flag.kind === 'helicopter');
   }
 
   function duration(ms) {
@@ -251,6 +264,18 @@ var UI = (function () {
         'Today: ' + h.countries.join(' \u2192 ') + ' (' + n + (n === 1 ? ' country, ' : ' countries, ') +
         h.flightsToday + (h.flightsToday === 1 ? ' flight)' : ' flights)')));
     }
+  }
+
+  // When the screen is full, drop the oldest ordinary flight before any private jet or helicopter.
+  function isSpecial(kind) {
+    return kind === 'private-jet' || kind === 'helicopter';
+  }
+
+  function cardToReplace() {
+    for (var i = 0; i < cards.length; i++) {
+      if (!isSpecial(cards[i].kind)) return cards[i];
+    }
+    return cards[0];
   }
 
   function appendAirport(parent, ap) {

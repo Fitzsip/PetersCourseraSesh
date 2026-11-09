@@ -6,8 +6,9 @@
 // 'android' when running inside the phone app (it loads index.html?platform=android).
 var PLATFORM = /[?&]platform=android\b/.test(location.search) ? 'android' : 'tv';
 
-var APP_VERSION = '1.6.0';
+var APP_VERSION = '1.7.0';
 var CHANGELOG = [
+  ['1.7.0', 'Helicopter alerts and notifications, like private jets, and helicopters in the 24-hour list'],
   ['1.6.0', 'Private jets from the last 24 hours, with Flightradar24 links (green button / Jets button)'],
   ['1.5.0', 'Track any flight on Flightradar24: QR code on the TV, button on the phone, tap a notification'],
   ['1.4.0', 'Android phone app: touch layout, phone location, notifications when the app is closed'],
@@ -40,8 +41,9 @@ var DEFAULT_CONFIG = {
   provider: 'auto',
 
   alertRadiusKm: 2.5,      // a plane within this distance counts as "overhead"
-  maxAltitudeFt: 20000,    // ignore planes higher than this (private jets excepted)
+  maxAltitudeFt: 20000,    // ignore planes higher than this (private jets and helicopters excepted)
   jetAlertRadiusKm: 10,    // private jets alert from further out
+  heliAlertRadiusKm: 5,    // so do helicopters, at any altitude
   watchRadiusKm: 30,       // range of the radar screen
   lookaheadSeconds: 30,    // alert early if a plane will be overhead within this time
   pollSeconds: 5,          // how often to ask the API for positions
@@ -52,18 +54,19 @@ var DEFAULT_CONFIG = {
   sound: true,
   showRoutes: true,        // look up origin/destination (adsb.lol route API)
   showPhotos: true,        // look up an aircraft photo (planespotters.net)
-  alertFilter: 'all',      // 'all' or 'private jets' (radar still shows everything)
+  alertFilter: 'all',      // 'all', 'jets & helicopters' or 'private jets' (radar still shows everything)
 
   // Phone pushes via the free ntfy app. Pick a unique, hard-to-guess topic name.
   ntfyTopic: '',
-  pushFor: 'private jets', // 'private jets' or 'all alerts'
+  pushFor: 'jets & helicopters', // 'private jets', 'jets & helicopters' or 'all alerts'
   quietHours: true,        // no pushes between 22:00 and 08:00
 
   // Phone app only: keep watching and show Android notifications when the app is closed.
   backgroundAlerts: true,
-  notifyFor: 'private jets', // 'private jets' or 'all alerts'
+  notifyFor: 'jets & helicopters', // 'private jets', 'jets & helicopters' or 'all alerts'
 
   demo: false,             // simulated planes, handy for testing indoors
+  configVersion: 2,        // settings saved before helicopter alerts existed are upgraded on load
 
   // Optional FlightAware AeroAPI key. Adds where each plane took off, how long it has
   // been flying and which countries it has been to today. See README for setup.

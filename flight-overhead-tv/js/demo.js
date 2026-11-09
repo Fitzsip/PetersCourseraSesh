@@ -21,6 +21,8 @@ var Demo = (function () {
       track: 160, offsetKm: -0.8, periodSec: 150, phase: 0.75, route: null,
       history: { origin: { code: 'FAB', city: 'Farnborough', country: 'United Kingdom' }, airborneMin: 52,
                  countries: ['Switzerland', 'France', 'United Kingdom'], flightsToday: 3 } },
+    { hex: 'd0e007', callsign: 'EIICR', reg: 'EI-ICR', type: 'EC35', altFt: 1500, gs: 110,
+      track: 70, offsetKm: 2.2, periodSec: 240, phase: 0.45, route: null },
     { hex: 'd0e005', callsign: 'N172SP', reg: 'N172SP', type: 'C172', altFt: 2500, gsKt: 95,
       track: 300, offsetKm: 6, periodSec: 600, phase: 0.4, route: null }
   ];

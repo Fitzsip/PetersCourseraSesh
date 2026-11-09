@@ -36,18 +36,20 @@ Tracker.prototype.update = function (list, cfg, now) {
     a.cpaSec = cpa.seconds;
 
     var isJet = a.flag.kind === 'private-jet';
-    // Private jets are announced at any altitude and from further out.
-    var altOk = !a.onGround && (isJet || a.altFt === null || a.altFt <= cfg.maxAltitudeFt);
+    var isHeli = a.flag.kind === 'helicopter';
+    // Private jets and helicopters are announced at any altitude and from further out.
+    var altOk = !a.onGround && (isJet || isHeli || a.altFt === null || a.altFt <= cfg.maxAltitudeFt);
     var willPass = hasVelocity && a.cpaKm <= cfg.alertRadiusKm && a.cpaSec > 0;
     a.overheadNow = altOk && a.distKm <= cfg.alertRadiusKm;
     a.overHouseIn = altOk && !a.overheadNow && willPass && a.cpaSec <= 900 ? a.cpaSec : null;
     a.inZone = a.overheadNow ||
       (altOk && willPass && a.cpaSec <= cfg.lookaheadSeconds) ||
-      (altOk && isJet && a.distKm <= Math.max(cfg.alertRadiusKm, cfg.jetAlertRadiusKm || 0));
+      (altOk && isJet && a.distKm <= Math.max(cfg.alertRadiusKm, cfg.jetAlertRadiusKm || 0)) ||
+      (altOk && isHeli && a.distKm <= Math.max(cfg.alertRadiusKm, cfg.heliAlertRadiusKm || 0));
 
     if (a.inZone) {
       var last = this.lastInZone[a.hex];
-      var wanted = cfg.alertFilter !== 'private jets' || isJet;
+      var wanted = alertWanted(cfg.alertFilter, a.flag.kind);
       if ((!last || now - last > cooldownMs) && wanted) newAlerts.push(a);
       this.lastInZone[a.hex] = now;
     }

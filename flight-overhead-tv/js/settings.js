@@ -14,6 +14,7 @@ var Settings = (function () {
     { key: 'homeName', label: 'Location name', type: 'text' },
     { key: 'alertRadiusKm', label: 'Overhead radius (km)', type: 'number' },
     { key: 'jetAlertRadiusKm', label: 'Private jet alert radius (km)', type: 'number' },
+    { key: 'heliAlertRadiusKm', label: 'Helicopter alert radius (km)', type: 'number' },
     { key: 'maxAltitudeFt', label: 'Ignore planes above (ft)', type: 'number' },
     { key: 'watchRadiusKm', label: 'Radar range (km)', type: 'number' },
     { key: 'provider', label: 'Flight data source', type: 'choice', options: ['auto', 'adsb.fi', 'airplanes.live', 'adsb.lol', 'opensky'] },
@@ -21,11 +22,11 @@ var Settings = (function () {
     { key: 'sound', label: 'Chime on alert', type: 'bool' },
     { key: 'showRoutes', label: 'Look up routes', type: 'bool' },
     { key: 'showPhotos', label: 'Show aircraft photos', type: 'bool' },
-    { key: 'alertFilter', label: 'Pop up for', type: 'choice', options: ['all', 'private jets'] },
+    { key: 'alertFilter', label: 'Pop up for', type: 'choice', options: ['all', 'jets & helicopters', 'private jets'] },
     { key: 'ntfyTopic', label: 'Phone push topic (ntfy)', type: 'text', only: 'tv' },
-    { key: 'pushFor', label: 'Push to phone for', type: 'choice', options: ['private jets', 'all alerts'], only: 'tv' },
+    { key: 'pushFor', label: 'Push to phone for', type: 'choice', options: ['jets & helicopters', 'private jets', 'all alerts'], only: 'tv' },
     { key: 'backgroundAlerts', label: 'Notify when the app is closed', type: 'bool', only: 'android' },
-    { key: 'notifyFor', label: 'Notifications for', type: 'choice', options: ['private jets', 'all alerts'], only: 'android' },
+    { key: 'notifyFor', label: 'Notifications for', type: 'choice', options: ['jets & helicopters', 'private jets', 'all alerts'], only: 'android' },
     { key: 'quietHours', label: 'Quiet 22:00\u201308:00', type: 'bool' },
     { label: 'Send a test push', type: 'action', run: testPush, only: 'tv' },
     { key: 'flightawareKey', label: 'FlightAware API key', type: 'text' },
@@ -208,6 +209,7 @@ var Settings = (function () {
     if (!isNum(c.alertRadiusKm) || c.alertRadiusKm <= 0) return 'Overhead radius must be a positive number.';
     if (!isNum(c.maxAltitudeFt) || c.maxAltitudeFt <= 0) return 'Altitude limit must be a positive number.';
     if (!isNum(c.jetAlertRadiusKm) || c.jetAlertRadiusKm <= 0) return 'Private jet radius must be a positive number.';
+    if (!isNum(c.heliAlertRadiusKm) || c.heliAlertRadiusKm <= 0) return 'Helicopter radius must be a positive number.';
     if (c.ntfyTopic && !/^[-_A-Za-z0-9]{1,64}$/.test(String(c.ntfyTopic).trim())) {
       return 'The ntfy topic can only use letters, numbers, - and _.';
     }

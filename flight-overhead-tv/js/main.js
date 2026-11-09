@@ -18,6 +18,12 @@
     var saved = {};
     try { saved = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; } catch (e) { saved = {}; }
     for (var k in DEFAULT_CONFIG) cfg[k] = saved.hasOwnProperty(k) ? saved[k] : DEFAULT_CONFIG[k];
+    // Settings saved before helicopter alerts: "private jets" now also covers helicopters.
+    if (!(saved.configVersion >= 2)) {
+      ['alertFilter', 'pushFor', 'notifyFor'].forEach(function (key) {
+        if (cfg[key] === 'private jets') cfg[key] = 'jets & helicopters';
+      });
+    }
 
     // URL overrides for testing in a desktop browser, e.g. index.html?lat=51.5&lon=-0.1&demo=1
     var q = {};
@@ -73,7 +79,7 @@
       });
       if (!cfg.demo) {
         result.aircraft.forEach(function (a) {
-          if (a.inZone && a.flag.kind === 'private-jet') JetLog.record(a);
+          if (a.inZone && (a.flag.kind === 'private-jet' || a.flag.kind === 'helicopter')) JetLog.record(a);
         });
       }
       UI.refreshAlerts(result.aircraft, cfg);
@@ -101,15 +107,16 @@
 
   function pushAlert(a, cfg) {
     var isJet = a.flag.kind === 'private-jet';
+    var isHeli = a.flag.kind === 'helicopter';
     // The phone app notifies natively instead.
-    if (PLATFORM === 'android' || cfg.demo || !cfg.ntfyTopic || (cfg.pushFor !== 'all alerts' && !isJet)) return;
+    if (PLATFORM === 'android' || cfg.demo || !cfg.ntfyTopic || !alertWanted(cfg.pushFor, a.flag.kind)) return;
     Promise.all([
       withTimeout(cfg.showRoutes ? Providers.lookupRoute(a) : Promise.resolve(null), 4000),
       withTimeout(History.lookup(a, cfg), 4000)
     ]).then(function (extra) {
       var route = extra[0], hist = extra[1];
-      var what = isJet ? 'Private jet' : 'Flight';
-      var title = what + (a.overheadNow ? ' overhead' : ' approaching') + ' \u2708\ufe0f';
+      var what = isJet ? 'Private jet' : isHeli ? 'Helicopter' : 'Flight';
+      var title = what + (a.overheadNow ? ' overhead' : ' approaching') + (isHeli ? ' \ud83d\ude81' : ' \u2708\ufe0f');
       var lines = [[a.callsign || a.reg, aircraftTypeName(a), a.reg !== a.callsign ? a.reg : '']
         .filter(Boolean).join(' \u00b7 ')];
       if (route && route.origin && route.dest) {
@@ -128,7 +135,8 @@
         lines.push('In the air ' + (mins >= 60 ? Math.floor(mins / 60) + ' h ' : '') + (mins % 60) + ' min' +
           (hist.countries.length ? ' \u00b7 Today: ' + hist.countries.join(' \u2192 ') : ''));
       }
-      return Notify.send(cfg, title, lines.join('\n'), { click: trackingUrl(a) });
+      return Notify.send(cfg, title, lines.join('\n'),
+        { click: trackingUrl(a), tags: isHeli ? 'helicopter' : 'small_airplane' });
     }).then(null, function (e) { UI.setStatus('Phone push failed: ' + e.message, true); });
   }
 
@@ -218,9 +226,11 @@
 
   function renderSide() {
     UI.renderSide({ cfg: effectiveConfig(), aircraft: state.aircraft, selectedHex: state.selectedHex });
-    var jets = JetLog.count();
-    var jc = document.getElementById('jetcount');
-    jc.textContent = jets ? jets + ' private jet' + (jets === 1 ? '' : 's') + ' in the last 24 h \u203a' : '';
+    var c = JetLog.counts();
+    var parts = [];
+    if (c.jets) parts.push(c.jets + ' private jet' + (c.jets === 1 ? '' : 's'));
+    if (c.helicopters) parts.push(c.helicopters + ' helicopter' + (c.helicopters === 1 ? '' : 's'));
+    document.getElementById('jetcount').textContent = parts.length ? parts.join(', ') + ' in the last 24 h \u203a' : '';
   }
 
   function visibleHexes() {

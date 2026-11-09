@@ -70,7 +70,12 @@ var AIRCRAFT_TYPES = {
   A109: 'AW109 helicopter', A169: 'AW169 helicopter', R44: 'Robinson R44 helicopter',
   R22: 'Robinson R22 helicopter', R66: 'Robinson R66 helicopter', B06: 'Bell 206 helicopter',
   B407: 'Bell 407 helicopter', B429: 'Bell 429 helicopter', S76: 'Sikorsky S-76 helicopter',
-  S92: 'Sikorsky S-92 helicopter', H60: 'Black Hawk helicopter', BALL: 'Balloon', GLID: 'Glider'
+  S92: 'Sikorsky S-92 helicopter', H60: 'Black Hawk helicopter', A189: 'AW189 helicopter',
+  A119: 'AW119 helicopter', A149: 'AW149 helicopter', EC20: 'Airbus H120 helicopter',
+  EC75: 'Airbus H175 helicopter', H160: 'Airbus H160 helicopter', AS55: 'Airbus Twin Squirrel helicopter',
+  AS65: 'Airbus Dauphin helicopter', AS32: 'Super Puma helicopter', B505: 'Bell 505 helicopter',
+  B412: 'Bell 412 helicopter', H500: 'MD 500 helicopter', EH10: 'AW101 helicopter', NH90: 'NH90 helicopter',
+  CH47: 'Chinook helicopter', G2CA: 'Guimbal Cabri helicopter', BALL: 'Balloon', GLID: 'Glider'
 };
 
 function airlineFor(callsign) {
@@ -109,6 +114,8 @@ var BIZJET_OPERATORS = {
 
 function classifyAircraft(a) {
   var prefix = /^[A-Z]{3}\d/.test(a.callsign) ? a.callsign.substr(0, 3) : '';
+  var helicopter = /helicopter/.test(AIRCRAFT_TYPES[a.type] || '') || a.category === 'A7';
+  if (helicopter) return { kind: 'helicopter', label: a.dbFlags & 1 ? 'Military helicopter' : 'Helicopter' };
   if (a.dbFlags & 1) return { kind: 'military', label: 'Military' };
   if (BIZJET_OPERATORS[prefix]) return { kind: 'private-jet', label: 'Private jet', operator: BIZJET_OPERATORS[prefix] };
   if (BIZJET_TYPES[a.type]) return { kind: 'private-jet', label: 'Private jet' };
@@ -116,9 +123,6 @@ function classifyAircraft(a) {
   var reg = (a.reg || '').replace('-', '');
   if (AIRLINER_TYPES[a.type] && reg && a.callsign.replace('-', '') === reg) {
     return { kind: 'private-jet', label: 'Private jet' };
-  }
-  if (/helicopter/.test(AIRCRAFT_TYPES[a.type] || '') || a.category === 'A7') {
-    return { kind: 'helicopter', label: 'Helicopter' };
   }
   if (reg && a.callsign.replace('-', '') === reg) return { kind: 'private', label: 'Private flight' };
   return { kind: '', label: '' };
@@ -186,4 +190,12 @@ function trackingUrl(a) {
 function historyUrl(e) {
   if (e.reg) return 'https://www.flightradar24.com/data/aircraft/' + encodeURIComponent(String(e.reg).toLowerCase());
   return trackingUrl(e);
+}
+
+// Whether an alert setting ('all', 'all alerts', 'private jets', 'jets & helicopters')
+// covers an aircraft of this kind (from classifyAircraft).
+function alertWanted(filter, kind) {
+  if (filter === 'private jets') return kind === 'private-jet';
+  if (filter === 'jets & helicopters') return kind === 'private-jet' || kind === 'helicopter';
+  return true;
 }

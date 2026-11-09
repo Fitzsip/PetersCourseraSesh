@@ -87,7 +87,7 @@ FlightAware to hide them won't have history.
 | ▲ ▼ | Highlight a plane in the Nearby list (ringed on the radar) |
 | **OK** | Details for the highlighted plane (OK again closes them); otherwise dismiss the newest popup or open settings |
 | **Red** | Show a test popup for the nearest plane |
-| **Green** | Private jets from the last 24 hours, each with a Flightradar24 QR code |
+| **Green** | Private jets and helicopters from the last 24 hours, each with a Flightradar24 QR code |
 | **Back** / ◀ | Dismiss the popup, clear the highlight, close settings, or exit |
 | ▲ ▼ ◀ ▶ | Move and change values in settings |
 
@@ -214,6 +214,9 @@ Photos © their photographers via planespotters.net.
 
 ## Changelog
 
+* **1.7.0**: Helicopters are treated like private jets: alerts within 5 km at any altitude,
+  phone pushes (🚁), a lime-green helicopter icon on the radar, and the 24-hour list. Saved
+  "private jets" settings become "jets & helicopters".
 * **1.6.0**: Private jets from the last 24 hours, with Flightradar24 links: press the
   **green** button on the TV (a QR code per jet), or **Jets (24h)** on the phone.
 * **1.5.0**: Every popup links to the flight on Flightradar24: a QR code to scan on the

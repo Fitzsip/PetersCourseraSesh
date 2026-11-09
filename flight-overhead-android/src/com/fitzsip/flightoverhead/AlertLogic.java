@@ -25,14 +25,16 @@ final class AlertLogic {
         final String title;
         final String body;
         final boolean privateJet;
+        final boolean helicopter;
         /** Flightradar24 page for the flight, or "" if there is nothing to look it up by. */
         final String trackingUrl;
 
-        Alert(String hex, String title, String body, boolean privateJet, String trackingUrl) {
+        Alert(String hex, String title, String body, boolean privateJet, boolean helicopter, String trackingUrl) {
             this.hex = hex;
             this.title = title;
             this.body = body;
             this.privateJet = privateJet;
+            this.helicopter = helicopter;
             this.trackingUrl = trackingUrl;
         }
     }
@@ -89,7 +91,7 @@ final class AlertLogic {
         return airlinerTypes.contains(type) && r.length() > 0 && callsign.replace("-", "").equals(r);
     }
 
-    /** Private jets in the alert zone during the last evaluate(), for the 24-hour list. */
+    /** Private jets and helicopters in the alert zone during the last evaluate(), for the 24-hour list. */
     final List<JSONObject> jetsInZone = new ArrayList<JSONObject>();
 
     /** Returns the aircraft (from a readsb "ac" array) that should be announced now. */
@@ -99,10 +101,11 @@ final class AlertLogic {
         double homeLat = cfg.optDouble("homeLat"), homeLon = cfg.optDouble("homeLon");
         double radius = cfg.optDouble("alertRadiusKm", 2.5);
         double jetRadius = Math.max(radius, cfg.optDouble("jetAlertRadiusKm", 10));
+        double heliRadius = Math.max(radius, cfg.optDouble("heliAlertRadiusKm", 5));
         double maxAlt = cfg.optDouble("maxAltitudeFt", 20000);
         double lookahead = cfg.optDouble("lookaheadSeconds", 30);
         long cooldownMs = (long) (cfg.optDouble("cooldownMinutes", 20) * 60000);
-        boolean jetsOnly = !"all alerts".equals(cfg.optString("notifyFor", "private jets"));
+        String notifyFor = cfg.optString("notifyFor", "jets & helicopters");
 
         for (int i = 0; ac != null && i < ac.length(); i++) {
             JSONObject a = ac.optJSONObject(i);
@@ -137,20 +140,24 @@ final class AlertLogic {
             double cpaKm = Math.hypot(x + vx * cpaSec, y + vy * cpaSec);
 
             boolean jet = isPrivateJet(callsign, type, reg);
-            boolean altOk = !onGround && (jet || Double.isNaN(alt) || alt <= maxAlt);
+            // Same test as classifyAircraft() in js/data.js: a helicopter type or the rotorcraft category.
+            boolean heli = !jet && (String.valueOf(typeNames.get(type)).contains("helicopter")
+                    || "A7".equals(a.optString("category")));
+            boolean altOk = !onGround && (jet || heli || Double.isNaN(alt) || alt <= maxAlt);
             boolean willPass = hasVelocity && cpaKm <= radius && cpaSec > 0;
             boolean overheadNow = altOk && dist <= radius;
             boolean inZone = overheadNow
                     || (altOk && willPass && cpaSec <= lookahead)
-                    || (altOk && jet && dist <= jetRadius);
+                    || (altOk && jet && dist <= jetRadius)
+                    || (altOk && heli && dist <= heliRadius);
             if (!inZone) continue;
 
             String typeName = typeNames.containsKey(type) ? typeNames.get(type) : a.optString("desc", type);
-            if (jet) {
+            if (jet || heli) {
                 // Same fields as js/jetlog.js.
                 JSONObject entry = new JSONObject();
                 try {
-                    entry.put("hex", hex).put("callsign", callsign).put("reg", reg).put("type", typeName)
+                    entry.put("hex", hex).put("kind", jet ? "private-jet" : "helicopter").put("callsign", callsign).put("reg", reg).put("type", typeName)
                             .put("operator", a.optString("ownOp", ""))
                             .put("closestKm", Math.round(dist * 10) / 10.0)
                             .put("altFt", Double.isNaN(alt) ? JSONObject.NULL : (Object) alt)
@@ -163,9 +170,12 @@ final class AlertLogic {
 
             Long last = lastInZone.get(hex);
             lastInZone.put(hex, now);
-            if ((last != null && now - last <= cooldownMs) || (jetsOnly && !jet)) continue;
+            boolean wanted = "private jets".equals(notifyFor) ? jet
+                    : "jets & helicopters".equals(notifyFor) ? jet || heli : true;
+            if ((last != null && now - last <= cooldownMs) || !wanted) continue;
 
-            String title = (jet ? "Private jet" : "Flight") + (overheadNow ? " overhead" : " approaching") + " ✈️";
+            String title = (jet ? "Private jet" : heli ? "Helicopter" : "Flight")
+                    + (overheadNow ? " overhead" : " approaching") + (heli ? " \uD83D\uDE81" : " \u2708\uFE0F");
             StringBuilder body = new StringBuilder();
             String name = callsign.length() > 0 ? callsign : reg.length() > 0 ? reg : hex.toUpperCase(Locale.ROOT);
             body.append(name);
@@ -178,7 +188,7 @@ final class AlertLogic {
             if (!Double.isNaN(alt)) body.append(", ").append(altitude(alt, cfg));
             if (overheadNow) body.append(", overhead now");
             else if (willPass && cpaSec <= 900) body.append(", over the house in ~").append(eta(cpaSec));
-            out.add(new Alert(hex, title, body.toString(), jet, trackingUrl(callsign, reg)));
+            out.add(new Alert(hex, title, body.toString(), jet, heli, trackingUrl(callsign, reg)));
         }
 
         Iterator<Map.Entry<String, Long>> it = lastInZone.entrySet().iterator();

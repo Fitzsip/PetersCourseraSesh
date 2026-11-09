@@ -159,7 +159,7 @@ html, body {
 }
 .badge.private-jet { background: #ff7ad9; color: #2a0820; }
 .badge.military { background: #8a9a5b; }
-.badge.helicopter { background: #3a8fb7; }
+.badge.helicopter { background: #a6e22e; color: #18220a; }
 .alert.private-jet { border-color: #ff7ad9; box-shadow: 0 2rem 6rem rgba(0, 0, 0, 0.6), 0 0 5rem rgba(255, 122, 217, 0.35); }
 .alert.private-jet .alert-timer i { background: #ff7ad9; }
 .alert-owner { font-size: 2.4rem; color: #ffc2ee; margin-top: 0.4rem; }
@@ -262,3 +262,14 @@ html.android { font-size: calc(100vw / 140); }
 .android #jetlog-list { overflow-y: auto; }
 .android .jl-time { width: auto; margin-right: 1.4rem; }
 .android .jl-sub { margin-left: 0; }
+
+/* ---- Helicopters (lime green) ---- */
+#nearby li.helicopter { border-left-color: #a6e22e; }
+.nb-tag.heli { color: #a6e22e; }
+.alert.helicopter { border-color: #a6e22e; box-shadow: 0 2rem 6rem rgba(0, 0, 0, 0.6), 0 0 5rem rgba(166, 226, 46, 0.3); }
+.alert.helicopter .alert-timer i { background: #a6e22e; }
+.alert.helicopter .track-btn { background: #a6e22e; color: #18220a; }
+#jetlog-list li.helicopter { border-left-color: #a6e22e; }
+#jetlog h1 { color: #e6eef6; }
+.alert-glyph-heli { width: 16rem; height: 16rem; }
+.android .alert-glyph-heli { width: 9rem; height: 9rem; }

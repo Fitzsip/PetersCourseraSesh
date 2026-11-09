@@ -1,7 +1,7 @@
 /* Radar-style map of nearby traffic, centred on home, north up. */
 var Radar = (function () {
   'use strict';
-  var canvas, ctx, w = 0, h = 0;
+  var canvas, ctx, ctxMain, w = 0, h = 0;
 
   // Simple aircraft silhouette pointing up, in units of its half-size.
   var PLANE = [[0, -1], [0.12, -0.6], [0.12, -0.2], [1, 0.25], [1, 0.4], [0.12, 0.2], [0.1, 0.7],
@@ -10,7 +10,7 @@ var Radar = (function () {
 
   function init(el) {
     canvas = el;
-    ctx = el.getContext('2d');
+    ctx = ctxMain = el.getContext('2d');
     resize();
     window.addEventListener('resize', resize);
   }
@@ -43,6 +43,36 @@ var Radar = (function () {
     ctx.closePath();
     ctx.fillStyle = colour;
     ctx.fill();
+    ctx.restore();
+  }
+
+  // Top-down helicopter: body, tail boom and tail rotor, with the main rotor turning.
+  function drawHelicopter(x, y, trackDeg, size, colour, now, target) {
+    var ctx = target || ctxMain;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate((trackDeg || 0) * Math.PI / 180);
+    ctx.fillStyle = colour;
+    ctx.strokeStyle = colour;
+    ctx.beginPath();
+    ctx.ellipse ? ctx.ellipse(0, -0.1 * size, 0.32 * size, 0.55 * size, 0, 0, Math.PI * 2)
+      : ctx.arc(0, -0.1 * size, 0.45 * size, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.lineWidth = Math.max(2, 0.14 * size);
+    ctx.beginPath();
+    ctx.moveTo(0, 0.3 * size);
+    ctx.lineTo(0, 1.15 * size);
+    ctx.moveTo(-0.3 * size, 1.15 * size);
+    ctx.lineTo(0.3 * size, 1.15 * size);
+    ctx.stroke();
+    ctx.rotate(now / 120 % (Math.PI * 2));
+    ctx.lineWidth = Math.max(1.5, 0.1 * size);
+    ctx.beginPath();
+    ctx.moveTo(-1.1 * size, 0);
+    ctx.lineTo(1.1 * size, 0);
+    ctx.moveTo(0, -1.1 * size);
+    ctx.lineTo(0, 1.1 * size);
+    ctx.stroke();
     ctx.restore();
   }
 
@@ -166,7 +196,8 @@ var Radar = (function () {
       var x = a.x + a.vx * dt, y = a.y + a.vy * dt;
       if (x * x + y * y > cfg.watchRadiusKm * cfg.watchRadiusKm * 1.05) continue;
       var px = cx + x * scale, py = cy - y * scale;
-      var colour = a.flag && a.flag.kind === 'private-jet' ? '#ff7ad9'
+      var kind = a.flag ? a.flag.kind : '';
+      var colour = kind === 'private-jet' ? '#ff7ad9' : kind === 'helicopter' ? '#a6e22e'
         : a.inZone ? '#ffb547' : altitudeColour(a.altFt);
 
       var trail = state.trails[a.hex];
@@ -199,7 +230,8 @@ var Radar = (function () {
         ctx.stroke();
         if (ctx.setLineDash) ctx.setLineDash([]);
       }
-      drawPlane(px, py, a.track, a.inZone ? 18 : 13, colour);
+      if (kind === 'helicopter') drawHelicopter(px, py, a.track, a.inZone ? 15 : 11, colour, now);
+      else drawPlane(px, py, a.track, a.inZone ? 18 : 13, colour);
       labels.push({ a: a, x: px + 18, y: py, colour: colour });
     }
     drawLabels(labels, cfg, rem);
@@ -234,5 +266,12 @@ var Radar = (function () {
     }
   }
 
-  return { init: init, draw: draw, resize: resize };
+  // A helicopter picture for popups (the radar's icon, larger and still).
+  function helicopterIcon(canvas, colour) {
+    var c = canvas.getContext('2d');
+    c.clearRect(0, 0, canvas.width, canvas.height);
+    drawHelicopter(canvas.width / 2, canvas.height * 0.42, 0, canvas.width * 0.3, colour, Math.PI * 120 / 4, c);
+  }
+
+  return { init: init, draw: draw, resize: resize, helicopterIcon: helicopterIcon };
 })();

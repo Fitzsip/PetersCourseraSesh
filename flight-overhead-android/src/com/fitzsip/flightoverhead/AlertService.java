@@ -163,7 +163,7 @@ public class AlertService extends Service {
                     .setContentTitle(a.title)
                     .setContentText(a.body.split("\n")[0])
                     .setStyle(new Notification.BigTextStyle().bigText(a.body))
-                    .setColor(a.privateJet ? 0xffff7ad9 : 0xffffb547)
+                    .setColor(a.privateJet ? 0xffff7ad9 : a.helicopter ? 0xffa6e22e : 0xffffb547)
                     .setContentIntent(openApp())
                     .setAutoCancel(true);
             if (a.trackingUrl.length() > 0) {
