@@ -7,3 +7,4 @@
 .sign/
 author-signature.xml
 signature1.xml
+__pycache__/
