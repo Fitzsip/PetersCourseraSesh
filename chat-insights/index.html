@@ -1,0 +1,1186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!--
+  PRIVACY: this policy forbids the page from loading or sending anything over the
+  network (no fetch, no XHR, no images, no fonts, no scripts from elsewhere).
+  Your chat is read from disk by your browser and never leaves this tab.
+-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; form-action 'none'; base-uri 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Chat Insights</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #6f6d68;
+  --axis: #898781;
+  --grid: #e1e0d9;
+  --base: #c3c2b7;
+  --border: rgba(11,11,11,0.10);
+  --wash: rgba(11,11,11,0.04);
+  --accent: #2a78d6;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100;
+  --s5: #e87ba4; --s6: #008300; --s7: #6250d6; --s8: #e34948;
+  --q0: #eeede8; --q1: #cde2fb; --q2: #86b6ef; --q3: #3987e5; --q4: #1c5cab; --q5: #0d366b;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #a09e97;
+    --axis: #898781; --grid: #2c2c2a; --base: #383835;
+    --border: rgba(255,255,255,0.10); --wash: rgba(255,255,255,0.05); --accent: #3987e5;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+    --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+    --q0: #262624; --q1: #104281; --q2: #1c5cab; --q3: #2a78d6; --q4: #5598e7; --q5: #9ec5f4;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #a09e97;
+  --axis: #898781; --grid: #2c2c2a; --base: #383835;
+  --border: rgba(255,255,255,0.10); --wash: rgba(255,255,255,0.05); --accent: #3987e5;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500;
+  --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767;
+  --q0: #262624; --q1: #104281; --q2: #1c5cab; --q3: #2a78d6; --q4: #5598e7; --q5: #9ec5f4;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--page); color: var(--ink); font: 15px/1.5 var(--font); }
+main { max-width: 1120px; margin: 0 auto; padding: 24px 16px 80px; }
+h1 { font-size: 28px; line-height: 1.2; margin: 0 0 4px; font-weight: 650; }
+h2 { font-size: 20px; margin: 0 0 2px; font-weight: 600; }
+h3 { font-size: 15px; margin: 0 0 8px; font-weight: 600; }
+p { margin: 0 0 8px; }
+.sub { color: var(--ink-2); }
+.muted { color: var(--muted); font-size: 13px; }
+a { color: var(--accent); }
+button, select, input, textarea { font: inherit; color: inherit; }
+button, select, input[type=text], input[type=search], textarea {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px;
+}
+button { cursor: pointer; }
+button:hover { background: var(--wash); }
+button.primary { background: var(--accent); color: #fff; border-color: transparent; }
+textarea { width: 100%; min-height: 150px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
+.privacy { display: flex; gap: 10px; align-items: flex-start; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 12px 14px; margin: 16px 0; font-size: 14px; color: var(--ink-2); }
+.privacy b { color: var(--ink); }
+.drop { border: 2px dashed var(--base); border-radius: 16px; padding: 40px 20px; text-align: center; background: var(--surface); }
+.drop.over { border-color: var(--accent); background: var(--wash); }
+.drop .big { font-size: 18px; font-weight: 600; margin-bottom: 6px; }
+.howto { margin-top: 20px; display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.howto div { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; font-size: 14px; }
+.howto ol { margin: 4px 0 0; padding-left: 20px; }
+.toolbar { position: sticky; top: 0; z-index: 5; background: var(--page); display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center;
+  padding: 10px 0; border-bottom: 1px solid var(--grid); margin-bottom: 8px; font-size: 14px; }
+.toolbar label { display: inline-flex; gap: 6px; align-items: center; color: var(--ink-2); }
+.toolbar .spacer { flex: 1; }
+section.card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 18px; margin: 16px 0; }
+.card > header { margin-bottom: 12px; }
+.grid2 { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+.chart { width: 100%; position: relative; }
+.chart svg { display: block; overflow: visible; }
+.chart text { font: 11px var(--font); fill: var(--axis); font-variant-numeric: tabular-nums; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--ink-2); margin: 0 0 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; }
+.legend i.line { height: 2px; width: 14px; border-radius: 1px; }
+.hero { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: 8px 0 14px; }
+.hero .num { font-size: 52px; font-weight: 650; line-height: 1; }
+.tiles { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); }
+.tile { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; }
+.tile .l { font-size: 13px; color: var(--ink-2); }
+.tile .v { font-size: 22px; font-weight: 600; line-height: 1.25; }
+.tile .d { font-size: 12px; color: var(--muted); }
+.seg { display: grid; grid-template-columns: 120px 1fr; gap: 8px 12px; align-items: center; }
+.seg .lab { font-size: 13px; color: var(--ink-2); }
+.segbar { display: flex; gap: 2px; height: 28px; }
+.segbar div { border-radius: 4px; color: #fff; font-size: 12px; font-weight: 600; display: flex; align-items: center; padding-left: 8px;
+  white-space: nowrap; overflow: hidden; min-width: 0; }
+.hbars { display: grid; grid-template-columns: minmax(70px, max-content) 1fr; gap: 5px 10px; align-items: center; font-size: 13px; }
+.hbars .k { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
+.hbars .row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.hbars .bar { height: 12px; border-radius: 0 4px 4px 0; flex: none; }
+.hbars .val { color: var(--ink-2); font-size: 12px; font-variant-numeric: tabular-nums; }
+.emo { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 8px; }
+.emo div { text-align: center; border: 1px solid var(--border); border-radius: 10px; padding: 6px 2px; }
+.emo .e { font-size: 26px; line-height: 1.2; }
+.emo .c { font-size: 12px; color: var(--ink-2); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips span { border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; font-size: 13px; }
+.years { display: grid; gap: 10px; }
+.years > div { display: grid; grid-template-columns: 56px 1fr; gap: 10px; align-items: baseline; }
+.years b { font-size: 15px; }
+.miles { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.mile { border-left: 3px solid var(--base); padding: 4px 0 4px 12px; }
+.mile .t { font-size: 13px; color: var(--ink-2); }
+.mile .v { font-weight: 600; }
+.mile q { display: block; color: var(--ink-2); font-size: 13px; margin-top: 2px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.results { max-height: 420px; overflow: auto; border-top: 1px solid var(--grid); margin-top: 10px; }
+.msg { padding: 8px 2px; border-bottom: 1px solid var(--grid); font-size: 14px; }
+.msg .h { font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.msg .h i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.msg .b { white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg mark { background: color-mix(in srgb, var(--s4) 40%, transparent); color: inherit; border-radius: 3px; }
+.row-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.row-form input[type=search] { flex: 1; min-width: 200px; }
+#tip { position: fixed; z-index: 20; pointer-events: none; background: var(--surface); color: var(--ink); border: 1px solid var(--border);
+  border-radius: 10px; padding: 8px 10px; font-size: 12px; box-shadow: 0 6px 24px rgba(0,0,0,.18); max-width: 280px; }
+#tip .tt { color: var(--ink-2); margin-bottom: 4px; }
+#tip .tr { display: flex; align-items: center; gap: 8px; }
+#tip .tr i { width: 12px; height: 2px; border-radius: 1px; display: inline-block; }
+#tip .tr b { font-variant-numeric: tabular-nums; min-width: 34px; }
+#tip .tr span { color: var(--ink-2); }
+.err { color: #d03b3b; margin-top: 10px; }
+.note { font-size: 13px; color: var(--ink-2); margin-top: 8px; }
+.hit:hover, .hit:focus { opacity: .75; outline: none; }
+nav.jump { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 0; }
+nav.jump a { font-size: 13px; text-decoration: none; border: 1px solid var(--border); border-radius: 999px; padding: 2px 10px; color: var(--ink-2); }
+@media (max-width: 560px) {
+  .hero .num { font-size: 44px; }
+  .seg { grid-template-columns: 1fr; gap: 2px; }
+  .seg .lab { margin-top: 6px; }
+}
+@media print { .toolbar, #landing { display: none; } section.card { break-inside: avoid; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Chat Insights</h1>
+  <p class="sub">Look back at a WhatsApp conversation: rhythms, trends, topics and little milestones.</p>
+
+  <div class="privacy" role="note">
+    <span aria-hidden="true">🔒</span>
+    <div><b>Your chat never leaves this device.</b> The file is read by your browser and analysed right here. This page
+    has no server, sends nothing, and its security policy blocks every network request, so you can switch off Wi‑Fi before opening it.
+    Nothing is saved: closing the tab forgets everything.</div>
+  </div>
+
+  <div id="landing">
+    <label class="drop" id="drop">
+      <div class="big">Drop your WhatsApp export here</div>
+      <div class="muted">the <b>.zip</b> or <b>_chat.txt</b> / <b>.txt</b> file · or click to choose</div>
+      <input type="file" id="file" accept=".txt,.zip,text/plain,application/zip" hidden>
+    </label>
+    <p style="text-align:center;margin-top:10px"><button id="demo">Or try it with made-up demo data</button></p>
+    <div id="loadMsg" class="muted" style="text-align:center" aria-live="polite"></div>
+    <div id="loadErr" class="err" role="alert"></div>
+    <div class="howto">
+      <div><b>iPhone</b><ol><li>Open the chat, tap the contact's name at the top.</li><li>Scroll down → <b>Export Chat</b> → <b>Without Media</b>.</li><li>Save to Files, then drop the .zip here.</li></ol></div>
+      <div><b>Android</b><ol><li>Open the chat, tap <b>⋮</b> → <b>More</b> → <b>Export chat</b>.</li><li>Choose <b>Without media</b>.</li><li>Save the .txt (or .zip) and drop it here.</li></ol></div>
+    </div>
+  </div>
+
+  <div id="app" hidden>
+    <div class="toolbar">
+      <label>From <select id="fromY"></select></label>
+      <label>to <select id="toY"></select></label>
+      <label title="Silence longer than this starts a new conversation">New conversation after
+        <select id="gap"><option value="1">1 h</option><option value="2">2 h</option><option value="4" selected>4 h</option><option value="8">8 h</option><option value="12">12 h</option></select> quiet</label>
+      <label>Group by <select id="unitSel"><option value="auto">auto</option><option value="week">week</option><option value="month">month</option><option value="quarter">quarter</option><option value="year">year</option></select></label>
+      <label><input type="checkbox" id="smooth" checked> Smooth lines</label>
+      <label title="Only change if dates look wrong">Dates <select id="order"><option value="auto">auto</option><option value="dmy">day/month</option><option value="mdy">month/day</option><option value="ymd">year/month/day</option></select></label>
+      <span class="spacer"></span>
+      <button id="csv" title="Monthly numbers as a spreadsheet, saved to this device">Save CSV</button>
+      <button id="reset">Load another chat</button>
+    </div>
+    <nav class="jump" aria-label="Sections">
+      <a href="#s-overview">Overview</a><a href="#s-time">Over time</a><a href="#s-when">When</a><a href="#s-dyn">Dynamics</a>
+      <a href="#s-love">Love &amp; laughs</a><a href="#s-words">Words</a><a href="#s-topics">Topics</a><a href="#s-miles">Milestones</a><a href="#s-search">Search</a>
+    </nav>
+
+    <section class="card" id="s-overview">
+      <header><h2>Overview</h2><p class="muted" id="ovSub"></p></header>
+      <div class="hero"><span class="num" id="heroNum"></span><span class="sub" id="heroTxt"></span></div>
+      <div class="tiles" id="tiles"></div>
+      <h3 style="margin-top:18px">Who does what</h3>
+      <div class="legend" id="balLegend"></div>
+      <div class="seg" id="balance"></div>
+    </section>
+
+    <section class="card" id="s-time">
+      <header><h2>Messages over time</h2><p class="muted">How much you talk, <span class="unit">month</span> by <span class="unit">month</span>.</p></header>
+      <div class="legend" id="volLegend"></div>
+      <div class="chart" id="vol"></div>
+      <h3 style="margin-top:22px">Every day, at a glance</h3>
+      <p class="muted">Darker = more messages that day.</p>
+      <div class="chart" id="cal"></div>
+    </section>
+
+    <section class="card" id="s-when">
+      <header><h2>When you talk</h2><p class="muted">Your weekly rhythm, by hour of the day.</p></header>
+      <div class="chart" id="hourDow"></div>
+      <h3 style="margin-top:22px">Hour of day, by person</h3>
+      <div class="legend" id="hourLegend"></div>
+      <div class="chart" id="hourP"></div>
+    </section>
+
+    <section class="card" id="s-dyn">
+      <header><h2>Conversation dynamics</h2><p class="muted">A conversation starts after a quiet spell (set in the toolbar). Who reaches out first, and how fast does the other reply?</p></header>
+      <div class="grid2">
+        <div><h3>Conversations started</h3><div class="legend" id="initLegend"></div><div class="chart" id="init"></div></div>
+        <div><h3>Typical reply time (median, minutes)</h3><div class="legend" id="rtLegend"></div><div class="chart" id="rt"></div></div>
+      </div>
+      <div class="grid2" style="margin-top:18px">
+        <div><h3>Average words per message</h3><div class="legend" id="lenLegend"></div><div class="chart" id="len"></div></div>
+        <div><h3>Mood (net positivity)</h3><div class="legend" id="moodLegend"></div><div class="chart" id="mood"></div>
+          <p class="note">% of messages with positive words or emoji minus % with negative ones. A rough, word-list based signal: it can't read sarcasm or in-jokes.</p></div>
+      </div>
+    </section>
+
+    <section class="card" id="s-love">
+      <header><h2>Love &amp; laughs</h2><p class="muted">Messages with affection (love, miss you, xx, ❤️, 😘…) and laughter (haha, lol, 😂…), as a share of each person's messages.</p></header>
+      <div class="grid2">
+        <div><h3>Affection</h3><div class="legend" id="loveLegend"></div><div class="chart" id="love"></div></div>
+        <div><h3>Laughter</h3><div class="legend" id="laughLegend"></div><div class="chart" id="laugh"></div></div>
+      </div>
+    </section>
+
+    <section class="card" id="s-words">
+      <header><h2>Words &amp; emoji</h2><p class="muted">Common filler words are skipped. Add more (names, other languages) here:
+        <input type="text" id="stop" placeholder="e.g. alex, sam, grand" style="width:260px;max-width:100%"></p></header>
+      <div class="grid2" id="topWords"></div>
+      <h3 style="margin-top:22px">Signature words</h3>
+      <p class="muted">Words each of you uses far more than the other.</p>
+      <div class="grid2" id="sigWords"></div>
+      <h3 style="margin-top:22px">Favourite emoji</h3>
+      <div class="grid2" id="emoji"></div>
+      <h3 style="margin-top:22px">Catchphrases</h3>
+      <p class="muted">Most repeated two- and three-word phrases.</p>
+      <div class="grid2" id="phrases"></div>
+    </section>
+
+    <section class="card" id="s-topics">
+      <header><h2>Topics over time</h2>
+        <p class="muted">Share of messages in each period that mention a topic. Edit the topics: one per line as <code>Name: word, another word, prefix*</code> (emoji work too; up to 8 topics).</p></header>
+      <div class="legend" id="topicLegend"></div>
+      <div class="chart" id="topics"></div>
+      <details style="margin-top:12px"><summary>Edit topics</summary>
+        <textarea id="topicDefs" spellcheck="false"></textarea>
+        <button id="topicApply" class="primary" style="margin-top:6px">Update chart</button>
+      </details>
+      <h3 style="margin-top:22px">Each year in words</h3>
+      <p class="muted">Words that stood out in each year compared with the others: a rough summary of what was going on.</p>
+      <div class="years" id="yearWords"></div>
+    </section>
+
+    <section class="card" id="s-miles">
+      <header><h2>Milestones &amp; records</h2></header>
+      <div class="miles" id="miles"></div>
+    </section>
+
+    <section class="card" id="s-search">
+      <header><h2>Search your chat</h2><p class="muted">Find a word or phrase and see when it came up. Use <code>*</code> for prefixes (e.g. <code>holiday*</code>), commas for several terms.</p></header>
+      <form class="row-form" id="searchForm"><input type="search" id="q" placeholder="e.g. paris, wedding"><button class="primary">Search</button></form>
+      <div class="legend" id="searchLegend"></div>
+      <div class="chart" id="searchChart"></div>
+      <div class="muted" id="searchInfo"></div>
+      <div class="results" id="searchRes"></div>
+    </section>
+  </div>
+</main>
+<div id="tip" hidden></div>
+
+<script>
+'use strict';
+/* =========================================================================
+   Chat Insights: runs entirely in the browser. No network access.
+   ========================================================================= */
+
+const $ = (s) => document.querySelector(s);
+const DAY = 864e5;
+const state = { raw: null, all: [], people: [], msgs: [], A: null, renderers: [] };
+
+/* ---------------- helpers ---------------- */
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmt = (n) => Math.round(n).toLocaleString();
+const fmt1 = (n) => (Math.round(n * 10) / 10).toLocaleString();
+const compact = (n) => n >= 1e6 ? (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M' : n >= 1e4 ? Math.round(n / 1e3) + 'K' : n >= 1e3 ? (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'K' : String(Math.round(n * 100) / 100);
+const pct = (n) => (Math.round(n * 1000) / 10) + '%';
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const fmtDate = (d) => d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+const fmtDT = (d) => fmtDate(d) + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+function fmtDur(ms) {
+  const m = ms / 6e4;
+  if (m < 1) return Math.round(ms / 1000) + ' s';
+  if (m < 90) return Math.round(m) + ' min';
+  const h = m / 60;
+  if (h < 48) return fmt1(h) + ' hours';
+  return fmt1(h / 24) + ' days';
+}
+const median = (a) => { if (!a.length) return null; const s = Float64Array.from(a).sort(); const k = s.length >> 1; return s.length % 2 ? s[k] : (s[k - 1] + s[k]) / 2; };
+const color = (i) => `var(--s${(i % 8) + 1})`;
+function topN(map, n, filter) {
+  const arr = [];
+  for (const [k, v] of map) if (!filter || filter(k, v)) arr.push([k, v]);
+  arr.sort((a, b) => b[1] - a[1]);
+  return arr.slice(0, n);
+}
+function smooth(vals, on) {
+  if (!on) return vals;
+  return vals.map((_, i) => {
+    let s = 0, c = 0;
+    for (let j = i - 1; j <= i + 1; j++) if (j >= 0 && j < vals.length && vals[j] != null) { s += vals[j]; c++; }
+    return vals[i] == null || !c ? null : s / c;
+  });
+}
+
+/* ---------------- word lists ---------------- */
+const STOP = new Set(`a about above after again against ain all also am an and any are aren aren't as at be because been before being below between both but by can can't cannot could couldn't did didn't do does doesn't doing don don't done down during each either else even ever every few for from further get gets getting go goes going gone got gotta gonna had hadn't has hasn't have haven't having he he'd he'll he's her here here's hers herself him himself his how how's i i'd i'll i'm i've id if ill im in into is isn't it it'd it'll it's its itself ive just know let let's like ll made make me might more most much must mustn't my myself need no nor not now of off oh ok okay on once one only or other ought our ours ourselves out over own re really right said same say says see shan't she she'd she'll she's should shouldn't so some such sure than that that's thats the their theirs them themselves then there there's theres these they they'd they'll they're they've thing things think this those though through to too u ur under until up us ve very want was wasn't way we we'd we'll we're we've well were weren't what what's whats when when's where where's which while who who's whom why why's will with won't would wouldn't yeah yep yes yh ya you you'd you'll you're you've your youre yours yourself yourselves dont cant wont didnt doesnt isnt wasnt couldnt wouldnt shouldnt havent hasnt arent theyre were thats gonna wanna gotta lol haha hahaha hah hehe ah ahh hmm hm mm mmm ooh oh ohh yea yeh nah na k kk cos coz cause cuz bit back still lot lots also maybe though tho thru thx thanks thank ta pls please plz sorry well good great grand cool nice fine alright alr sounds sound actually probably already anyway anyways something anything nothing everything someone anyone everyone come came coming take took put look looks looking tell told ask asked give gave let get got also there's ye yup ty np omg lmao btw idk tbh rn brb ttyl ok oki okey okk kay x xx xxx media omitted deleted message edited image video audio sticker gif document attached omitted null http https www com`.split(/\s+/));
+
+const SENT = (() => {
+  const pos = `love:3 loved:3 lovely:3 loving:3 adore:3 amazing:3 awesome:3 fantastic:3 brilliant:3 wonderful:3 perfect:3 beautiful:3 gorgeous:3 excellent:3 best:2 better:1 great:2 good:2 nice:2 happy:3 glad:2 cute:2 sweet:2 fun:2 funny:2 enjoy:2 enjoyed:2 excited:3 exciting:3 yay:3 woohoo:3 congrats:3 congratulations:3 proud:3 thanks:2 thank:2 cheers:1 delighted:3 lucky:2 relaxed:2 relaxing:2 cosy:2 cozy:2 delicious:3 yum:2 yummy:2 hug:2 hugs:2 kiss:2 kisses:2 miss:1 smile:2 laugh:1 grand:1 class:1 deadly:1 legend:2 ace:2 safe:1 well:0 fab:3 fabulous:3 super:2 incredible:3 fine:1 calm:1 xx:2 xxx:2 haha:1 hahaha:1 lol:1 ❤:3 ❤️:3 😍:3 🥰:3 😘:3 😊:2 😀:2 😃:2 😄:2 😁:2 🙂:1 😂:2 🤣:2 😆:2 👍:1 🙌:2 🎉:3 🥳:3 💕:3 💖:3 💗:3 💓:3 💞:3 😻:3 ☺:2 😚:3 😙:2 🤗:2 💪:1 ✨:1 😎:1`;
+  const neg = `hate:-3 hated:-3 awful:-3 terrible:-3 horrible:-3 worst:-3 bad:-2 worse:-2 sad:-2 upset:-2 angry:-3 annoyed:-2 annoying:-2 annoying:-2 irritated:-2 furious:-3 mad:-2 cross:-1 tired:-1 exhausted:-2 knackered:-2 wrecked:-2 stressed:-2 stress:-2 stressful:-2 worried:-2 worry:-2 anxious:-2 scared:-2 afraid:-2 sick:-2 ill:-2 pain:-2 hurt:-2 hurts:-2 cry:-2 crying:-2 sorry:-1 unfortunately:-2 disappointed:-2 disappointing:-2 boring:-2 bored:-2 lonely:-2 miserable:-3 shit:-2 shite:-2 crap:-2 damn:-1 fuck:-2 fucking:-2 ugh:-2 argh:-2 fed:-1 late:-1 problem:-1 problems:-2 wrong:-2 fail:-2 failed:-2 broke:-2 broken:-2 lost:-1 nightmare:-3 disaster:-3 rubbish:-2 useless:-2 stupid:-2 ridiculous:-2 frustrated:-2 frustrating:-2 hungover:-2 cold:-1 rain:-1 😢:-2 😭:-1 😞:-2 😔:-2 😟:-2 😩:-2 😫:-2 😡:-3 😠:-3 🤬:-3 😤:-2 🙄:-1 😒:-2 💔:-3 😣:-2 😖:-2 🤢:-2 🤒:-2 😷:-1`;
+  const m = new Map();
+  for (const tok of (pos + ' ' + neg).split(/\s+/)) { const i = tok.lastIndexOf(':'); m.set(tok.slice(0, i), +tok.slice(i + 1)); }
+  return m;
+})();
+const NEGATORS = new Set(['not', 'no', 'never', "don't", 'dont', "isn't", 'isnt', "wasn't", 'wasnt', "didn't", 'didnt', "aren't", "can't", 'cant', "won't", 'wont', 'nothing', 'hardly', 'without']);
+const LOVE_RE = /\blo+ve? (yo)?u+\b|\bluv\b|\bl+u+v+ (yo)?u+\b|\blove\b|\bmiss(ed|ing)? (yo)?u+\b|\bx{2,}\b|\bbabe+\b|\bbab(y|ie)\b|\bhoney\b|\bhun\b|\bsweetheart\b|\bdarling\b|\bsweetie\b|❤|♥|😘|🥰|😍|💕|💖|💗|💓|💞|💘|💝|😚|😻|🫶/i;
+const LOVEYOU_RE = /\b(i )?lo+ve? (yo)?u+\b|\b(i )?luv (yo)?u+\b|\bily\b|\bi love you\b/i;
+const LAUGH_RE = /\b(a?ha){2,}h?\b|\bhe(he)+\b|\blo+l+\b|\blmf?ao+\b|\brofl\b|😂|🤣|😆|😹/i;
+const EMOJI_RE = /(?:\p{Regional_Indicator}{2}|\p{Extended_Pictographic})(?:️|[\u{1F3FB}-\u{1F3FF}])*(?:‍\p{Extended_Pictographic}(?:️|[\u{1F3FB}-\u{1F3FF}])*)*/gu;
+const WORD_RE = /[\p{L}\p{N}][\p{L}\p{N}'’]*/gu;
+const URL_RE = /https?:\/\/\S+|www\.\S+/gi;
+
+/* ---------------- zip reading (no libraries) ---------------- */
+async function readZip(buf) {
+  const dv = new DataView(buf), u8 = new Uint8Array(buf);
+  let eocd = -1;
+  for (let i = buf.byteLength - 22; i >= Math.max(0, buf.byteLength - 65557); i--) if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  if (eocd < 0) throw new Error('This .zip file looks damaged.');
+  const n = dv.getUint16(eocd + 10, true);
+  let p = dv.getUint32(eocd + 16, true);
+  const entries = [], dec = new TextDecoder();
+  for (let k = 0; k < n; k++) {
+    if (dv.getUint32(p, true) !== 0x02014b50) break;
+    const method = dv.getUint16(p + 10, true), csize = dv.getUint32(p + 20, true), usize = dv.getUint32(p + 24, true);
+    const nlen = dv.getUint16(p + 28, true), elen = dv.getUint16(p + 30, true), clen = dv.getUint16(p + 32, true), off = dv.getUint32(p + 42, true);
+    entries.push({ name: dec.decode(u8.subarray(p + 46, p + 46 + nlen)), method, csize, usize, off });
+    p += 46 + nlen + elen + clen;
+  }
+  const txt = entries.filter((e) => /\.txt$/i.test(e.name) && !/(^|\/)__MACOSX\//.test(e.name));
+  if (!txt.length) throw new Error('No chat text file was found inside the .zip.');
+  const e = txt.find((x) => /_chat\.txt$/i.test(x.name)) || txt.sort((a, b) => b.usize - a.usize)[0];
+  const start = e.off + 30 + dv.getUint16(e.off + 26, true) + dv.getUint16(e.off + 28, true);
+  const data = u8.subarray(start, start + e.csize);
+  if (e.method === 0) return data;
+  if (e.method !== 8) throw new Error('Unsupported zip compression.');
+  if (typeof DecompressionStream === 'undefined') throw new Error('This browser cannot unzip files. Unzip it first and drop the .txt file instead.');
+  const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+/* ---------------- parsing ---------------- */
+// Matches both iOS "[31/12/2023, 21:04:05] Name: text" and Android "31/12/2023, 21:04 - Name: text"
+// (also dots/dashes in dates, 2-digit years, 12-hour clocks with am/pm).
+const HEAD = /^\[?(\d{1,4})[\/.\-](\d{1,2})[\/.\-](\d{1,4})\.?,?\s+(\d{1,2})[:.](\d{2})(?:[:.](\d{2}))?\s*([ap]\.?\s?m\.?)?(?:\]\s?|\s?[-–—]\s)(.*)$/i;
+
+function clean(text) {
+  return text.replace(/^﻿/, '').replace(/[‎‏‪-‮⁦-⁩]/g, '').replace(/[  ]/g, ' ');
+}
+
+function detectOrder(heads) {
+  let maxA = 0, maxB = 0, ymd = false;
+  for (const h of heads) {
+    if (h[1].length === 4) ymd = true;
+    maxA = Math.max(maxA, +h[1]); maxB = Math.max(maxB, +h[2]);
+  }
+  if (ymd) return 'ymd';
+  if (maxA > 12) return 'dmy';
+  if (maxB > 12) return 'mdy';
+  return 'dmy';
+}
+
+function classify(text) {
+  const l = text.toLowerCase().trim();
+  let m = l.match(/^<attached: [^>]*\.(\w+)>$/);
+  if (m) {
+    const ext = m[1];
+    if (/sticker/.test(l) || ext === 'webp') return 'sticker';
+    if (/^(jpe?g|png|heic|gif)$/.test(ext)) return /gif/.test(l) ? 'gif' : 'photo';
+    if (/^(mp4|mov|3gp)$/.test(ext)) return 'video';
+    if (/^(opus|m4a|aac|mp3|ogg|wav)$/.test(ext)) return 'voice';
+    return 'document';
+  }
+  if (/^<media omitted>$|^media omitted$/.test(l)) return 'media';
+  if (/^(image|photo) omitted$/.test(l)) return 'photo';
+  if (/^video omitted$/.test(l)) return 'video';
+  if (/^(audio|voice message) omitted$|^\S+\.opus \(file attached\)$/.test(l)) return 'voice';
+  if (/^sticker omitted$/.test(l)) return 'sticker';
+  if (/^gif omitted$/.test(l)) return 'gif';
+  if (/^(document|contact card) omitted$|\.(pdf|docx?|xlsx?|pptx?)( •.*)? (document omitted|\(file attached\))$/.test(l)) return 'document';
+  if (/^\S+\.(jpe?g|png|webp) \(file attached\)$/.test(l)) return 'photo';
+  if (/^\S+\.(mp4|3gp) \(file attached\)$/.test(l)) return 'video';
+  if (/^(this message was deleted|you deleted this message)\.?$/.test(l)) return 'deleted';
+  if (/^(missed )?(voice|video|group voice|group video) call\b/.test(l)) return 'call';
+  if (/^(live )?location: |^location: https?:/.test(l)) return 'location';
+  if (/^null$/.test(l)) return 'deleted';
+  return 'text';
+}
+
+function parseChat(raw, orderPref) {
+  const lines = clean(raw).split(/\r?\n/);
+  const heads = [];
+  for (let i = 0; i < lines.length && heads.length < 4000; i++) { const m = HEAD.exec(lines[i]); if (m) heads.push(m); }
+  if (heads.length < 2) throw new Error("This doesn't look like a WhatsApp chat export. Please choose the exported .zip or .txt file.");
+  const order = orderPref === 'auto' ? detectOrder(heads) : orderPref;
+  const out = [];
+  let cur = null;
+  for (const line of lines) {
+    const m = HEAD.exec(line);
+    if (!m) { if (cur) cur.text += '\n' + line; continue; }
+    let a = +m[1], b = +m[2], c = +m[3], y, mo, d;
+    if (order === 'ymd') { y = a; mo = b; d = c; } else if (order === 'mdy') { mo = a; d = b; y = c; } else { d = a; mo = b; y = c; }
+    if (y < 100) y += 2000;
+    let h = +m[4];
+    const ap = m[7] ? m[7].toLowerCase()[0] : '';
+    if (ap === 'p' && h < 12) h += 12;
+    if (ap === 'a' && h === 12) h = 0;
+    const date = new Date(y, mo - 1, d, h, +m[5], +(m[6] || 0));
+    const rest = m[8];
+    const idx = rest.indexOf(': ');
+    if (idx > 0 && idx < 80) {
+      cur = { d: date, sender: rest.slice(0, idx).trim(), text: rest.slice(idx + 2) };
+      out.push(cur);
+    } else cur = null; // system line (joined, changed subject, security code...)
+  }
+  return out.filter((m) => !isNaN(m.d) && !/^messages and calls are end-to-end encrypted|^messages to this (chat|group) are now secured|^your security code with/i.test(m.text));
+}
+
+function enrich(list) {
+  // Stable order (exports are chronological, but be safe).
+  list.sort((a, b) => a.d - b.d);
+  const counts = new Map();
+  for (const m of list) counts.set(m.sender, (counts.get(m.sender) || 0) + 1);
+  let names = [...counts.entries()].sort((a, b) => b[1] - a[1]).map((e) => e[0]);
+  const people = names.length > 8 ? [...names.slice(0, 7), 'Others'] : names;
+  const pIndex = new Map(names.map((n, i) => [n, Math.min(i, people.length - 1)]));
+  for (const m of list) {
+    m.p = pIndex.get(m.sender);
+    m.t = +m.d;
+    let text = m.text;
+    if (/<this message was edited>\s*$/i.test(text)) { m.edited = true; text = text.replace(/\s*<this message was edited>\s*$/i, ''); }
+    m.text = text;
+    m.type = classify(text);
+    m.di = Math.floor(Date.UTC(m.d.getFullYear(), m.d.getMonth(), m.d.getDate()) / DAY);
+    m.h = m.d.getHours();
+    m.dow = (m.d.getDay() + 6) % 7;
+    m.y = m.d.getFullYear();
+    m.mk = m.y * 12 + m.d.getMonth();
+    if (m.type === 'text' || m.type === 'location') {
+      m.link = URL_RE.test(text); URL_RE.lastIndex = 0;
+      const plain = text.replace(URL_RE, ' ');
+      m.e = (plain.match(EMOJI_RE) || []).map((e) => e.replace(/️/g, ''));
+      m.w = (plain.toLowerCase().replace(/’/g, "'").match(WORD_RE) || []).map((w) => w.replace(/'+$/, ''));
+      m.q = /\?\s*$|\?\s*\p{Extended_Pictographic}/u.test(plain);
+      m.love = LOVE_RE.test(plain);
+      m.laugh = LAUGH_RE.test(plain);
+      let s = 0;
+      for (let i = 0; i < m.w.length; i++) {
+        const v = SENT.get(m.w[i]);
+        if (v) s += (i > 0 && NEGATORS.has(m.w[i - 1])) || (i > 1 && NEGATORS.has(m.w[i - 2])) ? -v / 2 : v;
+      }
+      for (const e of m.e) { const v = SENT.get(e); if (v) s += v; }
+      m.s = s;
+    } else { m.w = []; m.e = []; m.s = 0; }
+  }
+  return { list, people };
+}
+
+/* ---------------- analysis ---------------- */
+function buckets(first, last, unit) {
+  const span = last - first;
+  if (unit === 'auto') unit = span < 180 * DAY ? 'week' : span < 6 * 365 * DAY ? 'month' : 'quarter';
+  if (unit === 'week') {
+    const d0 = Math.floor(Date.UTC(first.getFullYear(), first.getMonth(), first.getDate()) / DAY);
+    const start = d0 - ((first.getDay() + 6) % 7); // Monday
+    const d1 = Math.floor(Date.UTC(last.getFullYear(), last.getMonth(), last.getDate()) / DAY);
+    const n = Math.floor((d1 - start) / 7) + 1;
+    const labels = [], dates = [];
+    for (let i = 0; i < n; i++) { const dt = new Date((start + i * 7) * DAY); dates.push(dt); labels.push('Week of ' + dt.getUTCDate() + ' ' + MON[dt.getUTCMonth()] + ' ' + dt.getUTCFullYear()); }
+    return { unit: 'week', n, labels, dates, of: (m) => Math.floor((m.di - start) / 7) };
+  }
+  if (unit === 'quarter' || unit === 'year') {
+    const per = unit === 'year' ? 12 : 3;
+    const k0 = Math.floor((first.getFullYear() * 12 + first.getMonth()) / per), k1 = Math.floor((last.getFullYear() * 12 + last.getMonth()) / per);
+    const n = k1 - k0 + 1, labels = [], dates = [];
+    for (let i = 0; i < n; i++) {
+      const mk = (k0 + i) * per, y = Math.floor(mk / 12);
+      dates.push(new Date(Date.UTC(y, mk % 12, 1)));
+      labels.push(unit === 'year' ? String(y) : 'Q' + ((mk % 12) / 3 + 1) + ' ' + y);
+    }
+    return { unit, n, labels, dates, of: (m) => Math.floor(m.mk / per) - k0 };
+  }
+  const k0 = first.getFullYear() * 12 + first.getMonth(), k1 = last.getFullYear() * 12 + last.getMonth();
+  const n = k1 - k0 + 1, labels = [], dates = [];
+  for (let i = 0; i < n; i++) { const k = k0 + i; dates.push(new Date(Date.UTC(Math.floor(k / 12), k % 12, 1))); labels.push(MON[k % 12] + ' ' + Math.floor(k / 12)); }
+  return { unit: 'month', n, labels, dates, of: (m) => m.mk - k0 };
+}
+
+function stopSet() {
+  const extra = $('#stop').value.toLowerCase().split(/[,\s]+/).filter(Boolean);
+  const s = new Set(STOP);
+  for (const w of extra) s.add(w);
+  for (const p of state.people) for (const w of p.toLowerCase().split(/\s+/)) s.add(w);
+  return s;
+}
+const isContent = (w, stop) => w.length > 2 && !stop.has(w) && !/^\d+$/.test(w) && !/^\d/.test(w);
+
+const WORD_FIELDS = ['wc', 'emo', 'bi', 'tri', 'sig', 'yearWords'];
+function analyze(msgs, gapH, reuseWords) {
+  const P = state.people.length;
+  const B = buckets(msgs[0].d, msgs[msgs.length - 1].d, $('#unitSel').value);
+  const grid = () => Array.from({ length: P }, () => new Array(B.n).fill(0));
+  const tot = () => new Array(P).fill(0);
+  const A = {
+    B, P, n: msgs.length,
+    vol: grid(), words: grid(), textMsgs: grid(), love: grid(), laugh: grid(), pos: grid(), neg: grid(), init: grid(),
+    rt: Array.from({ length: P }, () => Array.from({ length: B.n }, () => [])),
+    T: { msgs: tot(), words: tot(), media: tot(), emoji: tot(), q: tot(), link: tot(), love: tot(), laugh: tot(), init: tot(), last: tot(), voice: tot(), deleted: tot(), text: tot(), call: tot() },
+    rtAll: Array.from({ length: P }, () => []),
+    days: new Map(), hourDow: Array.from({ length: 7 }, () => new Array(24).fill(0)), hourP: Array.from({ length: P }, () => new Array(24).fill(0)),
+    types: Array.from({ length: P }, () => new Map()),
+    longestMsg: null, firstLoveYou: new Array(P).fill(null), maxGap: { ms: 0 }, sessions: 0, longestSession: null,
+  };
+  const gap = gapH * 36e5;
+  let sess = null;
+  for (let i = 0; i < msgs.length; i++) {
+    const m = msgs[i], p = m.p, b = B.of(m), prev = msgs[i - 1];
+    A.vol[p][b]++; A.T.msgs[p]++;
+    A.days.set(m.di, (A.days.get(m.di) || 0) + 1);
+    A.hourDow[m.dow][m.h]++; A.hourP[p][m.h]++;
+    A.types[p].set(m.type, (A.types[p].get(m.type) || 0) + 1);
+    if (m.type === 'text') {
+      A.textMsgs[p][b]++; A.T.text[p]++;
+      A.words[p][b] += m.w.length; A.T.words[p] += m.w.length;
+      if (m.love) { A.love[p][b]++; A.T.love[p]++; }
+      if (m.laugh) { A.laugh[p][b]++; A.T.laugh[p]++; }
+      if (m.s > 0) A.pos[p][b]++; else if (m.s < 0) A.neg[p][b]++;
+      if (m.q) A.T.q[p]++;
+      if (m.link) A.T.link[p]++;
+      A.T.emoji[p] += m.e.length;
+      if (!A.longestMsg || m.w.length > A.longestMsg.w.length) A.longestMsg = m;
+      if (!A.firstLoveYou[p] && LOVEYOU_RE.test(m.text)) A.firstLoveYou[p] = m;
+    } else if (m.type === 'deleted') A.T.deleted[p]++;
+    else if (m.type === 'call') A.T.call[p]++;
+    else if (m.type !== 'location') { A.T.media[p]++; if (m.type === 'voice') A.T.voice[p]++; }
+
+    const dt = prev ? m.t - prev.t : Infinity;
+    if (prev && dt > A.maxGap.ms) A.maxGap = { ms: dt, from: prev.d, to: m.d };
+    if (dt > gap) {
+      if (sess) { A.T.last[msgs[i - 1].p]++; }
+      sess = { start: i, end: i, p };
+      A.sessions++; A.init[p][b]++; A.T.init[p]++;
+    } else {
+      sess.end = i;
+      if (prev.p !== p) { A.rt[p][b].push(dt); A.rtAll[p].push(dt); }
+    }
+    if (!A.longestSession || sess.end - sess.start > A.longestSession.end - A.longestSession.start) A.longestSession = { ...sess };
+  }
+  if (sess) A.T.last[msgs[msgs.length - 1].p]++;
+
+  // daily streaks
+  const dayKeys = [...A.days.keys()].sort((a, b) => a - b);
+  let best = { len: 0 }, run = 1, runStart = dayKeys[0];
+  for (let i = 1; i <= dayKeys.length; i++) {
+    if (i < dayKeys.length && dayKeys[i] === dayKeys[i - 1] + 1) { run++; continue; }
+    if (run > best.len) best = { len: run, from: runStart, to: dayKeys[i - 1] };
+    run = 1; runStart = dayKeys[i];
+  }
+  A.streak = best;
+  A.spanDays = dayKeys[dayKeys.length - 1] - dayKeys[0] + 1;
+  A.activeDays = dayKeys.length;
+  let busiest = [0, 0];
+  for (const [k, v] of A.days) if (v > busiest[1]) busiest = [k, v];
+  A.busiest = busiest;
+  if (reuseWords) for (const f of WORD_FIELDS) A[f] = reuseWords[f];
+  else computeWords(A, msgs);
+  return A;
+}
+
+function computeWords(A, msgs) {
+  const P = A.P, stop = stopSet();
+  const wc = Array.from({ length: P }, () => new Map());
+  const yc = new Map();
+  const emo = Array.from({ length: P }, () => new Map());
+  const bi = new Map(), tri = new Map();
+  for (const m of msgs) {
+    if (m.type !== 'text') continue;
+    const map = wc[m.p];
+    let ym = yc.get(m.y); if (!ym) yc.set(m.y, ym = new Map());
+    for (const w of m.w) if (isContent(w, stop)) { map.set(w, (map.get(w) || 0) + 1); ym.set(w, (ym.get(w) || 0) + 1); }
+    for (const e of m.e) emo[m.p].set(e, (emo[m.p].get(e) || 0) + 1);
+    const w = m.w;
+    if (w.length > 1 && w.length < 40) {
+      for (let i = 0; i + 1 < w.length; i++) {
+        if (stop.has(w[i]) && stop.has(w[i + 1])) continue;
+        if (/^\d/.test(w[i]) || /^\d/.test(w[i + 1])) continue;
+        const k = w[i] + ' ' + w[i + 1]; bi.set(k, (bi.get(k) || 0) + 1);
+        if (i + 2 < w.length && !/^\d/.test(w[i + 2])) { const k3 = k + ' ' + w[i + 2]; tri.set(k3, (tri.get(k3) || 0) + 1); }
+      }
+    }
+  }
+  A.wc = wc; A.emo = emo;
+  A.bi = topN(bi, 15, (k, v) => v >= 3); A.tri = topN(tri, 15, (k, v) => v >= 3);
+  // Distinctive words: weighted log-odds with an informative prior (Monroe et al. 2008).
+  const logOdds = (target, rest, minCount) => {
+    let nT = 0, nR = 0; for (const v of target.values()) nT += v; for (const v of rest.values()) nR += v;
+    const all = new Map(target); for (const [k, v] of rest) all.set(k, (all.get(k) || 0) + v);
+    const N = nT + nR, a0 = 1000, out = [];
+    for (const [w, yT] of target) {
+      if (yT < minCount) continue;
+      const yR = rest.get(w) || 0, aw = (all.get(w) / N) * a0;
+      const d = Math.log((yT + aw) / (nT + a0 - yT - aw)) - Math.log((yR + aw) / (nR + a0 - yR - aw));
+      out.push([w, d / Math.sqrt(1 / (yT + aw) + 1 / (yR + aw)), yT]);
+    }
+    return out.sort((a, b) => b[1] - a[1]).filter((x) => x[1] > 1.5);
+  };
+  const merge = (maps) => { const r = new Map(); for (const m of maps) for (const [k, v] of m) r.set(k, (r.get(k) || 0) + v); return r; };
+  A.sig = wc.map((m, i) => P > 1 ? logOdds(m, merge(wc.filter((_, j) => j !== i)), 4).slice(0, 15) : []);
+  const years = [...yc.keys()].sort();
+  A.yearWords = years.length > 1 ? years.map((y) => [y, logOdds(yc.get(y), merge(years.filter((z) => z !== y).map((z) => yc.get(z))), 4).slice(0, 14)]) : [];
+}
+
+/* ---------------- tooltip ---------------- */
+const tip = $('#tip');
+function showTip(ev, html) {
+  tip.innerHTML = html; tip.hidden = false;
+  const r = tip.getBoundingClientRect();
+  let x = ev.clientX + 14, y = ev.clientY + 14;
+  if (x + r.width > innerWidth - 8) x = ev.clientX - r.width - 14;
+  if (y + r.height > innerHeight - 8) y = ev.clientY - r.height - 14;
+  tip.style.left = Math.max(8, x) + 'px'; tip.style.top = Math.max(8, y) + 'px';
+}
+const hideTip = () => { tip.hidden = true; };
+const tipRow = (c, v, name) => `<div class="tr"><i style="background:${c}"></i><b>${esc(v)}</b><span>${esc(name)}</span></div>`;
+
+/* ---------------- chart primitives (inline SVG) ---------------- */
+function niceTicks(lo, hi, count = 4) {
+  if (hi <= lo) hi = lo + 1;
+  const raw = (hi - lo) / count, mag = 10 ** Math.floor(Math.log10(raw)), nrm = raw / mag;
+  const step = (nrm <= 1 ? 1 : nrm <= 2 ? 2 : nrm <= 2.5 ? 2.5 : nrm <= 5 ? 5 : 10) * mag;
+  const min = Math.floor(lo / step) * step, max = Math.ceil(hi / step) * step, ticks = [];
+  for (let v = min; v <= max + step / 1e6; v += step) ticks.push(+v.toFixed(10));
+  return { min, max, ticks };
+}
+function legend(el, names, kind = 'rect') {
+  el.innerHTML = names.length < 2 ? '' : names.map((n, i) => `<span><i class="${kind === 'line' ? 'line' : ''}" style="background:${color(i)}"></i>${esc(n)}</span>`).join('');
+}
+function xTicks(B, x, y0) {
+  const n = B.n, out = [];
+  if (!B.dates || !B.dates.length) return '';
+  let idx = [];
+  if (B.unit === 'year') { const every = Math.max(1, Math.ceil(n / 12)); for (let i = 0; i < n; i += every) idx.push(i); }
+  else if (B.unit === 'quarter' || (B.unit === 'month' && n > 30)) {
+    for (let i = 0; i < n; i++) if (B.dates[i].getUTCMonth() === 0) idx.push(i);
+    if (!idx.length) idx.push(0);
+    const every = Math.ceil(idx.length / 10); idx = idx.filter((_, k) => k % every === 0);
+  }
+  else if (B.unit === 'month') {
+    const every = Math.max(1, Math.ceil(n / 8)); for (let i = 0; i < n; i += every) idx.push(i);
+  } else { const every = Math.max(1, Math.ceil(n / 7)); for (let i = 0; i < n; i += every) idx.push(i); }
+  for (const i of idx) {
+    const d = B.dates[i];
+    const lab = B.unit === 'year' || B.unit === 'quarter' ? String(d.getUTCFullYear()) : B.unit === 'month' ? (n > 30 ? String(d.getUTCFullYear()) : MON[d.getUTCMonth()] + " '" + String(d.getUTCFullYear()).slice(2)) : d.getUTCDate() + ' ' + MON[d.getUTCMonth()];
+    out.push(`<text x="${x(i)}" y="${y0 + 16}" text-anchor="${x(i) - 20 < x(0) - 6 ? 'start' : 'middle'}">${lab}</text>`);
+  }
+  return out.join('');
+}
+function yAxis(T, y, l, r, f) {
+  return T.ticks.map((v) => `<line x1="${l}" x2="${r}" y1="${y(v)}" y2="${y(v)}" stroke="var(--grid)" stroke-width="1"/>` +
+    `<text x="${l - 6}" y="${y(v) + 4}" text-anchor="end">${f(v)}</text>`).join('') +
+    (T.min < 0 ? `<line x1="${l}" x2="${r}" y1="${y(0)}" y2="${y(0)}" stroke="var(--base)" stroke-width="1"/>` : '');
+}
+
+function lineChart(el, { series, B, height = 220, yFmt = compact, tipFmt = (v) => fmt1(v), label = '' }) {
+  const W = Math.max(280, el.clientWidth), H = height, m = { t: 10, r: 14, b: 26, l: 44 };
+  const iw = W - m.l - m.r, ih = H - m.t - m.b, n = B.n;
+  let lo = 0, hi = 0;
+  for (const s of series) for (const v of s.values) if (v != null && isFinite(v)) { if (v < lo) lo = v; if (v > hi) hi = v; }
+  const T = niceTicks(lo, hi);
+  const x = (i) => m.l + (n === 1 ? iw / 2 : (i * iw) / (n - 1));
+  const y = (v) => m.t + ih - ((v - T.min) / (T.max - T.min)) * ih;
+  let paths = '';
+  series.forEach((s, si) => {
+    let d = '', pen = false, lonely = '';
+    s.values.forEach((v, i) => {
+      if (v == null || !isFinite(v)) { pen = false; return; }
+      const prevNull = i === 0 || s.values[i - 1] == null, nextNull = i === n - 1 || s.values[i + 1] == null;
+      if (prevNull && nextNull) lonely += `<circle cx="${x(i)}" cy="${y(v)}" r="2" fill="${color(si)}"/>`;
+      d += (pen ? 'L' : 'M') + x(i).toFixed(1) + ',' + y(v).toFixed(1); pen = true;
+    });
+    paths += `<path d="${d}" fill="none" stroke="${color(si)}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>` + lonely;
+  });
+  el.innerHTML = `<svg width="${W}" height="${H}" role="img" aria-label="${esc(label)}">${yAxis(T, y, m.l, W - m.r, yFmt)}${xTicks(B, x, m.t + ih)}${paths}
+    <g class="hov" style="display:none"><line y1="${m.t}" y2="${m.t + ih}" stroke="var(--axis)" stroke-width="1"/>${series.map((_, si) => `<circle r="4" fill="${color(si)}" stroke="var(--surface)" stroke-width="2"/>`).join('')}</g>
+    <rect x="${m.l}" y="${m.t}" width="${iw}" height="${ih}" fill="transparent" tabindex="0"/></svg>`;
+  const svg = el.firstElementChild, hov = svg.querySelector('.hov'), ln = hov.querySelector('line'), dots = hov.querySelectorAll('circle'), hit = svg.querySelector('rect:last-of-type');
+  const show = (ev, i) => {
+    hov.style.display = ''; ln.setAttribute('x1', x(i)); ln.setAttribute('x2', x(i));
+    series.forEach((s, si) => { const v = s.values[i]; if (v == null) dots[si].style.display = 'none'; else { dots[si].style.display = ''; dots[si].setAttribute('cx', x(i)); dots[si].setAttribute('cy', y(v)); } });
+    showTip(ev, `<div class="tt">${esc(B.labels[i])}</div>` + series.map((s, si) => tipRow(color(si), s.values[i] == null ? '–' : tipFmt(s.values[i]), s.name)).join(''));
+  };
+  hit.addEventListener('pointermove', (ev) => {
+    const r = svg.getBoundingClientRect();
+    const i = Math.max(0, Math.min(n - 1, Math.round(((ev.clientX - r.left - m.l) / iw) * (n - 1))));
+    show(ev, i);
+  });
+  hit.addEventListener('pointerleave', () => { hov.style.display = 'none'; hideTip(); });
+}
+
+function stackChart(el, { series, B, height = 240, label = '', unitName = 'messages' }) {
+  const W = Math.max(280, el.clientWidth), H = height, m = { t: 10, r: 14, b: 26, l: 44 };
+  const iw = W - m.l - m.r, ih = H - m.t - m.b, n = B.n;
+  const totals = new Array(n).fill(0);
+  for (const s of series) s.values.forEach((v, i) => { totals[i] += v; });
+  const T = niceTicks(0, Math.max(...totals, 1));
+  const band = iw / n, bw = Math.max(1, Math.min(24, band * 0.78));
+  const x = (i) => m.l + band * i + band / 2;
+  const y = (v) => m.t + ih - (v / T.max) * ih;
+  const gapPx = bw >= 3 ? 2 : 0;
+  let bars = '', hits = '';
+  for (let i = 0; i < n; i++) {
+    let acc = 0, topIdx = -1;
+    series.forEach((s, si) => { if (s.values[i] > 0) topIdx = si; });
+    const x0 = x(i) - bw / 2;
+    series.forEach((s, si) => {
+      const v = s.values[i]; if (!(v > 0)) return;
+      let yb = y(acc), yt = y(acc + v);
+      if (acc > 0) yb -= gapPx;
+      acc += v;
+      const h = yb - yt; if (h <= 0.3) return;
+      if (si === topIdx) {
+        const r = Math.min(4, bw / 2, h);
+        bars += `<path d="M${x0},${yb}V${yt + r}Q${x0},${yt} ${x0 + r},${yt}H${x0 + bw - r}Q${x0 + bw},${yt} ${x0 + bw},${yt + r}V${yb}Z" fill="${color(si)}"/>`;
+      } else bars += `<rect x="${x0}" y="${yt}" width="${bw}" height="${h}" fill="${color(si)}"/>`;
+    });
+    hits += `<rect class="hit" data-i="${i}" x="${m.l + band * i}" y="${m.t}" width="${band}" height="${ih}" fill="transparent"/>`;
+  }
+  el.innerHTML = `<svg width="${W}" height="${H}" role="img" aria-label="${esc(label)}">${yAxis(T, y, m.l, W - m.r, compact)}${xTicks(B, x, m.t + ih)}
+    <line x1="${m.l}" x2="${W - m.r}" y1="${m.t + ih}" y2="${m.t + ih}" stroke="var(--base)"/>${bars}<g>${hits}</g></svg>`;
+  el.querySelector('g:last-child').addEventListener('pointermove', (ev) => {
+    const i = +ev.target.dataset.i; if (isNaN(i)) return;
+    showTip(ev, `<div class="tt">${esc(B.labels[i])} · <b>${fmt(totals[i])}</b> ${unitName}</div>` + series.map((s, si) => tipRow(color(si), fmt(s.values[i]), s.name)).join(''));
+  });
+  el.querySelector('g:last-child').addEventListener('pointerleave', hideTip);
+}
+
+function quantScale(values) {
+  const nz = values.filter((v) => v > 0).sort((a, b) => a - b);
+  const q = (p) => nz.length ? nz[Math.min(nz.length - 1, Math.floor(p * nz.length))] : 1;
+  const th = [q(0.2), q(0.4), q(0.6), q(0.8)];
+  return (v) => v <= 0 ? 'var(--q0)' : `var(--q${1 + th.filter((t) => v > t).length})`;
+}
+
+function heatHourDow(el, A) {
+  const W = Math.max(280, el.clientWidth), m = { t: 4, r: 4, b: 22, l: 36 };
+  const cw = (W - m.l - m.r) / 24, ch = Math.min(26, Math.max(14, cw));
+  const H = m.t + ch * 7 + m.b;
+  const flat = A.hourDow.flat(), sc = quantScale(flat), total = flat.reduce((a, b) => a + b, 0) || 1;
+  let cells = '';
+  for (let d = 0; d < 7; d++) for (let h = 0; h < 24; h++) {
+    const v = A.hourDow[d][h];
+    cells += `<rect class="hit" data-d="${d}" data-h="${h}" x="${m.l + h * cw + 1}" y="${m.t + d * ch + 1}" width="${Math.max(1, cw - 2)}" height="${ch - 2}" rx="3" fill="${sc(v)}"/>`;
+  }
+  let labs = DOW.map((d, i) => `<text x="${m.l - 6}" y="${m.t + i * ch + ch / 2 + 4}" text-anchor="end">${d}</text>`).join('');
+  for (let h = 0; h < 24; h += (W < 500 ? 6 : 3)) labs += `<text x="${m.l + h * cw + cw / 2}" y="${H - 6}" text-anchor="middle">${String(h).padStart(2, '0')}:00</text>`;
+  el.innerHTML = `<svg width="${W}" height="${H}" role="img" aria-label="Messages by weekday and hour">${labs}<g>${cells}</g></svg>`;
+  const g = el.querySelector('g');
+  g.addEventListener('pointermove', (ev) => {
+    const d = ev.target.dataset.d, h = ev.target.dataset.h; if (d == null) return;
+    const v = A.hourDow[d][h];
+    showTip(ev, `<div class="tt">${DOW[d]}s, ${String(h).padStart(2, '0')}:00–${String(h).padStart(2, '0')}:59</div><b>${fmt(v)}</b> messages (${pct(v / total)})`);
+  });
+  g.addEventListener('pointerleave', hideTip);
+}
+
+function calendar(el, A) {
+  const W = Math.max(280, el.clientWidth);
+  const keys = [...A.days.keys()];
+  const y0 = new Date(Math.min(...keys) * DAY).getUTCFullYear(), y1 = new Date(Math.max(...keys) * DAY).getUTCFullYear();
+  if (y1 - y0 >= 3) return calendarStrip(el, A, y0, y1, W);
+  const labW = 40, s = Math.max(4, Math.min(15, Math.floor((W - labW) / 54))), rowH = s * 7 + 22;
+  const sc = quantScale([...A.days.values()]);
+  let out = '';
+  for (let yr = y1, row = 0; yr >= y0; yr--, row++) {
+    const top = row * rowH + 14;
+    out += `<text x="0" y="${top + s * 3.5 + 4}" style="font-weight:600;fill:var(--ink-2)">${yr}</text>`;
+    const jan1 = Date.UTC(yr, 0, 1) / DAY, off = (new Date(jan1 * DAY).getUTCDay() + 6) % 7;
+    const days = (Date.UTC(yr + 1, 0, 1) - Date.UTC(yr, 0, 1)) / DAY;
+    for (let k = 0; k < days; k++) {
+      const di = jan1 + k, col = Math.floor((k + off) / 7), r = (k + off) % 7;
+      const v = A.days.get(di) || 0;
+      out += `<rect class="hit" data-k="${di}" x="${labW + col * s}" y="${top + r * s}" width="${s - 1.5}" height="${s - 1.5}" rx="${s > 8 ? 2 : 1}" fill="${sc(v)}"/>`;
+    }
+    for (let mo = 0; mo < 12; mo++) {
+      const k = (Date.UTC(yr, mo, 1) / DAY) - jan1, col = Math.floor((k + off) / 7);
+      if (row === 0 || s >= 10) if (W > 420 || mo % 3 === 0) out += `<text x="${labW + col * s}" y="${top - 4}">${MON[mo]}</text>`;
+    }
+  }
+  const H = (y1 - y0 + 1) * rowH + 8;
+  el.innerHTML = `<svg width="${W}" height="${H}" role="img" aria-label="Daily messages calendar"><g>${out}</g></svg>`;
+  const g = el.querySelector('g');
+  g.addEventListener('pointermove', (ev) => {
+    const k = ev.target.dataset.k; if (k == null) return;
+    const d = new Date(+k * DAY);
+    showTip(ev, `<div class="tt">${d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })}</div><b>${fmt(A.days.get(+k) || 0)}</b> messages`);
+  });
+  g.addEventListener('pointerleave', hideTip);
+}
+
+// Long histories: one row per year, one thin column per day of the year.
+function calendarStrip(el, A, y0, y1, W) {
+  const labW = 40, rowH = 14, top = 16, cw = (W - labW) / 366, sc = quantScale([...A.days.values()]);
+  let out = '';
+  for (let yr = y0, row = 0; yr <= y1; yr++, row++) {
+    const y = top + row * rowH, jan1 = Date.UTC(yr, 0, 1) / DAY, days = (Date.UTC(yr + 1, 0, 1) - Date.UTC(yr, 0, 1)) / DAY;
+    out += `<text x="0" y="${y + rowH - 3}" style="fill:var(--ink-2)">${yr}</text>`;
+    for (let k = 0; k < days; k++) {
+      const v = A.days.get(jan1 + k) || 0;
+      out += `<rect class="hit" data-k="${jan1 + k}" x="${(labW + k * cw).toFixed(2)}" y="${y}" width="${Math.max(0.6, cw - (cw > 3 ? 1 : 0)).toFixed(2)}" height="${rowH - 2}" fill="${sc(v)}"/>`;
+    }
+  }
+  for (let mo = 0; mo < 12; mo += (W < 500 ? 3 : 1)) {
+    const k = (Date.UTC(2001, mo, 1) - Date.UTC(2001, 0, 1)) / DAY;
+    out += `<text x="${labW + k * cw}" y="10">${MON[mo]}</text>`;
+  }
+  const H = top + (y1 - y0 + 1) * rowH + 4;
+  el.innerHTML = `<svg width="${W}" height="${H}" role="img" aria-label="Daily messages, one row per year"><g>${out}</g></svg>`;
+  const g = el.querySelector('g');
+  g.addEventListener('pointermove', (ev) => {
+    const k = ev.target.dataset.k; if (k == null) return;
+    const d = new Date(+k * DAY);
+    showTip(ev, `<div class="tt">${d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })}</div><b>${fmt(A.days.get(+k) || 0)}</b> messages`);
+  });
+  g.addEventListener('pointerleave', hideTip);
+}
+
+function hbars(el, rows, ci, valFmt = fmt) {
+  if (!rows.length) { el.innerHTML = '<p class="muted">Not enough data.</p>'; return; }
+  const max = Math.max(...rows.map((r) => r[1]));
+  el.innerHTML = '<div class="hbars">' + rows.map((r) =>
+    `<div class="k" title="${esc(r[0])}">${esc(r[0])}</div><div class="row"><div class="bar" style="width:calc((100% - 50px) * ${r[1] / max});background:${color(ci)}"></div><span class="val">${valFmt(r[1])}</span></div>`).join('') + '</div>';
+}
+
+/* ---------------- sections ---------------- */
+function rOverview(A) {
+  const people = state.people, msgs = state.msgs, total = A.n;
+  const f = msgs[0].d, l = msgs[msgs.length - 1].d;
+  $('#ovSub').textContent = `${people.join(' & ')} · ${fmtDate(f)} – ${fmtDate(l)}`;
+  $('#heroNum').textContent = fmt(total);
+  const years = A.spanDays / 365.25;
+  $('#heroTxt').textContent = `messages over ${years >= 1.5 ? fmt1(years) + ' years' : fmt(A.spanDays) + ' days'}`;
+  const totWords = A.T.words.reduce((a, b) => a + b, 0);
+  const rtAll = A.rtAll.flat();
+  const tiles = [
+    ['Per day, on average', fmt1(total / A.spanDays), `${fmt(A.activeDays)} days with messages (${pct(A.activeDays / A.spanDays)})`],
+    ['Words written', compact(totWords), `about ${fmt(totWords / 250)} pages of a novel`],
+    ['Longest daily streak', fmt(A.streak.len) + ' days', A.streak.len ? `${fmtDate(new Date(A.streak.from * DAY))} – ${fmtDate(new Date(A.streak.to * DAY))}` : ''],
+    ['Busiest day', fmt(A.busiest[1]) + ' msgs', fmtDate(new Date(A.busiest[0] * DAY))],
+    ['Longest silence', fmtDur(A.maxGap.ms), A.maxGap.from ? `${fmtDate(A.maxGap.from)} → ${fmtDate(A.maxGap.to)}` : ''],
+    ['Conversations', fmt(A.sessions), `average ${fmt1(total / Math.max(1, A.sessions))} messages each`],
+    ['Typical reply', rtAll.length ? fmtDur(median(rtAll)) : '–', 'median time to answer within a conversation'],
+    ['Emoji sent', compact(A.T.emoji.reduce((a, b) => a + b, 0)), `${compact(A.T.media.reduce((a, b) => a + b, 0))} photos, videos, voice notes & more`],
+  ];
+  $('#tiles').innerHTML = tiles.map((t) => `<div class="tile"><div class="l">${t[0]}</div><div class="v">${t[1]}</div><div class="d">${esc(t[2])}</div></div>`).join('');
+  legend($('#balLegend'), people);
+  const metrics = [['Messages', A.T.msgs], ['Words', A.T.words], ['Conversations started', A.T.init], ['Had the last word', A.T.last], ['Questions asked', A.T.q], ['Emoji', A.T.emoji],
+    ['Affection', A.T.love], ['Laughs', A.T.laugh], ['Photos & media', A.T.media], ['Voice notes', A.T.voice], ['Links shared', A.T.link], ['Deleted messages', A.T.deleted]];
+  $('#balance').innerHTML = metrics.filter((mt) => mt[1].some((v) => v > 0)).map(([name, arr]) => {
+    const sum = arr.reduce((a, b) => a + b, 0);
+    const parts = arr.map((v, i) => v > 0 ? `<div class="hit" tabindex="0" style="flex:${v} 1 0;background:${color(i)};${i === 3 ? 'color:#0b0b0b' : ''}" title="${esc(people[i])}: ${fmt(v)} (${pct(v / sum)})">${v / sum >= 0.12 ? pct(v / sum) : ''}</div>` : '').join('');
+    return `<div class="lab">${name} <span class="muted">· ${compact(sum)}</span></div><div class="segbar" role="img" aria-label="${esc(name)}: ${esc(arr.map((v, i) => people[i] + ' ' + fmt(v)).join(', '))}">${parts}</div>`;
+  }).join('');
+}
+
+function rTime(A) {
+  document.querySelectorAll('.unit').forEach((e) => { e.textContent = A.B.unit; });
+  legend($('#volLegend'), state.people);
+  stackChart($('#vol'), { series: state.people.map((p, i) => ({ name: p, values: A.vol[i] })), B: A.B, label: 'Messages over time by person' });
+  calendar($('#cal'), A);
+}
+
+function rWhen(A) {
+  heatHourDow($('#hourDow'), A);
+  legend($('#hourLegend'), state.people, 'line');
+  const hb = { unit: 'hour', n: 24, labels: Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2, '0')}:00–${String(h).padStart(2, '0')}:59`), dates: [] };
+  const el = $('#hourP');
+  lineChart(el, {
+    B: hb, label: 'Share of messages by hour of day', yFmt: (v) => Math.round(v * 100) + '%', tipFmt: pct,
+    series: state.people.map((p, i) => { const s = A.T.msgs[i] || 1; return { name: p, values: A.hourP[i].map((v) => v / s) }; }),
+  });
+  // hour axis labels (xTicks is date-based)
+  const svg = el.querySelector('svg'), W = +svg.getAttribute('width'), H = +svg.getAttribute('height');
+  let t = ''; for (let h = 0; h < 24; h += (W < 500 ? 6 : 3)) t += `<text x="${44 + (h * (W - 58)) / 23}" y="${H - 10}" text-anchor="middle">${String(h).padStart(2, '0')}:00</text>`;
+  svg.insertAdjacentHTML('afterbegin', t);
+}
+
+function perMonth(grid, denom, minDen = 1) {
+  return grid.map((row, i) => row.map((v, b) => (denom[i][b] >= minDen ? v / denom[i][b] : null)));
+}
+
+function rDyn(A, sm) {
+  const people = state.people, B = A.B;
+  document.querySelectorAll('.unit').forEach((e) => { e.textContent = B.unit; });
+  ['initLegend', 'rtLegend', 'lenLegend', 'moodLegend', 'loveLegend', 'laughLegend'].forEach((id) => legend($('#' + id), people, 'line'));
+  lineChart($('#init'), { B, label: 'Conversations started', tipFmt: fmt1, series: people.map((p, i) => ({ name: p, values: smooth(A.init[i], sm) })) });
+  lineChart($('#rt'), { B, label: 'Median reply time', tipFmt: (v) => fmtDur(v * 6e4), series: people.map((p, i) => ({ name: p, values: smooth(A.rt[i].map((a) => (a.length >= 3 ? median(a) / 6e4 : null)), sm) })) });
+  lineChart($('#len'), { B, label: 'Words per message', tipFmt: fmt1, series: people.map((p, i) => ({ name: p, values: smooth(perMonth(A.words, A.textMsgs, 5)[i], sm) })) });
+  const net = A.pos.map((row, i) => row.map((v, b) => (A.textMsgs[i][b] >= 10 ? (v - A.neg[i][b]) / A.textMsgs[i][b] : null)));
+  lineChart($('#mood'), { B, label: 'Net positivity', yFmt: (v) => Math.round(v * 100) + '%', tipFmt: pct, series: people.map((p, i) => ({ name: p, values: smooth(net[i], sm) })) });
+  lineChart($('#love'), { B, label: 'Affectionate messages', yFmt: (v) => Math.round(v * 100) + '%', tipFmt: pct, series: people.map((p, i) => ({ name: p, values: smooth(perMonth(A.love, A.textMsgs, 5)[i], sm) })) });
+  lineChart($('#laugh'), { B, label: 'Laughing messages', yFmt: (v) => Math.round(v * 100) + '%', tipFmt: pct, series: people.map((p, i) => ({ name: p, values: smooth(perMonth(A.laugh, A.textMsgs, 5)[i], sm) })) });
+}
+
+function rWords(A) {
+  const people = state.people, show = people.map((p, i) => i).slice(0, 4);
+  $('#topWords').innerHTML = show.map((i) => `<div><h3>${esc(people[i])}'s top words</h3><div id="tw${i}"></div></div>`).join('');
+  show.forEach((i) => hbars($('#tw' + i), topN(A.wc[i], 15), i));
+  $('#sigWords').innerHTML = show.map((i) => `<div><h3>Very ${esc(people[i])}</h3><div class="chips">${A.sig[i].map((w) => `<span title="used ${w[2]} times">${esc(w[0])}</span>`).join('') || '<span class="muted">Not enough data.</span>'}</div></div>`).join('');
+  $('#emoji').innerHTML = show.map((i) => {
+    const top = topN(A.emo[i], 12);
+    return `<div><h3>${esc(people[i])}</h3>${top.length ? `<div class="emo">${top.map(([e, c]) => `<div><div class="e">${esc([...e].length === 1 ? e + '\uFE0F' : e)}</div><div class="c">${fmt(c)}</div></div>`).join('')}</div>` : '<p class="muted">No emoji.</p>'}</div>`;
+  }).join('');
+  $('#phrases').innerHTML = `<div><h3>Two words</h3><div id="ph2"></div></div><div><h3>Three words</h3><div id="ph3"></div></div>`;
+  hbars($('#ph2'), A.bi, 0); hbars($('#ph3'), A.tri, 2);
+  $('#yearWords').innerHTML = A.yearWords.length ? A.yearWords.map(([y, ws]) => `<div><b>${y}</b><div class="chips">${ws.map((w) => `<span title="${w[2]} times">${esc(w[0])}</span>`).join('') || '<span class="muted">nothing stood out</span>'}</div></div>`).join('')
+    : '<p class="muted">Needs at least two years of messages.</p>';
+}
+
+const DEFAULT_TOPICS = `Love: love, miss you, xx*, ❤, 😘, 🥰, babe, honey
+Food: dinner, lunch, breakfast, food, eat*, cook*, takeaway, pizza, hungry
+Home: home, house, clean*, wash*, groceries, shopping, bins, laundry
+Work: work, meeting, office, boss, job, emails
+Family: kids, school, mum, mom, dad, family, baby, nana, granny
+Travel & plans: holiday, flight, trip, hotel, beach, weekend, booked
+Health: tired, sick, doctor, gym, run*, sleep*, headache`;
+
+function termRegex(terms) {
+  const parts = terms.map((t) => t.trim().toLowerCase()).filter(Boolean).map((t) => {
+    const star = t.endsWith('*'); const core = t.replace(/\*+$/, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+    if (!/[\p{L}\p{N}]/u.test(core)) return core; // emoji / symbols: plain substring
+    return `(?<![\\p{L}\\p{N}])${core}${star ? '[\\p{L}\\p{N}]*' : ''}(?![\\p{L}\\p{N}])`;
+  });
+  return parts.length ? new RegExp(parts.join('|'), 'giu') : null;
+}
+
+function rTopics(A, sm) {
+  const defs = $('#topicDefs').value.split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 8).map((l) => {
+    const i = l.indexOf(':'); const name = i > 0 ? l.slice(0, i).trim() : l.split(',')[0];
+    return { name, re: termRegex((i > 0 ? l.slice(i + 1) : l).split(',')) };
+  }).filter((d) => d.re);
+  const B = A.B, den = new Array(B.n).fill(0), cnt = defs.map(() => new Array(B.n).fill(0));
+  for (const m of state.msgs) {
+    if (m.type !== 'text') continue;
+    const b = B.of(m); den[b]++;
+    const low = m.text.toLowerCase();
+    defs.forEach((d, k) => { d.re.lastIndex = 0; if (d.re.test(low)) cnt[k][b]++; });
+  }
+  legend($('#topicLegend'), defs.map((d) => d.name), 'line');
+  lineChart($('#topics'), { B, height: 260, label: 'Topics over time', yFmt: (v) => fmt1(v * 100) + '%', tipFmt: pct,
+    series: defs.map((d, k) => ({ name: d.name, values: smooth(cnt[k].map((v, b) => (den[b] >= 10 ? v / den[b] : null)), sm) })) });
+}
+
+function rMiles(A) {
+  const people = state.people, msgs = state.msgs, out = [];
+  const add = (t, v, q) => out.push(`<div class="mile"><div class="t">${esc(t)}</div><div class="v">${esc(v)}</div>${q ? `<q>${esc(q.length > 220 ? q.slice(0, 220) + '…' : q)}</q>` : ''}</div>`);
+  const first = msgs.find((m) => m.type === 'text') || msgs[0];
+  add('First message in this export', `${people[first.p]}, ${fmtDT(first.d)}`, first.text);
+  const lys = A.firstLoveYou.map((m, i) => m && { m, i }).filter(Boolean).sort((a, b) => a.m.t - b.m.t);
+  if (lys.length) {
+    add('First "love you"', `${people[lys[0].i]}, ${fmtDate(lys[0].m.d)}`, lys[0].m.text);
+    if (lys[1]) add('…and back', `${people[lys[1].i]}, ${fmtDate(lys[1].m.d)} (${fmtDur(lys[1].m.t - lys[0].m.t)} later)`, '');
+  }
+  if (A.longestSession) {
+    const s = A.longestSession, a = msgs[s.start], b = msgs[s.end];
+    add('Longest conversation', `${fmt(s.end - s.start + 1)} messages over ${fmtDur(b.t - a.t)}`, `${fmtDT(a.d)}, started by ${people[s.p]}`);
+  }
+  if (A.longestMsg) add('Longest message', `${people[A.longestMsg.p]}, ${fmt(A.longestMsg.w.length)} words, ${fmtDate(A.longestMsg.d)}`, A.longestMsg.text);
+  const nightOwl = A.hourP.map((h, i) => [i, (h[0] + h[1] + h[2] + h[3] + h[4]) / (A.T.msgs[i] || 1)]).sort((a, b) => b[1] - a[1])[0];
+  if (people.length > 1 && nightOwl[1] > 0) add('Night owl', `${people[nightOwl[0]]}`, `${pct(nightOwl[1])} of their messages are sent between midnight and 5am`);
+  const early = A.hourP.map((h, i) => [i, (h[5] + h[6] + h[7]) / (A.T.msgs[i] || 1)]).sort((a, b) => b[1] - a[1])[0];
+  if (people.length > 1 && early[1] > 0) add('Early bird', `${people[early[0]]}`, `${pct(early[1])} of their messages are sent between 5 and 8am`);
+  const fast = A.rtAll.map((a, i) => [i, median(a)]).filter((x) => x[1] != null).sort((a, b) => a[1] - b[1]);
+  if (fast.length > 1) add('Fastest replier', people[fast[0][0]], `typically answers in ${fmtDur(fast[0][1])} vs ${fmtDur(fast[1][1])}`);
+  const yearCounts = new Map(); for (const m of msgs) yearCounts.set(m.y, (yearCounts.get(m.y) || 0) + 1);
+  const by = [...yearCounts].sort((a, b) => b[1] - a[1])[0];
+  if (yearCounts.size > 1) add('Chattiest year', String(by[0]), `${fmt(by[1])} messages`);
+  const dowTot = A.hourDow.map((r) => r.reduce((a, b) => a + b, 0)), bd = dowTot.indexOf(Math.max(...dowTot));
+  add('Favourite day to talk', ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][bd], `${pct(dowTot[bd] / A.n)} of all messages`);
+  const calls = A.T.call.reduce((a, b) => a + b, 0);
+  if (calls) add('Calls logged in the chat', fmt(calls), 'voice and video calls, including missed ones');
+  $('#miles').innerHTML = out.join('');
+}
+
+function rSearch() {
+  const q = $('#q').value.trim();
+  const res = $('#searchRes'), info = $('#searchInfo');
+  if (!q) { res.innerHTML = ''; info.textContent = ''; $('#searchChart').innerHTML = ''; $('#searchLegend').innerHTML = ''; return; }
+  const re = termRegex(q.split(','));
+  const A = state.A, B = A.B, hits = [], grid = state.people.map(() => new Array(B.n).fill(0));
+  for (const m of state.msgs) { if (m.type !== 'text') continue; re.lastIndex = 0; if (re.test(m.text)) { hits.push(m); grid[m.p][B.of(m)]++; } }
+  legend($('#searchLegend'), state.people);
+  stackChart($('#searchChart'), { series: state.people.map((p, i) => ({ name: p, values: grid[i] })), B, height: 160, label: 'Search matches over time' });
+  info.textContent = hits.length ? `${fmt(hits.length)} messages${hits.length > 300 ? ' · showing the first 300' : ''}` : 'No messages found.';
+  const frag = document.createDocumentFragment();
+  for (const m of hits.slice(0, 300)) {
+    const div = document.createElement('div'); div.className = 'msg';
+    const h = document.createElement('div'); h.className = 'h';
+    const dot = document.createElement('i'); dot.style.background = color(m.p);
+    h.append(dot, document.createTextNode(`${state.people[m.p]} · ${fmtDT(m.d)}`));
+    const b = document.createElement('div'); b.className = 'b';
+    re.lastIndex = 0; let last = 0, mm;
+    while ((mm = re.exec(m.text))) {
+      b.append(document.createTextNode(m.text.slice(last, mm.index)));
+      const mk = document.createElement('mark'); mk.textContent = mm[0]; b.append(mk);
+      last = mm.index + mm[0].length; if (!mm[0].length) re.lastIndex++;
+    }
+    b.append(document.createTextNode(m.text.slice(last)));
+    div.append(h, b); frag.append(div);
+  }
+  res.replaceChildren(frag);
+}
+
+/* ---------------- orchestration ---------------- */
+function render() {
+  const sm = $('#smooth').checked;
+  const A = state.A;
+  rOverview(A); rTime(A); rWhen(A); rDyn(A, sm); rWords(A); rTopics(A, sm); rMiles(A);
+  if ($('#q').value.trim()) rSearch();
+}
+function recompute() {
+  const y0 = +$('#fromY').value, y1 = +$('#toY').value;
+  const key = Math.min(y0, y1) + '-' + Math.max(y0, y1);
+  const sameRange = state.A && state.rangeKey === key;
+  if (!sameRange) state.msgs = state.all.filter((m) => m.y >= Math.min(y0, y1) && m.y <= Math.max(y0, y1));
+  if (!state.msgs.length) return;
+  state.A = analyze(state.msgs, +$('#gap').value, sameRange ? state.A : null);
+  state.rangeKey = key;
+  render();
+}
+const nextFrame = () => new Promise((r) => setTimeout(r, 30));
+async function load(raw) {
+  $('#loadErr').textContent = '';
+  $('#loadMsg').textContent = `Analysing ${(raw.length / 1e6).toFixed(1)} MB of chat… (a big history can take a little while)`;
+  await nextFrame();
+  try {
+    const parsed = parseChat(raw, $('#order').value);
+    if (parsed.length < 10) throw new Error('Found fewer than 10 messages; is this the right file?');
+    const { list, people } = enrich(parsed);
+    state.raw = raw; state.all = list; state.people = people; state.A = null;
+    const years = [...new Set(list.map((m) => m.y))].sort();
+    $('#fromY').innerHTML = years.map((y) => `<option>${y}</option>`).join('');
+    $('#toY').innerHTML = years.map((y) => `<option>${y}</option>`).join('');
+    $('#fromY').value = years[0]; $('#toY').value = years[years.length - 1];
+    $('#landing').hidden = true; $('#app').hidden = false;
+    recompute();
+    window.scrollTo(0, 0);
+    $('#loadMsg').textContent = '';
+  } catch (e) {
+    $('#loadMsg').textContent = '';
+    console.error(e);
+    $('#loadErr').textContent = e.message || String(e);
+  }
+}
+async function readFile(file) {
+  try {
+    $('#loadErr').textContent = '';
+    $('#loadMsg').textContent = `Reading ${file.name}…`;
+    await nextFrame();
+    const buf = await file.arrayBuffer();
+    const u8 = new Uint8Array(buf);
+    const isZip = u8[0] === 0x50 && u8[1] === 0x4b;
+    const bytes = isZip ? await readZip(buf) : u8;
+    load(new TextDecoder('utf-8').decode(bytes));
+  } catch (e) { $('#loadMsg').textContent = ''; $('#loadErr').textContent = e.message || String(e); }
+}
+
+/* ---------------- demo data (synthetic, generated locally) ---------------- */
+function demoChat() {
+  let seed = 42; const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const pick = (a) => a[Math.floor(rnd() * a.length)];
+  const names = ['Alex', 'Sam'];
+  const T = {
+    chat: ['how was your day', 'on my way home', 'running a bit late sorry', 'what time are you finishing?', 'grand see you soon', 'did you see that?', 'haha brilliant 😂', 'ok sounds good 👍', 'just leaving now', 'can you grab milk on the way?', "I'm wrecked today", 'what will we watch tonight?', 'that new series is class', 'ugh traffic is awful', 'have you heard from your mum?', 'lol 😂😂', 'perfect', 'yes!', 'sure thing', 'nearly there'],
+    love: ['love you xx', 'miss you ❤️', 'love you too 😘', 'can\'t wait to see you 🥰', 'night babe xx', 'you\'re the best ❤️', 'thinking of you xx'],
+    food: ['what do you want for dinner?', 'will we get a takeaway?', 'pizza tonight? 🍕', 'I\'ll cook, pasta ok?', 'starving, what\'s for lunch', 'picked up stuff for dinner'],
+    home: ['the bins go out tonight', 'can you put a wash on?', 'need to do the groceries', 'house is a mess haha', 'cleaning the kitchen now'],
+    work: ['meeting ran over', 'stuck at work late again 😩', 'boss is in a mood', 'work was mad busy', 'finally finished that report 🎉'],
+    kids: ['baby is finally asleep 😴', 'did the kids eat?', 'school pickup at 3', 'nappy disaster 😂', 'she said her first word!! ❤️', 'creche called, all fine', 'he\'s teething again 😢'],
+    travel: ['booked the flights ✈️', 'found a lovely hotel', 'beach day!! ☀️', 'holiday countdown 🎉', 'packing tonight', 'weekend away?'],
+    wedding: ['venue confirmed 💍', 'florist meeting tomorrow', 'wedding budget chat later', 'so excited for the wedding 🥰', 'guest list is getting long'],
+    media: ['<Media omitted>'],
+  };
+  const start = Date.UTC(2021, 2, 1) / DAY, end = Date.UTC(2026, 9, 31) / DAY;
+  const lines = ['01/03/2021, 09:00 - Messages and calls are end-to-end encrypted. No one outside of this chat, not even WhatsApp, can read or listen to them. Tap to learn more.'];
+  const pad = (n) => String(n).padStart(2, '0');
+  for (let di = start; di <= end; di++) {
+    const d = new Date(di * DAY), y = d.getUTCFullYear() + d.getUTCMonth() / 12, dow = (d.getUTCDay() + 6) % 7;
+    if (rnd() < 0.04) continue; // quiet days
+    let lam = 22 + 6 * Math.sin(y * 6.28) + (y > 2024.3 ? 8 : 0) - (dow >= 5 ? 6 : 0);
+    if (rnd() < 0.01) lam *= 4;
+    const n = Math.max(0, Math.round(lam * (0.5 + rnd())));
+    const times = Array.from({ length: n }, () => {
+      const r = rnd(); const h = r < 0.15 ? 7 + rnd() * 2 : r < 0.4 ? 12 + rnd() * 2 : r < 0.85 ? 16 + rnd() * 6 : rnd() < 0.8 ? 22 + rnd() * 2 : rnd() * 24;
+      return Math.min(1439, Math.floor(h * 60));
+    }).sort((a, b) => a - b);
+    let who = rnd() < (y < 2023 ? 0.62 : 0.45) ? 0 : 1;
+    for (const t of times) {
+      if (rnd() < 0.55) who = 1 - who;
+      const w = { chat: 10, love: who === 0 ? 2.2 : 1.6, food: 2, home: y > 2022.5 ? 2 : 0.6, work: dow < 5 ? 2 : 0.3, kids: y > 2024.3 ? 4 : 0, travel: (d.getUTCMonth() >= 4 && d.getUTCMonth() <= 7) ? 2.5 : 0.4, wedding: y > 2022.2 && y < 2023.6 ? 3 : 0, media: 1.2 };
+      let r = rnd() * Object.values(w).reduce((a, b) => a + b, 0), topic = 'chat';
+      for (const [k, v] of Object.entries(w)) { r -= v; if (r <= 0) { topic = k; break; } }
+      let text = pick(T[topic]);
+      if (rnd() < 0.05) text += '\n' + pick(T.chat);
+      lines.push(`${pad(d.getUTCDate())}/${pad(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}, ${pad(Math.floor(t / 60))}:${pad(t % 60)} - ${names[who]}: ${text}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+/* ---------------- wiring ---------------- */
+$('#topicDefs').value = DEFAULT_TOPICS;
+const drop = $('#drop');
+$('#file').addEventListener('change', (e) => { if (e.target.files[0]) readFile(e.target.files[0]); e.target.value = ''; });
+['dragenter', 'dragover'].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach((t) => drop.addEventListener(t, (e) => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', (e) => { const f = e.dataTransfer.files[0]; if (f) readFile(f); });
+window.addEventListener('dragover', (e) => e.preventDefault());
+window.addEventListener('drop', (e) => e.preventDefault());
+$('#demo').addEventListener('click', () => load(demoChat()));
+$('#fromY').addEventListener('change', recompute);
+$('#toY').addEventListener('change', recompute);
+$('#gap').addEventListener('change', recompute);
+$('#unitSel').addEventListener('change', recompute);
+$('#smooth').addEventListener('change', render);
+$('#order').addEventListener('change', () => { if (state.raw) load(state.raw); });
+let stopT; $('#stop').addEventListener('input', () => { clearTimeout(stopT); stopT = setTimeout(() => { computeWords(state.A, state.msgs); rWords(state.A); }, 400); });
+$('#topicApply').addEventListener('click', () => rTopics(state.A, $('#smooth').checked));
+$('#searchForm').addEventListener('submit', (e) => { e.preventDefault(); rSearch(); });
+$('#reset').addEventListener('click', () => {
+  state.raw = null; state.all = []; state.msgs = []; state.A = null; state.rangeKey = null;
+  $('#app').hidden = true; $('#landing').hidden = false; $('#q').value = ''; $('#searchRes').innerHTML = '';
+});
+$('#csv').addEventListener('click', () => {
+  const A = state.A, P = state.people;
+  const head = ['period', ...P.flatMap((p) => [`${p} messages`, `${p} words`, `${p} conversations started`, `${p} median reply (min)`, `${p} affectionate msgs`, `${p} laughing msgs`])];
+  const q = (s) => `"${String(s).replace(/"/g, '""')}"`;
+  const rows = A.B.labels.map((l, b) => [l, ...P.flatMap((_, i) => [A.vol[i][b], A.words[i][b], A.init[i][b], A.rt[i][b].length ? (median(A.rt[i][b]) / 6e4).toFixed(1) : '', A.love[i][b], A.laugh[i][b]])]);
+  const blob = new Blob([[head, ...rows].map((r) => r.map(q).join(',')).join('\n')], { type: 'text/csv' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'chat-insights.csv'; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
+let rz, lastW = innerWidth;
+window.addEventListener('resize', () => { if (innerWidth === lastW) return; lastW = innerWidth; clearTimeout(rz); rz = setTimeout(() => { if (state.A) render(); }, 200); });
+</script>
+</body>
+</html>
