@@ -230,8 +230,8 @@ It is an extract of [plane-alert-db](https://github.com/sdr-enthusiasts/plane-al
 [Open Database License](http://opendatacommons.org/licenses/odbl/1.0/); the extract is
 under the same licence. The database's humorous tags are not used.
 
-The apps keep it current themselves: once a week (30 seconds after starting, then every
-few hours while open) they download the latest plane-alert-db from GitHub and rebuild the
+The apps keep it current themselves: once a month (checked 30 seconds after starting,
+then every few hours while open) they download the latest plane-alert-db from GitHub and rebuild the
 list with the same rules (`NOTABLE_RULES` in `js/notable.js`). The newest list is kept
 on the device, and Settings shows its date. If a download fails or looks wrong, the
 previous list stays in use. To update the list built into the app:
@@ -246,7 +246,7 @@ privacy programmes that change their transponder code can't be matched.
 
 ## Changelog
 
-* **1.8.1**: The well-known aircraft list updates itself weekly from plane-alert-db.
+* **1.8.1**: The well-known aircraft list updates itself monthly from plane-alert-db.
 * **1.8.0**: Spots aircraft linked to celebrities and other well-known people (gold ★,
   alerts and pushes like private jets), and names coast guard, air ambulance and police
   aircraft, from plane-alert-db.

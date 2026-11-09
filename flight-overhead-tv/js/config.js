@@ -8,7 +8,7 @@ var PLATFORM = /[?&]platform=android\b/.test(location.search) ? 'android' : 'tv'
 
 var APP_VERSION = '1.8.1';
 var CHANGELOG = [
-  ['1.8.1', 'The well-known aircraft list updates itself weekly from plane-alert-db'],
+  ['1.8.1', 'The well-known aircraft list updates itself monthly from plane-alert-db'],
   ['1.8.0', 'Spots aircraft linked to celebrities and other well-known people, and names coast guard, air ambulance and police aircraft'],
   ['1.7.0', 'Helicopter alerts and notifications, like private jets, and helicopters in the 24-hour list'],
   ['1.6.0', 'Private jets from the last 24 hours, with Flightradar24 links (green button / Jets button)'],

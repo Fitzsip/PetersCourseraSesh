@@ -1,5 +1,5 @@
 /*
- * Keeps the well-known aircraft list (js/notable.js) current: once a week it downloads
+ * Keeps the well-known aircraft list (js/notable.js) current: once a month it downloads
  * plane-alert-db and rebuilds the list with the same rules as tools/build-notable.py
  * (NOTABLE_RULES). The newest list is kept on the device; if a download fails or looks
  * wrong, the previous list stays in use.
@@ -8,7 +8,7 @@ var NotableLive = (function () {
   'use strict';
   var SOURCE = 'https://raw.githubusercontent.com/sdr-enthusiasts/plane-alert-db/main/plane-alert-db.csv';
   var STORAGE_KEY = 'flightOverhead.notable';
-  var REFRESH_MS = 7 * 24 * 3600 * 1000;
+  var REFRESH_MS = 30 * 24 * 3600 * 1000;
   var RETRY_MS = 24 * 3600 * 1000;
   var MIN_PEOPLE = 50;   // a smaller result means the file changed shape; keep the old list
 
@@ -77,7 +77,7 @@ var NotableLive = (function () {
     return people >= MIN_PEOPLE ? list : null;
   }
 
-  // Downloads a new list if this one is a week old. Calls onUpdate() after a successful update.
+  // Downloads a new list if this one is a month old. Calls onUpdate() after a successful update.
   function refresh(onUpdate) {
     var now = Date.now();
     if (updatedAt && now - updatedAt < REFRESH_MS) return;

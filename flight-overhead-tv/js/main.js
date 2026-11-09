@@ -216,7 +216,7 @@
     } catch (e) { /* bridge unavailable */ }
   }
 
-  // Refresh the well-known aircraft list in the background (weekly); never during start-up.
+  // Refresh the well-known aircraft list in the background (monthly); never during start-up.
   function startNotableUpdates() {
     function check() { NotableLive.refresh(sendTables); }
     setTimeout(check, 30000);
