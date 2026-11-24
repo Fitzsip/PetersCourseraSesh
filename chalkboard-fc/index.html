@@ -216,7 +216,7 @@ button:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
   <section class="panel" id="help" hidden>
     <h2>Draw it up</h2>
     <ol class="rules">
-      <li>Put your finger on the ball and draw the play. Run the line through a teammate to pass to him, and finish it in the goal to shoot.</li>
+      <li>Put your finger on the ball and draw the play. Run the line through a teammate to pass to him, and finish it in the goal to shoot. Lift your finger and the play runs.</li>
       <li>Straight lines are passes and shots. Curve or bend the line to dribble: the player carries the ball along it, slower than a pass.</li>
       <li>Defenders chase the ball the moment it moves, and keep running from wherever they got to. A receiver needs a touch to control the ball, so a pass to a marked player gets him tackled.</li>
       <li>Offside: when a pass is played, the receiver can't be nearer the goal than both the ball and the second-last defender (the dashed line). The line moves with the defence.</li>
@@ -232,10 +232,6 @@ button:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
 
   <div class="status" id="status" role="status" aria-live="polite"></div>
 
-  <div class="controls" id="controls">
-    <button class="btn" id="eraseBtn" disabled>Erase</button>
-    <button class="btn primary" id="playBtn" disabled>Play it</button>
-  </div>
 
   <section class="panel" id="result" hidden>
     <h2 id="resTitle"></h2>
@@ -266,8 +262,8 @@ const P = {
   defMin: 85, defMax: 105, pressRadius: 150, jogFactor: 0.45,
   gkSpeed: 100, gkPosSpeed: 70, gkReach: 10, gkReact: 0.1,
   control: 0.12,                         // first touch: receiver needs this long to control a pass
-  capture: 22, startRadius: 34, maxTries: 3,
-  straightTol: 12, minDribble: 18, offsideTol: 4,
+  capture: 22, startRadius: 44, maxTries: 3,
+  straightTol: 14, minDribble: 18, offsideTol: 4, goalSlack: 50,
 };
 const NUMBERS = [8, 9, 10, 7, 11];
 
@@ -610,12 +606,11 @@ function startPuzzle(seed, isPractice) {
   if (record.done) showResult();
   else {
     $("result").hidden = true;
-    $("controls").hidden = false;
     setStatus(record.attempts.length ? lastMessage(record.attempts[record.attempts.length - 1]) + " Draw another play." : INTRO);
   }
   draw();
 }
-const INTRO = "Start on the ball. Straight lines pass and shoot, curvy lines dribble.";
+const INTRO = "Draw from the ball into the goal. Straight lines pass and shoot, curvy lines dribble. Lift your finger to play it.";
 
 function renderMeta() {
   const d = new Date();
@@ -654,15 +649,20 @@ function lastMessage(a) {
 function resetDrawing() {
   stroke = []; plan = []; planTeam = pz ? teamOf(pz).map(cp) : []; holder = 0; legStart = 0;
   drawing = false; open = null; aim = null;
-  $("eraseBtn").disabled = true;
-  $("playBtn").disabled = true;
+}
+// A message chalked onto the board itself, so it's seen even when the status line is scrolled away.
+let hint = null;
+function showHint(text) {
+  hint = { text, until: performance.now() + 2200 };
+  draw();
+  setTimeout(() => { if (hint && performance.now() >= hint.until) { hint = null; draw(); } }, 2300);
 }
 
 // ---------- Turning a drawn line into a plan ----------
 // Smallest k so that everything from pts[k] to T is (nearly) straight: before k is a dribble, after is a pass/shot.
 function splitIndex(pts, T) {
   for (let k = 0; k < pts.length; k++) {
-    const tol = P.straightTol + 0.04 * dist(pts[k], T);
+    const tol = P.straightTol + 0.06 * dist(pts[k], T);
     let ok = true;
     for (let m = k + 1; m < pts.length; m++) if (segDist(pts[m], pts[k], T) > tol) { ok = false; break; }
     if (ok) return k;
@@ -703,7 +703,7 @@ function computeOpen() {
   const E = pts[pts.length - 1];
   const s = splitLeg(pts, E);
   let shotAim = null;
-  if (E.y <= GOAL_Y + 30 && s.from.y > E.y + 10 && dist(s.from, E) >= 25) {
+  if (E.y <= GOAL_Y + P.goalSlack && s.from.y > E.y + 10 && dist(s.from, E) >= 20) {
     const t = (GOAL_Y - s.from.y) / (E.y - s.from.y);
     shotAim = { x: s.from.x + (E.x - s.from.x) * t, y: GOAL_Y };
   }
@@ -735,10 +735,12 @@ canvas.addEventListener("pointerdown", e => {
   const p = toBoard(e);
   if (dist(p, pz.carrier) > P.startRadius) {
     setStatus(`Start your line on the ball, at #${NUMBERS[0]}.`, "bad");
+    showHint(`Start on the ball at #${NUMBERS[0]}`);
     return;
   }
   e.preventDefault();
-  canvas.setPointerCapture(e.pointerId);
+  try { canvas.setPointerCapture(e.pointerId); } catch {}
+  hint = null;
   resetDrawing();
   drawing = true;
   stroke = [p];
@@ -759,6 +761,9 @@ function endStroke() {
   if (!drawing) return;
   drawing = false;
   updatePreview(true);
+  if (fullPlan()) startPlay();
+  else if (stroke.length > 3) showHint("Finish the line in the goal to shoot");
+  else { resetDrawing(); setStatus(INTRO); draw(); }
 }
 canvas.addEventListener("pointerup", endStroke);
 canvas.addEventListener("pointercancel", endStroke);
@@ -779,31 +784,21 @@ function updatePreview(final = false) {
     const msg = `${d.text}, then a shot from #${NUMBERS[holder]} (${xG(open.from).toFixed(2)} xG).`;
     setStatus(warn !== null ? `${msg} #${NUMBERS[warn]} is past the offside line right now.` : msg, warn !== null ? "bad" : "");
   } else if (final && stroke.length > 1) {
-    setStatus("Finish with a straight line into the goal to shoot.", "bad");
+    setStatus("The line has to finish in the goal. Draw it again from the ball.", "bad");
   } else if (stroke.length > 1) {
     setStatus(`${describe(plan).text === "Straight shot" ? "Drawing" : describe(plan).text + " so far"}. Finish in the goal.`);
   }
-  $("eraseBtn").disabled = stroke.length === 0;
-  $("playBtn").disabled = !fp || drawing;
   draw();
 }
 
-$("eraseBtn").addEventListener("click", () => {
-  resetDrawing();
-  setStatus(INTRO);
-  draw();
-});
-$("playBtn").addEventListener("click", () => {
+function startPlay() {
   const fp = fullPlan();
   if (!fp || mode !== "draw") return;
   const sim = simulate(pz, fp, true);
   mode = "anim";
-  $("eraseBtn").disabled = true;
-  $("playBtn").disabled = true;
-  setStatus("");
   anim = { sim, plan: fp, shotFrom: cp(open.from), t: 0, last: performance.now(), done: false, hold: 0 };
   requestAnimationFrame(tick);
-});
+}
 
 function frameIndex() { return Math.min(anim.sim.frames.length - 1, Math.floor(anim.t / DT)); }
 function tick(now) {
@@ -853,7 +848,6 @@ function shareText() {
   return `Chalkboard FC #${day}\n${marks} ${record.won ? record.attempts.length : "X"}/${P.maxTries}\n${line}`;
 }
 function showResult() {
-  $("controls").hidden = true;
   $("result").hidden = false;
   $("shareFallback").hidden = true;
   const last = record.attempts[record.attempts.length - 1];
@@ -1138,6 +1132,17 @@ function draw() {
     const shot = last.plan[last.plan.length - 1];
     drawBall({ x: shot.aim.x, y: GOAL_Y - 14 });
   } else drawBall({ x: pz.carrier.x + 9, y: pz.carrier.y - 12 });
+
+  if (hint && mode === "draw") {
+    ctx.save();
+    ctx.font = "700 17px 'Barlow Condensed', sans-serif";
+    const w = Math.min(W - 24, ctx.measureText(hint.text.toUpperCase()).width * 1.08 + 36);
+    ctx.globalAlpha = 0.92; ctx.fillStyle = C.deep;
+    ctx.beginPath(); ctx.roundRect ? ctx.roundRect(W / 2 - w / 2, H / 2 - 20, w, 40, 8) : ctx.rect(W / 2 - w / 2, H / 2 - 20, w, 40); ctx.fill();
+    ctx.globalAlpha = 1; ctx.fillStyle = C.yellow; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(hint.text.toUpperCase(), W / 2, H / 2 + 1);
+    ctx.restore();
+  }
 }
 
 // ---------- Boot ----------
