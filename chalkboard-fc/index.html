@@ -216,12 +216,13 @@ button:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
   <section class="panel" id="help" hidden>
     <h2>Draw it up</h2>
     <ol class="rules">
-      <li>Put your finger on the ball and draw the play. Run your line through teammates to pass to them, then finish it in the goal to shoot.</li>
-      <li>The ball goes in straight lines: player to player, then to where your line meets the goal.</li>
-      <li>Every defender closes in once the ball moves. The longer a pass is in the air, the more ground they cover. The chalk rings show how far they can reach.</li>
+      <li>Put your finger on the ball and draw the play. Run the line through a teammate to pass to him, and finish it in the goal to shoot.</li>
+      <li>Straight lines are passes and shots. Curve or bend the line to dribble: the player carries the ball along it, slower than a pass.</li>
+      <li>Defenders chase the ball the moment it moves, and keep running from wherever they got to. A receiver needs a touch to control the ball, so a pass to a marked player gets him tackled.</li>
+      <li>Offside: when a pass is played, the receiver can't be nearer the goal than both the ball and the second-last defender (the dashed line). The line moves with the defence.</li>
       <li>You get 3 tries a day. Everyone gets the same play.</li>
     </ol>
-    <div class="legend"><span><i class="us">O</i> your team</span><span><i class="them">X</i> defenders</span><span><i class="them">GK</i> keeper</span></div>
+    <div class="legend"><span><i class="us">O</i> your team</span><span><i class="them">X</i> defenders</span><span><i class="them">GK</i> keeper</span><span><i>→</i> pass</span><span><i>∿</i> dribble</span></div>
   </section>
 
   <div class="board">
@@ -258,15 +259,19 @@ const W = 440, H = 560;
 const GOAL_Y = 40, GOAL_C = 220, POST_L = 175, POST_R = 265;   // 7.32 m goal = 90 px
 const PX_PER_M = 12.3;
 const BALL_R = 5;
+const DT = 1 / 90;                       // simulation step (s)
 const P = {
-  passSpeed: 300, shotSpeed: 600,
-  defSpeed: 110, defReach: 14, defReact: 0.12,
-  gkSpeed: 110, gkReach: 18, gkReact: 0.08,
+  passSpeed: 300, shotSpeed: 600, dribbleSpeed: 140,
+  defReach: 14, defReact: 0.3,           // defenders take a moment to read each pass
+  defMin: 85, defMax: 105, pressRadius: 150, jogFactor: 0.45,
+  gkSpeed: 100, gkPosSpeed: 70, gkReach: 10, gkReact: 0.1,
+  control: 0.12,                         // first touch: receiver needs this long to control a pass
   capture: 22, startRadius: 34, maxTries: 3,
+  straightTol: 12, minDribble: 18, offsideTol: 4,
 };
 const NUMBERS = [8, 9, 10, 7, 11];
 
-// ---------- Seeded randomness ----------
+// ---------- Small helpers ----------
 function mulberry32(a) {
   return function () {
     a |= 0; a = (a + 0x6D2B79F5) | 0;
@@ -281,44 +286,151 @@ function hashStr(s) {
   return h >>> 0;
 }
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const cp = p => ({ x: p.x, y: p.y });
+function segDist(p, a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y, L = dx * dx + dy * dy;
+  let t = L ? ((p.x - a.x) * dx + (p.y - a.y) * dy) / L : 0;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy);
+}
+function simplify(pts, eps = 3) {            // Ramer–Douglas–Peucker
+  if (pts.length < 3) return pts.slice();
+  const a = pts[0], b = pts[pts.length - 1];
+  let dmax = 0, idx = 0;
+  for (let i = 1; i < pts.length - 1; i++) { const d = segDist(pts[i], a, b); if (d > dmax) { dmax = d; idx = i; } }
+  if (dmax > eps) {
+    const l = simplify(pts.slice(0, idx + 1), eps), r = simplify(pts.slice(idx), eps);
+    return [...l.slice(0, -1), ...r];
+  }
+  return [a, b];
+}
+function pathLen(pts) { let s = 0; for (let i = 1; i < pts.length; i++) s += dist(pts[i - 1], pts[i]); return s; }
+function isWide(aim) { return aim.x < POST_L + BALL_R || aim.x > POST_R - BALL_R; }
 
-// ---------- Simulation ----------
+// ---------- Teams ----------
 function teamOf(pz) { return [pz.carrier, ...pz.mates]; }
 function oppOf(pz) {
   return [
-    ...pz.defs.map(d => ({ x: d.x, y: d.y, speed: P.defSpeed, reach: P.defReach, react: P.defReact, gk: false })),
-    { x: pz.gk.x, y: pz.gk.y, speed: P.gkSpeed, reach: P.gkReach, react: P.gkReact, gk: true },
+    ...pz.defs.map(d => ({ x: d.x, y: d.y, speed: d.speed, reach: P.defReach, gk: false })),
+    { x: pz.gk.x, y: pz.gk.y, speed: P.gkSpeed, reach: P.gkReach, gk: true },
   ];
 }
-function isWide(aim) { return aim.x < POST_L + BALL_R || aim.x > POST_R - BALL_R; }
+// Offside line: the second-last opponent (keeper usually last). Smaller y = nearer the goal.
+function offsideLine(opp) { const ys = opp.map(o => o.y).sort((a, b) => a - b); return ys[1]; }
 
-// route: player indices starting at 0 (the ball carrier); aim: point on the goal line.
-function simulate(pz, route, aim) {
-  const team = teamOf(pz), opp = oppOf(pz);
-  const pts = route.map(i => team[i]);
-  pts.push(aim);
-  const wide = isWide(aim);
-  const segs = [];
-  for (let s = 0; s < pts.length - 1; s++) {
-    const a = pts[s], b = pts[s + 1], shot = s === pts.length - 2;
-    const speed = shot ? P.shotSpeed : P.passSpeed;
-    const len = dist(a, b);
-    const steps = Math.max(1, Math.ceil(len / 3));
-    let hit = null;
-    for (let k = 1; k <= steps && !hit; k++) {
-      const f = k / steps, t = (len * f) / speed;
-      const x = a.x + (b.x - a.x) * f, y = a.y + (b.y - a.y) * f;
-      for (let j = 0; j < opp.length; j++) {
-        const o = opp[j];
-        if (o.gk && shot && wide) continue;
-        const R = o.reach + BALL_R + o.speed * Math.max(0, t - o.react);
-        if (Math.hypot(o.x - x, o.y - y) <= R) { hit = { j, x, y, t, f }; break; }
+// ---------- Simulation ----------
+// State carries everyone's position through the whole play: defenders never reset between passes.
+function initState(pz) {
+  return { t: 0, holder: 0, team: teamOf(pz).map(cp), opp: oppOf(pz).map(o => ({ ...o, vx: 0, vy: 0 })) };
+}
+function cloneState(s) {
+  return { t: s.t, holder: s.holder, team: s.team.map(cp), opp: s.opp.map(o => ({ ...o })) };
+}
+function snap(st, ball) {
+  return { ball: cp(ball), holder: st.holder, team: st.team.map(cp), opp: st.opp.map(cp) };
+}
+function gkSpot(ball) {                       // keeper comes off his line to narrow the angle
+  const dx = ball.x - GOAL_C, dy = ball.y - GOAL_Y, d = Math.hypot(dx, dy) || 1;
+  const k = Math.max(8, Math.min(34, d * 0.12));
+  return { x: GOAL_C + (dx / d) * k, y: Math.max(GOAL_Y + 6, GOAL_Y + (dy / d) * k) };
+}
+// Earliest point where a runner at speed v (reach R) can meet a ball moving at velocity u for rem seconds.
+function interceptPoint(o, p, u, rem, end, v, R) {
+  const rx = p.x - o.x, ry = p.y - o.y;
+  const a = u.x * u.x + u.y * u.y - v * v, b = 2 * (rx * u.x + ry * u.y - v * R), c = rx * rx + ry * ry - R * R;
+  if (c <= 0) return p;
+  let t = null;
+  if (Math.abs(a) < 1e-6) { if (b < 0) t = -c / b; }
+  else {
+    const disc = b * b - 4 * a * c;
+    if (disc >= 0) {
+      const s = Math.sqrt(disc);
+      const r = [(-b - s) / (2 * a), (-b + s) / (2 * a)].filter(x => x > 0).sort((x, y) => x - y);
+      if (r.length) t = r[0];
+    }
+  }
+  if (t === null || t > rem) return end;
+  return { x: p.x + u.x * t, y: p.y + u.y * t };
+}
+function steer(o, ball, vel, rem, end, tt, kind) {
+  const react = kind === "shot" ? (o.gk ? P.gkReact : P.defReact) : kind === "pass" && !o.gk ? P.defReact : 0;
+  if (tt < react) return;                     // still reading it: keep running the old way
+  let target, spd;
+  if (o.gk && kind !== "shot") { target = gkSpot(ball); spd = P.gkPosSpeed; }
+  else {
+    spd = o.speed;
+    target = interceptPoint(o, ball, vel, rem, end, spd, o.reach + BALL_R);
+    // Far from the ball a defender only jogs across to cover; close to it he sprints.
+    if (kind !== "shot" && dist(o, target) > P.pressRadius) spd *= P.jogFactor;
+  }
+  const dx = target.x - o.x, dy = target.y - o.y, d = Math.hypot(dx, dy);
+  if (d < 0.5) { o.vx = 0; o.vy = 0; return; }
+  const sp = Math.min(spd, d / DT);
+  o.vx = (dx / d) * sp; o.vy = (dy / d) * sp;
+}
+// Move the ball along a polyline (or hold it still for "control"), moving every opponent each step.
+function moveBall(st, pts, speed, kind, frames, wide = false) {
+  const segL = []; let total = 0;
+  for (let i = 0; i < pts.length - 1; i++) { const l = dist(pts[i], pts[i + 1]); segL.push(l); total += l; }
+  const dur = kind === "control" ? P.control : total / speed;
+  let tt = 0, si = 0, sBase = 0;
+  while (tt < dur - 1e-9) {
+    const h = Math.min(DT, dur - tt); tt += h; st.t += h;
+    let ball, vel = { x: 0, y: 0 }, rem = 0, end;
+    if (kind === "control" || total === 0) { ball = cp(pts[0]); end = ball; }
+    else {
+      const s = Math.min(total, tt * speed);
+      while (si < segL.length - 1 && s > sBase + segL[si]) { sBase += segL[si]; si++; }
+      const a = pts[si], b = pts[si + 1], l = segL[si], f = l ? Math.min(1, (s - sBase) / l) : 1;
+      ball = { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
+      if (l) vel = { x: ((b.x - a.x) / l) * speed, y: ((b.y - a.y) / l) * speed };
+      rem = (l - (s - sBase)) / speed; end = b;
+    }
+    if (kind === "dribble") st.team[st.holder] = cp(ball);
+    for (let j = 0; j < st.opp.length; j++) {
+      const o = st.opp[j];
+      steer(o, ball, vel, rem, end, tt, kind);
+      o.x += o.vx * h; o.y += o.vy * h;
+      const catchable = !(o.gk && kind === "shot" && wide);
+      if (catchable && dist(o, ball) <= o.reach + BALL_R) {
+        if (frames) frames.push(snap(st, ball));
+        return { j, x: ball.x, y: ball.y };
       }
     }
-    segs.push({ a, b, shot, speed, len, dur: len / speed, hit });
-    if (hit) return { segs, result: opp[hit.j].gk ? "saved" : "intercepted", by: hit.j };
+    if (frames) frames.push(snap(st, ball));
   }
-  return { segs, result: wide ? "wide" : "goal" };
+  return null;
+}
+// One step of a plan. Returns an outcome object if the play ends here, otherwise null.
+function applyAction(st, act, frames) {
+  const from = cp(st.team[st.holder]);
+  if (act.type === "dribble") {
+    const hit = moveBall(st, [from, ...act.path], P.dribbleSpeed, "dribble", frames);
+    return hit ? { result: "tackled", hit } : null;
+  }
+  if (act.type === "pass") {
+    const rcv = cp(st.team[act.to]);
+    const line = offsideLine(st.opp);
+    if (rcv.y < Math.min(from.y, line) - P.offsideTol) return { result: "offside", who: act.to, line };
+    let hit = moveBall(st, [from, rcv], P.passSpeed, "pass", frames);
+    if (hit) return { result: "intercepted", hit };
+    st.holder = act.to;
+    hit = moveBall(st, [rcv], 0, "control", frames);
+    return hit ? { result: "tackled", hit } : null;
+  }
+  const wide = isWide(act.aim);
+  const hit = moveBall(st, [from, act.aim], P.shotSpeed, "shot", frames, wide);
+  if (hit) return { result: st.opp[hit.j].gk ? "saved" : "blocked", hit };
+  return { result: wide ? "wide" : "goal" };
+}
+function simulate(pz, plan, record = false) {
+  const st = initState(pz);
+  const frames = record ? [snap(st, st.team[0])] : null;
+  for (const act of plan) {
+    const r = applyAction(st, act, frames);
+    if (r) return { ...r, frames };
+  }
+  return { result: "none", frames };
 }
 
 // Expected goals for a shot from p: angle the goal mouth subtends, plus distance.
@@ -329,82 +441,105 @@ function xG(p) {
   return 1 / (1 + Math.exp(1.9 - 2.6 * theta + 0.05 * dm));
 }
 
+// ---------- Solver ----------
+// Middle of the widest scoring stretch of the goal mouth (must be >= 12 px to hit by hand).
+function bestAim(st) {
+  let scored = null, runStart = null, bestRun = 0;
+  for (let x = POST_L + BALL_R; x <= POST_R - BALL_R + 3; x += 3) {
+    const ok = x <= POST_R - BALL_R && applyAction(cloneState(st), { type: "shot", aim: { x, y: GOAL_Y } }).result === "goal";
+    if (ok && runStart === null) runStart = x;
+    if (!ok && runStart !== null) {
+      const w = x - runStart;
+      if (w >= 12 && w > bestRun) { bestRun = w; scored = { x: runStart + (w - 3) / 2, y: GOAL_Y }; }
+      runStart = null;
+    }
+  }
+  return scored;
+}
 function solve(pz, maxPasses = 4) {
   const n = 1 + pz.mates.length;
   let count = 0, direct = false, best = null;
-  const rec = (r) => {
-    // Does any aim along the goal mouth score from this route?
-    // Only count it if the open part of the goal is wide enough to hit by hand (>= 12 px).
-    let scored = null, runStart = null, bestRun = 0;
-    for (let x = POST_L + BALL_R; x <= POST_R - BALL_R + 3; x += 3) {
-      const ok = x <= POST_R - BALL_R && simulate(pz, r, { x, y: GOAL_Y }).result === "goal";
-      if (ok && runStart === null) runStart = x;
-      if (!ok && runStart !== null) {
-        const w = x - runStart;
-        if (w >= 12 && w > bestRun) { bestRun = w; scored = { x: runStart + (w - 3) / 2, y: GOAL_Y }; }
-        runStart = null;
-      }
-    }
-    if (scored) {
+  const rec = (plan, st, passes) => {
+    const aim = bestAim(st);
+    if (aim) {
       count++;
-      if (r.length === 1) direct = true;
-      if (!best || r.length < best.route.length) best = { route: r.slice(), aim: scored };
+      if (passes === 0) direct = true;
+      if (!best || plan.length < best.plan.length - 1) best = { plan: [...plan, { type: "shot", aim }] };
     }
-    if (r.length > maxPasses) return;
+    if (passes >= maxPasses) return;
     for (let i = 0; i < n; i++) {
-      if (i === r[r.length - 1]) continue;
-      // prune: skip if this pass gets cut out (the shot target doesn't matter for that)
-      const probe = simulate(pz, [...r, i], { x: GOAL_C, y: GOAL_Y });
-      const passSegs = probe.segs.slice(0, r.length);
-      if (passSegs.some(s => s.hit && !s.shot)) continue;
-      r.push(i); rec(r); r.pop();
+      if (i === st.holder) continue;
+      const s2 = cloneState(st), act = { type: "pass", to: i };
+      if (applyAction(s2, act)) continue;
+      rec([...plan, act], s2, passes + 1);
     }
   };
-  rec([0]);
+  rec([], initState(pz), 0);
   return { count, direct, best };
+}
+// Reject puzzles a simple run-and-shoot solves.
+function easyDribble(pz) {
+  const c = pz.carrier;
+  for (const tx of [GOAL_C - 60, GOAL_C, GOAL_C + 60]) {
+    for (const d of [80, 150, 220]) {
+      const dx = tx - c.x, dy = GOAL_Y + 50 - c.y, L = Math.hypot(dx, dy);
+      if (d > L) continue;
+      const st = initState(pz);
+      if (applyAction(st, { type: "dribble", path: [{ x: c.x + (dx / L) * d, y: c.y + (dy / L) * d }] })) continue;
+      if (bestAim(st)) return true;
+    }
+  }
+  return false;
 }
 
 function generate(seed) {
-  for (let tries = 0; tries < 600; tries++) {
+  for (let tries = 0; tries < 800; tries++) {
     const r = mulberry32(seed + tries * 7919);
     const rnd = (a, b) => a + (b - a) * r();
     const pick = arr => arr[Math.floor(r() * arr.length)];
     const pz = {
       carrier: { x: rnd(70, 370), y: rnd(400, 500) },
       mates: [], defs: [],
-      gk: { x: GOAL_C + rnd(-24, 24), y: 52 },
+      gk: { x: GOAL_C + rnd(-20, 20), y: 50 },
     };
     const all = () => [pz.carrier, ...pz.mates, ...pz.defs, pz.gk];
     const free = (p, min) => p.x > 28 && p.x < W - 28 && p.y > 70 && p.y < H - 30 && all().every(q => dist(p, q) >= min);
     const nM = r() < 0.5 ? 2 : 3;
     let guard = 0;
     while (pz.mates.length < nM && guard++ < 300) {
-      const p = { x: rnd(40, 400), y: rnd(110, 400) };
+      const p = { x: rnd(40, 400), y: rnd(130, 400) };
       if (free(p, 75)) pz.mates.push(p);
     }
     if (pz.mates.length < nM) continue;
-    const nD = 4 + Math.floor(r() * 3);
+    const nD = 4 + Math.floor(r() * 2);
     guard = 0;
     while (pz.defs.length < nD && guard++ < 500) {
       const k = pz.defs.length;
       let p;
-      if (k < 2) {            // block shooting lanes
-        const src = k === 0 ? pz.carrier : pick(pz.mates);
-        const t = rnd(0.25, 0.7);
-        p = { x: src.x + (GOAL_C - src.x) * t + rnd(-18, 18), y: src.y + (GOAL_Y - src.y) * t + rnd(-18, 18) };
-      } else if (k < 4) {     // sit in passing lanes
+      if (k === 0) {          // a centre-back holding the line
+        p = { x: GOAL_C + rnd(-70, 70), y: rnd(95, 150) };
+      } else if (k < 3) {     // in passing lanes
         const a = pick(pz.mates), b = r() < 0.5 ? pz.carrier : pick(pz.mates);
         if (a === b) continue;
         const t = rnd(0.3, 0.7);
         p = { x: a.x + (b.x - a.x) * t + rnd(-25, 25), y: a.y + (b.y - a.y) * t + rnd(-25, 25) };
-      } else {                // free roamers
-        p = { x: rnd(40, 400), y: rnd(80, 400) };
+      } else {                // between the ball and goal
+        const t = rnd(0.25, 0.6);
+        p = { x: pz.carrier.x + (GOAL_C - pz.carrier.x) * t + rnd(-40, 40), y: pz.carrier.y + (GOAL_Y - pz.carrier.y) * t };
       }
+      p.speed = rnd(P.defMin, P.defMax);
       if (free(p, 40)) pz.defs.push(p);
     }
     if (pz.defs.length < nD) continue;
+    // Sometimes a striker is already standing offside, to keep you honest.
+    if (r() < 0.45) {
+      const line = offsideLine(oppOf(pz));
+      const p = { x: rnd(60, 380), y: line - rnd(12, 35) };
+      if (free(p, 45)) pz.mates.push(p);
+    }
     const sol = solve(pz);
-    if (sol.direct || sol.count < 1 || sol.count > 14) continue;
+    if (sol.direct || sol.count < 1 || sol.count > 16) continue;
+    if (easyDribble(pz)) continue;
     pz.solution = sol.best;
     pz.routes = sol.count;
     return pz;
@@ -418,7 +553,7 @@ function todayIndex(d = new Date()) {
   const mid = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   return Math.round((mid - EPOCH) / 86400000) + 1;
 }
-const STORE_KEY = "chalkboardfc:v1";
+const STORE_KEY = "chalkboardfc:v2";
 function load() {
   try { return JSON.parse(localStorage.getItem(STORE_KEY)) || { days: {} }; } catch { return { days: {} }; }
 }
@@ -430,13 +565,11 @@ function computeStats(data) {
   const played = nums.length, won = nums.filter(n => data.days[n].won).length;
   let best = 0, run = 0, prev = null;
   for (const n of nums) {
-    if (data.days[n].won && (prev === null || n === prev + 1) && run > 0) run++;
-    else run = data.days[n].won ? 1 : 0;
     if (!data.days[n].won) run = 0;
+    else run = prev !== null && n === prev + 1 && run > 0 ? run + 1 : 1;
     best = Math.max(best, run);
     prev = n;
   }
-  // current streak counts back from the latest finished day
   let cur = 0;
   for (let i = nums.length - 1; i >= 0; i--) {
     const n = nums[i];
@@ -455,10 +588,11 @@ const $ = id => document.getElementById(id);
 const day = todayIndex();
 let data = load();
 let practice = false;
-let pz, record;     // record: { attempts: [{route, aim, result, shooter}], done, won }
+let pz, record;     // record: { attempts: [{plan, result, xg, passes, dribbles}], done, won }
 let mode = "draw";  // draw | anim | done
-let stroke = [], route = [], aim = null, drawing = false;
 let anim = null;
+// drawing state
+let stroke = [], plan = [], planTeam = [], holder = 0, legStart = 0, drawing = false, open = null, aim = null;
 
 function startPuzzle(seed, isPractice) {
   practice = isPractice;
@@ -469,18 +603,19 @@ function startPuzzle(seed, isPractice) {
     record = data.days[day];
   }
   resetDrawing();
+  anim = null;
   mode = record.done ? "done" : "draw";
   renderMeta();
   renderTries();
-  if (record.done) showResult(false);
+  if (record.done) showResult();
   else {
     $("result").hidden = true;
     $("controls").hidden = false;
-    setStatus(record.attempts.length ? lastMessage(record.attempts[record.attempts.length - 1]) + " Draw another play." :
-      "Start on the ball and draw your play into the goal.");
+    setStatus(record.attempts.length ? lastMessage(record.attempts[record.attempts.length - 1]) + " Draw another play." : INTRO);
   }
   draw();
 }
+const INTRO = "Start on the ball. Straight lines pass and shoot, curvy lines dribble.";
 
 function renderMeta() {
   const d = new Date();
@@ -506,23 +641,94 @@ function setStatus(text, kind = "") {
 }
 function lastMessage(a) {
   return {
-    intercepted: "Cut out by a defender.",
-    saved: "The keeper got to it.",
+    intercepted: "Pass cut out.",
+    tackled: "Closed down and tackled.",
+    offside: `Flag's up: #${NUMBERS[a.who] ?? ""} was offside.`,
+    blocked: "Shot blocked.",
+    saved: "Saved by the keeper.",
     wide: "Wide of the post.",
     goal: "Goal!",
   }[a.result];
 }
 
 function resetDrawing() {
-  stroke = []; route = []; aim = null; drawing = false;
+  stroke = []; plan = []; planTeam = pz ? teamOf(pz).map(cp) : []; holder = 0; legStart = 0;
+  drawing = false; open = null; aim = null;
   $("eraseBtn").disabled = true;
   $("playBtn").disabled = true;
+}
+
+// ---------- Turning a drawn line into a plan ----------
+// Smallest k so that everything from pts[k] to T is (nearly) straight: before k is a dribble, after is a pass/shot.
+function splitIndex(pts, T) {
+  for (let k = 0; k < pts.length; k++) {
+    const tol = P.straightTol + 0.04 * dist(pts[k], T);
+    let ok = true;
+    for (let m = k + 1; m < pts.length; m++) if (segDist(pts[m], pts[k], T) > tol) { ok = false; break; }
+    if (ok) return k;
+  }
+  return pts.length - 1;
+}
+function legPoints() {
+  const start = planTeam[holder];
+  const pts = [cp(start)];
+  let leaving = true;
+  for (let i = legStart + 1; i < stroke.length; i++) {
+    if (leaving && dist(stroke[i], start) < P.capture * 0.8) continue;  // ignore the scribble on top of the player
+    leaving = false;
+    pts.push(stroke[i]);
+  }
+  return pts;
+}
+// Split a leg toward T into an optional dribble path and the point the ball is struck from.
+function splitLeg(pts, T) {
+  const k = splitIndex(pts, T);
+  const body = simplify(pts.slice(0, k + 1)).filter((p, i, a) => i === 0 || dist(p, a[i - 1]) > 0.5);
+  if (body.length > 1 && pathLen(body) >= P.minDribble) return { path: body.slice(1).map(cp), from: cp(body[body.length - 1]) };
+  return { path: [], from: cp(pts[0]) };
+}
+function closeLeg(i) {
+  let pts = legPoints();
+  const T = planTeam[i];
+  while (pts.length > 1 && dist(pts[pts.length - 1], T) < P.capture) pts.pop();   // arrival scribble
+  const s = splitLeg(pts, T);
+  if (s.path.length) { plan.push({ type: "dribble", path: s.path }); planTeam[holder] = cp(s.from); }
+  plan.push({ type: "pass", to: i });
+  holder = i;
+  legStart = stroke.length - 1;
+}
+function computeOpen() {
+  const pts = legPoints();
+  if (pts.length < 2) return null;
+  const E = pts[pts.length - 1];
+  const s = splitLeg(pts, E);
+  let shotAim = null;
+  if (E.y <= GOAL_Y + 30 && s.from.y > E.y + 10 && dist(s.from, E) >= 25) {
+    const t = (GOAL_Y - s.from.y) / (E.y - s.from.y);
+    shotAim = { x: s.from.x + (E.x - s.from.x) * t, y: GOAL_Y };
+  }
+  return { ...s, end: E, aim: shotAim };
+}
+function fullPlan() {
+  if (!open || !open.aim) return null;
+  const p = plan.slice();
+  if (open.path.length) p.push({ type: "dribble", path: open.path });
+  p.push({ type: "shot", aim: open.aim });
+  return p;
+}
+function describe(p) {
+  const passes = p.filter(a => a.type === "pass").length, dribbles = p.filter(a => a.type === "dribble").length;
+  const bits = [];
+  if (dribbles) bits.push(dribbles === 1 ? "1 dribble" : `${dribbles} dribbles`);
+  if (passes) bits.push(passes === 1 ? "1 pass" : `${passes} passes`);
+  return { passes, dribbles, text: bits.length ? bits.join(", ") : "Straight shot" };
 }
 
 // ---------- Input ----------
 function toBoard(e) {
   const r = canvas.getBoundingClientRect();
-  return { x: ((e.clientX - r.left) / r.width) * W, y: ((e.clientY - r.top) / r.height) * H };
+  const x = ((e.clientX - r.left) / r.width) * W, y = ((e.clientY - r.top) / r.height) * H;
+  return { x: Math.max(4, Math.min(W - 4, x)), y: Math.max(4, Math.min(H - 4, y)) };
 }
 canvas.addEventListener("pointerdown", e => {
   if (mode !== "draw") return;
@@ -533,20 +739,19 @@ canvas.addEventListener("pointerdown", e => {
   }
   e.preventDefault();
   canvas.setPointerCapture(e.pointerId);
+  resetDrawing();
   drawing = true;
-  stroke = [p]; route = [0]; aim = null;
+  stroke = [p];
   updatePreview();
 });
 canvas.addEventListener("pointermove", e => {
   if (!drawing) return;
   const p = toBoard(e);
-  const last = stroke[stroke.length - 1];
-  if (dist(p, last) < 2) return;
+  if (dist(p, stroke[stroke.length - 1]) < 2) return;
   stroke.push(p);
-  const team = teamOf(pz);
-  for (let i = 0; i < team.length; i++) {
-    if (i === route[route.length - 1]) continue;
-    if (dist(p, team[i]) < P.capture) { route.push(i); break; }
+  for (let i = 0; i < planTeam.length; i++) {
+    if (i === holder) continue;
+    if (dist(p, planTeam[i]) < P.capture) { closeLeg(i); break; }
   }
   updatePreview();
 });
@@ -558,71 +763,66 @@ function endStroke() {
 canvas.addEventListener("pointerup", endStroke);
 canvas.addEventListener("pointercancel", endStroke);
 
-function computeAim() {
-  const team = teamOf(pz);
-  const from = team[route[route.length - 1]];
-  const end = stroke[stroke.length - 1];
-  if (!end || end.y > GOAL_Y + 30 || end.y >= from.y - 10) return null;
-  const t = (GOAL_Y - from.y) / (end.y - from.y);
-  return { x: from.x + (end.x - from.x) * t, y: GOAL_Y };
-}
 function updatePreview(final = false) {
-  aim = computeAim();
-  const passes = route.length - 1;
-  const passTxt = passes === 0 ? "No passes" : passes === 1 ? "1 pass" : `${passes} passes`;
-  if (aim) {
-    const from = teamOf(pz)[route[route.length - 1]];
-    setStatus(`${passTxt}, then a shot from #${NUMBERS[route[route.length - 1]]}. Chance: ${xG(from).toFixed(2)} xG.`);
-  } else if (final) {
-    setStatus("Finish your line inside the goal to take the shot.", "bad");
-  } else {
-    setStatus(`${passTxt} so far. Finish in the goal.`);
+  open = computeOpen();
+  const fp = fullPlan();
+  aim = fp ? open.aim : null;
+  // Offside warning against where the defence stands now.
+  const line = offsideLine(oppOf(pz));
+  const t = teamOf(pz).map(cp); let h = 0, warn = null;
+  for (const a of plan) {
+    if (a.type === "dribble") t[h] = cp(a.path[a.path.length - 1]);
+    else if (a.type === "pass") { if (t[a.to].y < Math.min(t[h].y, line) - P.offsideTol) warn = a.to; h = a.to; }
+  }
+  if (fp) {
+    const d = describe(fp);
+    const msg = `${d.text}, then a shot from #${NUMBERS[holder]} (${xG(open.from).toFixed(2)} xG).`;
+    setStatus(warn !== null ? `${msg} #${NUMBERS[warn]} is past the offside line right now.` : msg, warn !== null ? "bad" : "");
+  } else if (final && stroke.length > 1) {
+    setStatus("Finish with a straight line into the goal to shoot.", "bad");
+  } else if (stroke.length > 1) {
+    setStatus(`${describe(plan).text === "Straight shot" ? "Drawing" : describe(plan).text + " so far"}. Finish in the goal.`);
   }
   $("eraseBtn").disabled = stroke.length === 0;
-  $("playBtn").disabled = !aim || drawing;
+  $("playBtn").disabled = !fp || drawing;
   draw();
 }
 
 $("eraseBtn").addEventListener("click", () => {
   resetDrawing();
-  setStatus("Start on the ball and draw your play into the goal.");
+  setStatus(INTRO);
   draw();
 });
 $("playBtn").addEventListener("click", () => {
-  if (!aim || mode !== "draw") return;
-  const sim = simulate(pz, route, aim);
+  const fp = fullPlan();
+  if (!fp || mode !== "draw") return;
+  const sim = simulate(pz, fp, true);
   mode = "anim";
   $("eraseBtn").disabled = true;
   $("playBtn").disabled = true;
   setStatus("");
-  anim = { sim, route: route.slice(), aim: { ...aim }, t: 0, last: performance.now(), seg: 0, done: false, hold: 0 };
+  anim = { sim, plan: fp, shotFrom: cp(open.from), t: 0, last: performance.now(), done: false, hold: 0 };
   requestAnimationFrame(tick);
 });
 
+function frameIndex() { return Math.min(anim.sim.frames.length - 1, Math.floor(anim.t / DT)); }
 function tick(now) {
   if (!anim) return;
   const dt = Math.min(0.05, (now - anim.last) / 1000);
   anim.last = now;
-  const seg = anim.sim.segs[anim.seg];
   if (!anim.done) {
     anim.t += dt;
-    const end = seg.hit ? seg.hit.t : seg.dur;
-    if (anim.t >= end) {
-      if (seg.hit || anim.seg === anim.sim.segs.length - 1) { anim.t = end; anim.done = true; }
-      else { anim.seg++; anim.t = 0; }
-    }
-  } else {
-    anim.hold += dt;
-  }
+    if (anim.t / DT >= anim.sim.frames.length - 1) anim.done = true;
+  } else anim.hold += dt;
   draw();
-  if (anim.done && anim.hold > 0.7) return finishAttempt();
+  if (anim.done && anim.hold > (anim.sim.result === "offside" ? 1.3 : 0.8)) return finishAttempt();
   requestAnimationFrame(tick);
 }
 
 function finishAttempt() {
-  const { sim, route: r, aim: a } = anim;
-  const shooter = r[r.length - 1];
-  const attempt = { route: r, aim: a, result: sim.result, xg: +xG(teamOf(pz)[shooter]).toFixed(2) };
+  const { sim, plan: fp, shotFrom } = anim;
+  const d = describe(fp);
+  const attempt = { plan: fp, result: sim.result, who: sim.who, xg: +xG(shotFrom).toFixed(2), passes: d.passes, dribbles: d.dribbles };
   anim = null;
   record.attempts.push(attempt);
   if (sim.result === "goal") { record.done = true; record.won = true; }
@@ -630,7 +830,7 @@ function finishAttempt() {
   if (!practice) save(data);
   renderTries();
   resetDrawing();
-  if (record.done) { mode = "done"; showResult(true); }
+  if (record.done) { mode = "done"; showResult(); }
   else {
     mode = "draw";
     const left = P.maxTries - record.attempts.length;
@@ -640,24 +840,27 @@ function finishAttempt() {
 }
 
 // ---------- Result panel ----------
-function shareText() {
-  const marks = record.attempts.map(a => a.result === "goal" ? "⚽" : "❌").join("");
-  const won = record.won;
-  const last = record.attempts[record.attempts.length - 1];
-  const passes = last.route.length - 1;
-  const line = won ? `${passes} ${passes === 1 ? "pass" : "passes"} · ${last.xg.toFixed(2)} xG` : "No goal today";
-  return `Chalkboard FC #${day}\n${marks} ${won ? record.attempts.length : "X"}/${P.maxTries}\n${line}`;
+function summary(a) {
+  const bits = [];
+  if (a.dribbles) bits.push(`${a.dribbles} ${a.dribbles === 1 ? "dribble" : "dribbles"}`);
+  bits.push(`${a.passes} ${a.passes === 1 ? "pass" : "passes"}`);
+  return bits.join(" · ");
 }
-function showResult(fresh) {
+function shareText() {
+  const marks = record.attempts.map(a => a.result === "goal" ? "⚽" : a.result === "offside" ? "🚩" : "❌").join("");
+  const last = record.attempts[record.attempts.length - 1];
+  const line = record.won ? `${summary(last)} · ${last.xg.toFixed(2)} xG` : "No goal today";
+  return `Chalkboard FC #${day}\n${marks} ${record.won ? record.attempts.length : "X"}/${P.maxTries}\n${line}`;
+}
+function showResult() {
   $("controls").hidden = true;
   $("result").hidden = false;
   $("shareFallback").hidden = true;
   const last = record.attempts[record.attempts.length - 1];
   if (record.won) {
     const n = record.attempts.length;
-    const passes = last.route.length - 1;
     $("resTitle").textContent = n === 1 ? "Goal, first time!" : "Goal!";
-    $("resText").textContent = `Scored on try ${n} of ${P.maxTries} after ${passes} ${passes === 1 ? "pass" : "passes"}, from a ${last.xg.toFixed(2)} xG chance.`;
+    $("resText").textContent = `Scored on try ${n} of ${P.maxTries} (${summary(last)}), from a ${last.xg.toFixed(2)} xG chance.`;
     setStatus(practice ? "Practice goal. Not counted in your stats." : "That's today's play done.", "good");
   } else {
     $("resTitle").textContent = "Kept out";
@@ -680,11 +883,12 @@ function updateNext() {
   const ms = tmr - now;
   const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000), s = Math.floor((ms % 60000) / 1000);
   const pad = v => String(v).padStart(2, "0");
-  $("next").innerHTML = practice
-    ? `<button class="btn" id="backBtn" style="width:100%">Back to today's play</button>`
-    : `Next play in ${pad(h)}:${pad(m)}:${pad(s)}`;
-  const back = document.getElementById("backBtn");
-  if (back) back.onclick = () => startPuzzle(hashStr("chalkboard-" + day), false);
+  if (practice) {
+    if (!document.getElementById("backBtn")) {
+      $("next").innerHTML = `<button class="btn" id="backBtn" style="width:100%">Back to today's play</button>`;
+      document.getElementById("backBtn").onclick = () => startPuzzle(hashStr("chalkboard-" + day), false);
+    }
+  } else $("next").textContent = `Next play in ${pad(h)}:${pad(m)}:${pad(s)}`;
 }
 setInterval(() => { if (!practice) updateNext(); if (!practice && todayIndex() !== day) location.reload(); }, 1000);
 
@@ -696,11 +900,10 @@ $("shareBtn").addEventListener("click", () => {
     ta.value = text; ta.hidden = false; ta.focus(); ta.select();
     $("shareBtn").textContent = "Copy the text below";
   };
-  try {
-    navigator.clipboard.writeText(text).then(done, fallback);
-  } catch { fallback(); }
+  try { navigator.clipboard.writeText(text).then(done, fallback); } catch { fallback(); }
 });
 $("practiceBtn").addEventListener("click", () => {
+  $("next").innerHTML = "";
   startPuzzle(Math.floor(Math.random() * 2 ** 31), true);
 });
 $("helpBtn").addEventListener("click", () => {
@@ -746,6 +949,23 @@ function line(a, b, color, width, alpha, dash) {
   for (let i = 0; i <= n; i++) pts.push({ x: a.x + (b.x - a.x) * i / n, y: a.y + (b.y - a.y) * i / n });
   chalkPath(pts, color, width, alpha, dash);
 }
+// Coach's notation: a wavy line is a dribble.
+function wavy(pts, color, width, alpha) {
+  const out = [];
+  let s = 0;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1], l = dist(a, b);
+    if (!l) continue;
+    const nx = -(b.y - a.y) / l, ny = (b.x - a.x) / l;
+    for (let d = 0; d < l; d += 3) {
+      const w = Math.sin((s + d) / 5) * 3.2;
+      out.push({ x: a.x + (b.x - a.x) * d / l + nx * w, y: a.y + (b.y - a.y) * d / l + ny * w });
+    }
+    s += l;
+  }
+  out.push(pts[pts.length - 1]);
+  chalkPath(out, color, width, alpha);
+}
 function circlePts(c, r, a0 = 0, a1 = Math.PI * 2) {
   const n = Math.max(12, Math.ceil(r * Math.abs(a1 - a0) / 8));
   const pts = [];
@@ -761,23 +981,21 @@ function arrowHead(a, b, color, alpha = 0.9) {
 function drawPitch() {
   ctx.fillStyle = C.board;
   ctx.fillRect(0, 0, W, H);
-  // old chalk smudges
   const g = ctx.createRadialGradient(W * 0.45, H * 0.4, 40, W * 0.5, H * 0.5, H * 0.75);
   g.addColorStop(0, "rgba(255,255,255,0.05)");
   g.addColorStop(1, "rgba(0,0,0,0.18)");
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
 
   const lc = C.chalk, la = 0.42;
-  line({ x: 0, y: GOAL_Y }, { x: W, y: GOAL_Y }, lc, 2, la);               // goal line
+  line({ x: 0, y: GOAL_Y }, { x: W, y: GOAL_Y }, lc, 2, la);
   const boxD = 16.5 * PX_PER_M, sixD = 5.5 * PX_PER_M, sixW = 18.32 * PX_PER_M;
-  line({ x: 0, y: GOAL_Y + boxD }, { x: W, y: GOAL_Y + boxD }, lc, 2, la); // 18-yard line (box sides run off the board)
+  line({ x: 0, y: GOAL_Y + boxD }, { x: W, y: GOAL_Y + boxD }, lc, 2, la);
   const sx0 = GOAL_C - sixW / 2, sx1 = GOAL_C + sixW / 2;
   chalkPath([{ x: sx0, y: GOAL_Y }, { x: sx0, y: GOAL_Y + sixD }, { x: sx1, y: GOAL_Y + sixD }, { x: sx1, y: GOAL_Y }], lc, 2, la);
   const spot = { x: GOAL_C, y: GOAL_Y + 11 * PX_PER_M };
   ctx.fillStyle = lc; ctx.globalAlpha = la; ctx.beginPath(); ctx.arc(spot.x, spot.y, 2.5, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
   const arcR = 9.15 * PX_PER_M, dy = boxD - 11 * PX_PER_M, half = Math.acos(dy / arcR);
   chalkPath(circlePts(spot, arcR, Math.PI / 2 - half, Math.PI / 2 + half), lc, 2, la);
-  // goal frame and net
   ctx.save();
   ctx.globalAlpha = 0.16; ctx.strokeStyle = C.chalk; ctx.lineWidth = 1;
   for (let x = POST_L + 6; x < POST_R; x += 9) { ctx.beginPath(); ctx.moveTo(x, GOAL_Y); ctx.lineTo(x, 14); ctx.stroke(); }
@@ -785,7 +1003,24 @@ function drawPitch() {
   ctx.restore();
   chalkPath([{ x: POST_L, y: GOAL_Y }, { x: POST_L, y: 12 }, { x: POST_R, y: 12 }, { x: POST_R, y: GOAL_Y }], lc, 3, 0.85);
 }
-
+function drawOffsideLine(y, hot) {
+  ctx.save();
+  ctx.setLineDash([3, 7]);
+  ctx.strokeStyle = hot ? C.red : C.chalk; ctx.globalAlpha = hot ? 0.9 : 0.3; ctx.lineWidth = hot ? 2 : 1.5;
+  ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.globalAlpha = hot ? 0.95 : 0.45; ctx.fillStyle = hot ? C.red : C.chalk;
+  ctx.font = "600 10px 'Barlow Condensed', sans-serif"; ctx.textBaseline = "bottom";
+  ctx.fillText("OFFSIDE LINE", 6, y - 3);
+  ctx.restore();
+}
+function drawFlag(p) {
+  const x = p.x + 13, y = p.y - 6;
+  line({ x, y: y + 14 }, { x, y: y - 16 }, C.chalk, 2, 0.95);
+  ctx.save(); ctx.fillStyle = C.red; ctx.globalAlpha = 0.95;
+  ctx.beginPath(); ctx.moveTo(x, y - 16); ctx.lineTo(x + 14, y - 11); ctx.lineTo(x, y - 6); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
 function drawMate(p, num, hasBall) {
   chalkPath(circlePts(p, 11), C.yellow, 2.4, 0.95);
   ctx.save();
@@ -800,7 +1035,11 @@ function drawMate(p, num, hasBall) {
     ctx.restore();
   }
 }
-function drawOpp(o, gk) {
+function drawOpp(o, gk, ring) {
+  if (ring) {
+    ctx.save(); ctx.globalAlpha = 0.16; ctx.fillStyle = C.red;
+    ctx.beginPath(); ctx.arc(o.x, o.y, (gk ? P.gkReach : P.defReach) + BALL_R, 0, 7); ctx.fill(); ctx.restore();
+  }
   const s = 8;
   line({ x: o.x - s, y: o.y - s }, { x: o.x + s, y: o.y + s }, C.red, 2.6, 0.95);
   line({ x: o.x + s, y: o.y - s }, { x: o.x - s, y: o.y + s }, C.red, 2.6, 0.95);
@@ -819,12 +1058,14 @@ function drawBall(p) {
   ctx.fillStyle = C.board; ctx.beginPath(); ctx.arc(p.x, p.y, 1.8, 0, 7); ctx.fill();
   ctx.restore();
 }
-function routePts(r, a) { const team = teamOf(pz); return [...r.map(i => team[i]), a]; }
-function drawRoute(r, a, color, alpha, dash) {
-  const pts = routePts(r, a);
-  for (let i = 0; i < pts.length - 1; i++) {
-    line(pts[i], pts[i + 1], color, 2.2, alpha, dash);
-    arrowHead(pts[i], pts[i + 1], color, alpha);
+// Draw a plan in coach's notation. Returns where the shot ends, if any.
+function drawPlan(p, color, alpha, dash) {
+  const t = teamOf(pz).map(cp); let h = 0;
+  for (const a of p) {
+    const from = t[h];
+    if (a.type === "dribble") { wavy([from, ...a.path], color, 2.2, alpha); t[h] = cp(a.path[a.path.length - 1]); }
+    else if (a.type === "pass") { line(from, t[a.to], color, 2.2, alpha, dash); arrowHead(from, t[a.to], color, alpha); h = a.to; }
+    else { line(from, a.aim, color, 2.2, alpha, dash); arrowHead(from, a.aim, color, alpha); }
   }
 }
 
@@ -834,71 +1075,69 @@ function draw() {
   drawPitch();
   const team = teamOf(pz), opp = oppOf(pz);
 
-  // earlier tries, faded
-  const shown = anim ? record.attempts : record.attempts;
-  shown.forEach(a => { if (a.result !== "goal") drawRoute(a.route, a.aim, C.dim, 0.28, [6, 6]); });
+  record.attempts.forEach(a => { if (a.result !== "goal" && a.plan) drawPlan(a.plan, C.dim, 0.25, [6, 6]); });
 
-  // reach rings
-  if (mode === "draw") {
-    opp.forEach(o => {
-      ctx.save(); ctx.globalAlpha = 0.18; ctx.fillStyle = C.red;
-      ctx.beginPath(); ctx.arc(o.x, o.y, o.reach + BALL_R, 0, 7); ctx.fill(); ctx.restore();
-    });
-  }
-  let ballPos = pz.carrier;
-  let moved = new Map();
   if (anim) {
-    const segs = anim.sim.segs;
-    for (let i = 0; i < anim.seg; i++) line(segs[i].a, segs[i].b, C.chalk, 2, 0.5);
-    const s = segs[anim.seg];
-    const f = Math.min(1, (anim.t * s.speed) / s.len);
-    ballPos = { x: s.a.x + (s.b.x - s.a.x) * f, y: s.a.y + (s.b.y - s.a.y) * f };
-    line(s.a, ballPos, C.chalk, 2, 0.5);
-    const wide = isWide(anim.aim);
-    opp.forEach((o, j) => {
-      if (o.gk && s.shot && wide) return;
-      const R = o.reach + BALL_R + o.speed * Math.max(0, anim.t - o.react);
-      chalkPath(circlePts(o, R), C.red, 1.5, s.hit && s.hit.j === j && anim.done ? 0.8 : 0.4, [4, 5]);
-    });
-    if (s.hit && anim.done) {
-      const o = opp[s.hit.j];
-      const k = Math.min(1, anim.hold / 0.2);
-      moved.set(s.hit.j, { x: o.x + (s.hit.x - o.x) * k, y: o.y + (s.hit.y - o.y) * k });
+    const frames = anim.sim.frames, idx = frameIndex(), fr = frames[idx];
+    const offside = anim.sim.result === "offside" && anim.done;
+    drawOffsideLine(offside ? anim.sim.line : offsideLine(fr.opp), offside);
+    drawPlan(anim.plan, C.chalk, 0.18, [5, 6]);
+    // defender runs
+    for (let j = 0; j < opp.length; j++) {
+      const pts = [];
+      for (let k = 0; k <= idx; k += 3) pts.push(frames[k].opp[j]);
+      pts.push(fr.opp[j]);
+      chalkPath(pts, C.red, 1.3, 0.4);
     }
-  } else if (mode === "done") {
+    const bpts = [];
+    for (let k = 0; k <= idx; k += 2) bpts.push(frames[k].ball);
+    bpts.push(fr.ball);
+    chalkPath(bpts, C.chalk, 1.8, 0.55);
+    fr.team.forEach((p, i) => drawMate(p, NUMBERS[i], false));
+    fr.opp.forEach((o, j) => drawOpp(o, opp[j].gk, false));
+    if (anim.done && anim.sim.hit) {
+      const o = fr.opp[anim.sim.hit.j];
+      chalkPath(circlePts(o, 20), C.red, 2, 0.9);
+    }
+    if (offside) drawFlag(fr.team[anim.sim.who]);
+    let ball = fr.ball;
+    if (anim.done && anim.sim.result === "goal") ball = { x: ball.x, y: GOAL_Y - 14 };
+    drawBall(ball);
+    if (anim.done && anim.sim.result === "goal") {
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, anim.hold * 3);
+      ctx.fillStyle = C.yellow; ctx.font = "700 64px 'Cabin Sketch', cursive";
+      ctx.textAlign = "center"; ctx.fillText("GOAL!", W / 2, H * 0.55);
+      ctx.restore();
+    }
+    return;
+  }
+
+  drawOffsideLine(offsideLine(opp), false);
+  if (mode === "done") {
     const last = record.attempts[record.attempts.length - 1];
-    if (last && last.result === "goal") {
-      drawRoute(last.route, last.aim, C.yellow, 0.9);
-      ballPos = { x: last.aim.x, y: GOAL_Y - 14 };
-    } else if (pz.solution) {
-      drawRoute(pz.solution.route, pz.solution.aim, C.yellow, 0.85, [7, 6]);
-    }
+    if (last && last.result === "goal") drawPlan(last.plan, C.yellow, 0.9);
+    else if (pz.solution) drawPlan(pz.solution.plan, C.yellow, 0.85, [7, 6]);
   }
 
-  // live drawing
   if (mode === "draw" && stroke.length > 1) {
-    chalkPath(stroke, C.chalk, 1.5, 0.35);
-    const end = aim || stroke[stroke.length - 1];
-    const pts = [...route.map(i => team[i]), end];
-    for (let i = 0; i < pts.length - 1; i++) {
-      line(pts[i], pts[i + 1], aim || i < pts.length - 2 ? C.chalk : C.dim, 2.4, 0.95, i === pts.length - 2 && !aim ? [5, 6] : null);
-      if (aim || i < pts.length - 2) arrowHead(pts[i], pts[i + 1], C.chalk);
+    chalkPath(stroke, C.chalk, 1.5, 0.25);
+    drawPlan(plan, C.chalk, 0.95);
+    if (open) {
+      const from = planTeam[holder];
+      if (open.path.length) wavy([from, ...open.path], C.chalk, 2.2, 0.95);
+      if (open.aim) { line(open.from, open.aim, C.chalk, 2.4, 0.95); arrowHead(open.from, open.aim, C.chalk); }
+      else line(open.from, open.end, C.dim, 2, 0.8, [5, 6]);
     }
   }
 
-  // players
   team.forEach((p, i) => drawMate(p, NUMBERS[i], mode === "draw" && i === 0 && stroke.length === 0));
-  opp.forEach((o, j) => drawOpp(moved.get(j) || o, o.gk));
-  drawBall(ballPos.x === pz.carrier.x && ballPos.y === pz.carrier.y ? { x: pz.carrier.x + 9, y: pz.carrier.y - 12 } : ballPos);
-
-  // goal flash
-  if (anim && anim.done && anim.sim.result === "goal") {
-    ctx.save();
-    ctx.globalAlpha = Math.min(1, anim.hold * 3);
-    ctx.fillStyle = C.yellow; ctx.font = "700 64px 'Cabin Sketch', cursive";
-    ctx.textAlign = "center"; ctx.fillText("GOAL!", W / 2, H * 0.55);
-    ctx.restore();
-  }
+  opp.forEach(o => drawOpp(o, o.gk, mode === "draw"));
+  if (mode === "done" && record.won) {
+    const last = record.attempts[record.attempts.length - 1];
+    const shot = last.plan[last.plan.length - 1];
+    drawBall({ x: shot.aim.x, y: GOAL_Y - 14 });
+  } else drawBall({ x: pz.carrier.x + 9, y: pz.carrier.y - 12 });
 }
 
 // ---------- Boot ----------
@@ -909,6 +1148,6 @@ startPuzzle(hashStr("chalkboard-" + day), false);
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(draw);
 
 // exposed for tests
-window.__cfc = { generate, simulate, solve, hashStr, xG, get pz() { return pz; } };
+window.__cfc = { bestAim, initState, applyAction, P, generate, simulate, solve, hashStr, xG, offsideLine, oppOf, teamOf, get pz() { return pz; } };
 })();
 </script>
