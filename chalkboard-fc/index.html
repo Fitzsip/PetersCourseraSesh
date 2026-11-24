@@ -1,0 +1,914 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Chalkboard FC</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cabin+Sketch:wght@700&family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap">
+<style>
+/* Layout: one column, the tactics board is the hero; controls and result sit under it like a coach's clipboard. */
+/* Single look by choice: a dark chalkboard in any host theme. */
+:root {
+  --room: #0f1d19;        /* page behind the board */
+  --board: #1e3d34;       /* chalkboard green */
+  --board-deep: #142b24;
+  --wood: #6e4c2f;        /* board frame */
+  --chalk: #eeece2;       /* white chalk */
+  --chalk-dim: #9db3a8;   /* faded chalk / secondary text */
+  --yellow: #f2d66e;      /* our team */
+  --red: #f19583;         /* opponents */
+  --font-display: "Cabin Sketch", "Comic Sans MS", "Chalkboard SE", cursive;
+  --font-body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-label: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--room);
+  color: var(--chalk);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-tap-highlight-color: transparent;
+}
+.wrap {
+  max-width: 480px;
+  margin: 0 auto;
+  padding-block: 14px 32px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(30px, 8vw, 40px);
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  text-wrap: balance;
+}
+h1 span { color: var(--yellow); }
+.meta {
+  font-family: var(--font-label);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 13px;
+  color: var(--chalk-dim);
+  text-align: right;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+.meta b { color: var(--chalk); font-weight: 600; }
+.icon-btn {
+  appearance: none;
+  border: 1.5px solid var(--chalk-dim);
+  background: transparent;
+  color: var(--chalk);
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  font: 600 16px/1 var(--font-label);
+  cursor: pointer;
+  flex: none;
+}
+.board {
+  position: relative;
+  border: 10px solid var(--wood);
+  border-radius: 6px;
+  background: var(--board);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.35), 0 10px 30px rgba(0,0,0,.45);
+  max-width: 100%;
+}
+canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 440 / 560;
+  touch-action: none;
+  cursor: crosshair;
+}
+.tries {
+  position: absolute;
+  top: 8px; right: 10px;
+  display: flex; gap: 6px;
+  pointer-events: none;
+}
+.try {
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid var(--chalk);
+  opacity: .9;
+}
+.try.used { border-color: var(--red); background: transparent; position: relative; }
+.try.used::before, .try.used::after {
+  content: ""; position: absolute; left: 50%; top: 50%;
+  width: 14px; height: 2px; background: var(--red);
+  transform: translate(-50%,-50%) rotate(45deg);
+}
+.try.used::after { transform: translate(-50%,-50%) rotate(-45deg); }
+.try.goal { background: var(--yellow); border-color: var(--yellow); }
+.status {
+  min-height: 2.9em;
+  font-size: 15px;
+  color: var(--chalk);
+  display: flex; align-items: center;
+}
+.status.bad { color: var(--red); }
+.status.good { color: var(--yellow); font-weight: 600; }
+.controls { display: flex; gap: 10px; }
+button.btn {
+  appearance: none;
+  flex: 1;
+  border-radius: 8px;
+  padding: 12px 14px;
+  font: 700 17px/1 var(--font-label);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border: 2px solid var(--chalk-dim);
+  background: transparent;
+  color: var(--chalk);
+}
+button.btn.primary { background: var(--yellow); border-color: var(--yellow); color: var(--board-deep); }
+button.btn:disabled { opacity: .35; cursor: not-allowed; }
+button:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
+.panel {
+  background: var(--board-deep);
+  border: 1px solid rgba(238,236,226,.12);
+  border-radius: 10px;
+  padding: 16px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.panel h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 28px; line-height: 1.05; font-weight: 700;
+}
+.panel p { margin: 0; color: var(--chalk-dim); }
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  text-align: center;
+}
+.stat b {
+  display: block;
+  font: 700 26px/1 var(--font-label);
+  font-variant-numeric: tabular-nums;
+  color: var(--chalk);
+}
+.stat span {
+  font: 500 11px/1.2 var(--font-label);
+  text-transform: uppercase; letter-spacing: .08em;
+  color: var(--chalk-dim);
+}
+.row { display: flex; gap: 10px; flex-wrap: wrap; }
+.row .btn { min-width: 140px; }
+.next {
+  font-family: var(--font-label);
+  font-size: 13px; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--chalk-dim);
+  font-variant-numeric: tabular-nums;
+}
+.share-fallback {
+  width: 100%; box-sizing: border-box;
+  background: var(--room); color: var(--chalk);
+  border: 1px solid var(--chalk-dim); border-radius: 6px;
+  font: 14px/1.4 var(--font-body); padding: 8px; resize: none;
+}
+.rules { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; color: var(--chalk); }
+.rules li::marker { color: var(--yellow); font-family: var(--font-label); font-weight: 700; }
+.legend {
+  display: flex; gap: 14px; flex-wrap: wrap;
+  font: 500 13px/1 var(--font-label);
+  letter-spacing: .06em; text-transform: uppercase;
+  color: var(--chalk-dim);
+}
+.legend i { font-style: normal; font-weight: 700; }
+.legend .us { color: var(--yellow); }
+.legend .them { color: var(--red); }
+.practice-tag {
+  display: inline-block; padding: 2px 6px; border-radius: 4px;
+  background: var(--yellow); color: var(--board-deep);
+  font: 700 11px/1.3 var(--font-label); letter-spacing: .08em;
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Chalkboard <span>FC</span></h1>
+    <div style="display:flex;gap:10px;align-items:flex-end">
+      <div class="meta" id="meta">Play <b>#1</b><br>—</div>
+      <button class="icon-btn" id="helpBtn" aria-label="How to play" aria-expanded="false">?</button>
+    </div>
+  </header>
+
+  <section class="panel" id="help" hidden>
+    <h2>Draw it up</h2>
+    <ol class="rules">
+      <li>Put your finger on the ball and draw the play. Run your line through teammates to pass to them, then finish it in the goal to shoot.</li>
+      <li>The ball goes in straight lines: player to player, then to where your line meets the goal.</li>
+      <li>Every defender closes in once the ball moves. The longer a pass is in the air, the more ground they cover. The chalk rings show how far they can reach.</li>
+      <li>You get 3 tries a day. Everyone gets the same play.</li>
+    </ol>
+    <div class="legend"><span><i class="us">O</i> your team</span><span><i class="them">X</i> defenders</span><span><i class="them">GK</i> keeper</span></div>
+  </section>
+
+  <div class="board">
+    <canvas id="pitch" width="440" height="560" aria-label="Tactics board. Draw a play from the ball to the goal."></canvas>
+    <div class="tries" id="tries"></div>
+  </div>
+
+  <div class="status" id="status" role="status" aria-live="polite"></div>
+
+  <div class="controls" id="controls">
+    <button class="btn" id="eraseBtn" disabled>Erase</button>
+    <button class="btn primary" id="playBtn" disabled>Play it</button>
+  </div>
+
+  <section class="panel" id="result" hidden>
+    <h2 id="resTitle"></h2>
+    <p id="resText"></p>
+    <div class="stats" id="stats"></div>
+    <div class="row">
+      <button class="btn primary" id="shareBtn">Share result</button>
+      <button class="btn" id="practiceBtn">Practice play</button>
+    </div>
+    <textarea class="share-fallback" id="shareFallback" rows="4" readonly hidden aria-label="Result text to copy"></textarea>
+    <div class="next" id="next"></div>
+  </section>
+</div>
+
+<script>
+(() => {
+"use strict";
+
+// ---------- Geometry & tuning ----------
+const W = 440, H = 560;
+const GOAL_Y = 40, GOAL_C = 220, POST_L = 175, POST_R = 265;   // 7.32 m goal = 90 px
+const PX_PER_M = 12.3;
+const BALL_R = 5;
+const P = {
+  passSpeed: 300, shotSpeed: 600,
+  defSpeed: 110, defReach: 14, defReact: 0.12,
+  gkSpeed: 110, gkReach: 18, gkReact: 0.08,
+  capture: 22, startRadius: 34, maxTries: 3,
+};
+const NUMBERS = [8, 9, 10, 7, 11];
+
+// ---------- Seeded randomness ----------
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function hashStr(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+// ---------- Simulation ----------
+function teamOf(pz) { return [pz.carrier, ...pz.mates]; }
+function oppOf(pz) {
+  return [
+    ...pz.defs.map(d => ({ x: d.x, y: d.y, speed: P.defSpeed, reach: P.defReach, react: P.defReact, gk: false })),
+    { x: pz.gk.x, y: pz.gk.y, speed: P.gkSpeed, reach: P.gkReach, react: P.gkReact, gk: true },
+  ];
+}
+function isWide(aim) { return aim.x < POST_L + BALL_R || aim.x > POST_R - BALL_R; }
+
+// route: player indices starting at 0 (the ball carrier); aim: point on the goal line.
+function simulate(pz, route, aim) {
+  const team = teamOf(pz), opp = oppOf(pz);
+  const pts = route.map(i => team[i]);
+  pts.push(aim);
+  const wide = isWide(aim);
+  const segs = [];
+  for (let s = 0; s < pts.length - 1; s++) {
+    const a = pts[s], b = pts[s + 1], shot = s === pts.length - 2;
+    const speed = shot ? P.shotSpeed : P.passSpeed;
+    const len = dist(a, b);
+    const steps = Math.max(1, Math.ceil(len / 3));
+    let hit = null;
+    for (let k = 1; k <= steps && !hit; k++) {
+      const f = k / steps, t = (len * f) / speed;
+      const x = a.x + (b.x - a.x) * f, y = a.y + (b.y - a.y) * f;
+      for (let j = 0; j < opp.length; j++) {
+        const o = opp[j];
+        if (o.gk && shot && wide) continue;
+        const R = o.reach + BALL_R + o.speed * Math.max(0, t - o.react);
+        if (Math.hypot(o.x - x, o.y - y) <= R) { hit = { j, x, y, t, f }; break; }
+      }
+    }
+    segs.push({ a, b, shot, speed, len, dur: len / speed, hit });
+    if (hit) return { segs, result: opp[hit.j].gk ? "saved" : "intercepted", by: hit.j };
+  }
+  return { segs, result: wide ? "wide" : "goal" };
+}
+
+// Expected goals for a shot from p: angle the goal mouth subtends, plus distance.
+function xG(p) {
+  const a1 = Math.atan2(POST_L - p.x, p.y - GOAL_Y), a2 = Math.atan2(POST_R - p.x, p.y - GOAL_Y);
+  const theta = Math.abs(a2 - a1);
+  const dm = dist(p, { x: GOAL_C, y: GOAL_Y }) / PX_PER_M;
+  return 1 / (1 + Math.exp(1.9 - 2.6 * theta + 0.05 * dm));
+}
+
+function solve(pz, maxPasses = 4) {
+  const n = 1 + pz.mates.length;
+  let count = 0, direct = false, best = null;
+  const rec = (r) => {
+    // Does any aim along the goal mouth score from this route?
+    // Only count it if the open part of the goal is wide enough to hit by hand (>= 12 px).
+    let scored = null, runStart = null, bestRun = 0;
+    for (let x = POST_L + BALL_R; x <= POST_R - BALL_R + 3; x += 3) {
+      const ok = x <= POST_R - BALL_R && simulate(pz, r, { x, y: GOAL_Y }).result === "goal";
+      if (ok && runStart === null) runStart = x;
+      if (!ok && runStart !== null) {
+        const w = x - runStart;
+        if (w >= 12 && w > bestRun) { bestRun = w; scored = { x: runStart + (w - 3) / 2, y: GOAL_Y }; }
+        runStart = null;
+      }
+    }
+    if (scored) {
+      count++;
+      if (r.length === 1) direct = true;
+      if (!best || r.length < best.route.length) best = { route: r.slice(), aim: scored };
+    }
+    if (r.length > maxPasses) return;
+    for (let i = 0; i < n; i++) {
+      if (i === r[r.length - 1]) continue;
+      // prune: skip if this pass gets cut out (the shot target doesn't matter for that)
+      const probe = simulate(pz, [...r, i], { x: GOAL_C, y: GOAL_Y });
+      const passSegs = probe.segs.slice(0, r.length);
+      if (passSegs.some(s => s.hit && !s.shot)) continue;
+      r.push(i); rec(r); r.pop();
+    }
+  };
+  rec([0]);
+  return { count, direct, best };
+}
+
+function generate(seed) {
+  for (let tries = 0; tries < 600; tries++) {
+    const r = mulberry32(seed + tries * 7919);
+    const rnd = (a, b) => a + (b - a) * r();
+    const pick = arr => arr[Math.floor(r() * arr.length)];
+    const pz = {
+      carrier: { x: rnd(70, 370), y: rnd(400, 500) },
+      mates: [], defs: [],
+      gk: { x: GOAL_C + rnd(-24, 24), y: 52 },
+    };
+    const all = () => [pz.carrier, ...pz.mates, ...pz.defs, pz.gk];
+    const free = (p, min) => p.x > 28 && p.x < W - 28 && p.y > 70 && p.y < H - 30 && all().every(q => dist(p, q) >= min);
+    const nM = r() < 0.5 ? 2 : 3;
+    let guard = 0;
+    while (pz.mates.length < nM && guard++ < 300) {
+      const p = { x: rnd(40, 400), y: rnd(110, 400) };
+      if (free(p, 75)) pz.mates.push(p);
+    }
+    if (pz.mates.length < nM) continue;
+    const nD = 4 + Math.floor(r() * 3);
+    guard = 0;
+    while (pz.defs.length < nD && guard++ < 500) {
+      const k = pz.defs.length;
+      let p;
+      if (k < 2) {            // block shooting lanes
+        const src = k === 0 ? pz.carrier : pick(pz.mates);
+        const t = rnd(0.25, 0.7);
+        p = { x: src.x + (GOAL_C - src.x) * t + rnd(-18, 18), y: src.y + (GOAL_Y - src.y) * t + rnd(-18, 18) };
+      } else if (k < 4) {     // sit in passing lanes
+        const a = pick(pz.mates), b = r() < 0.5 ? pz.carrier : pick(pz.mates);
+        if (a === b) continue;
+        const t = rnd(0.3, 0.7);
+        p = { x: a.x + (b.x - a.x) * t + rnd(-25, 25), y: a.y + (b.y - a.y) * t + rnd(-25, 25) };
+      } else {                // free roamers
+        p = { x: rnd(40, 400), y: rnd(80, 400) };
+      }
+      if (free(p, 40)) pz.defs.push(p);
+    }
+    if (pz.defs.length < nD) continue;
+    const sol = solve(pz);
+    if (sol.direct || sol.count < 1 || sol.count > 14) continue;
+    pz.solution = sol.best;
+    pz.routes = sol.count;
+    return pz;
+  }
+  return null;
+}
+
+// ---------- Day & storage ----------
+const EPOCH = new Date(2026, 10, 24); // Play #1
+function todayIndex(d = new Date()) {
+  const mid = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  return Math.round((mid - EPOCH) / 86400000) + 1;
+}
+const STORE_KEY = "chalkboardfc:v1";
+function load() {
+  try { return JSON.parse(localStorage.getItem(STORE_KEY)) || { days: {} }; } catch { return { days: {} }; }
+}
+function save(data) {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch {}
+}
+function computeStats(data) {
+  const nums = Object.keys(data.days).map(Number).filter(n => data.days[n].done).sort((a, b) => a - b);
+  const played = nums.length, won = nums.filter(n => data.days[n].won).length;
+  let best = 0, run = 0, prev = null;
+  for (const n of nums) {
+    if (data.days[n].won && (prev === null || n === prev + 1) && run > 0) run++;
+    else run = data.days[n].won ? 1 : 0;
+    if (!data.days[n].won) run = 0;
+    best = Math.max(best, run);
+    prev = n;
+  }
+  // current streak counts back from the latest finished day
+  let cur = 0;
+  for (let i = nums.length - 1; i >= 0; i--) {
+    const n = nums[i];
+    if (!data.days[n].won) break;
+    if (i < nums.length - 1 && nums[i + 1] !== n + 1) break;
+    cur++;
+  }
+  return { played, winPct: played ? Math.round((won / played) * 100) : 0, cur, best };
+}
+
+// ---------- State ----------
+const canvas = document.getElementById("pitch");
+const ctx = canvas.getContext("2d");
+const $ = id => document.getElementById(id);
+
+const day = todayIndex();
+let data = load();
+let practice = false;
+let pz, record;     // record: { attempts: [{route, aim, result, shooter}], done, won }
+let mode = "draw";  // draw | anim | done
+let stroke = [], route = [], aim = null, drawing = false;
+let anim = null;
+
+function startPuzzle(seed, isPractice) {
+  practice = isPractice;
+  pz = generate(seed);
+  if (isPractice) record = { attempts: [], done: false, won: false };
+  else {
+    data.days[day] = data.days[day] || { attempts: [], done: false, won: false };
+    record = data.days[day];
+  }
+  resetDrawing();
+  mode = record.done ? "done" : "draw";
+  renderMeta();
+  renderTries();
+  if (record.done) showResult(false);
+  else {
+    $("result").hidden = true;
+    $("controls").hidden = false;
+    setStatus(record.attempts.length ? lastMessage(record.attempts[record.attempts.length - 1]) + " Draw another play." :
+      "Start on the ball and draw your play into the goal.");
+  }
+  draw();
+}
+
+function renderMeta() {
+  const d = new Date();
+  const date = d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  $("meta").innerHTML = practice
+    ? `<span class="practice-tag">PRACTICE</span><br>not counted`
+    : `Play <b>#${day}</b><br>${date}`;
+}
+function renderTries() {
+  const el = $("tries");
+  el.innerHTML = "";
+  for (let i = 0; i < P.maxTries; i++) {
+    const a = record.attempts[i];
+    const s = document.createElement("span");
+    s.className = "try" + (a ? (a.result === "goal" ? " goal" : " used") : "");
+    el.appendChild(s);
+  }
+}
+function setStatus(text, kind = "") {
+  const el = $("status");
+  el.textContent = text;
+  el.className = "status" + (kind ? " " + kind : "");
+}
+function lastMessage(a) {
+  return {
+    intercepted: "Cut out by a defender.",
+    saved: "The keeper got to it.",
+    wide: "Wide of the post.",
+    goal: "Goal!",
+  }[a.result];
+}
+
+function resetDrawing() {
+  stroke = []; route = []; aim = null; drawing = false;
+  $("eraseBtn").disabled = true;
+  $("playBtn").disabled = true;
+}
+
+// ---------- Input ----------
+function toBoard(e) {
+  const r = canvas.getBoundingClientRect();
+  return { x: ((e.clientX - r.left) / r.width) * W, y: ((e.clientY - r.top) / r.height) * H };
+}
+canvas.addEventListener("pointerdown", e => {
+  if (mode !== "draw") return;
+  const p = toBoard(e);
+  if (dist(p, pz.carrier) > P.startRadius) {
+    setStatus(`Start your line on the ball, at #${NUMBERS[0]}.`, "bad");
+    return;
+  }
+  e.preventDefault();
+  canvas.setPointerCapture(e.pointerId);
+  drawing = true;
+  stroke = [p]; route = [0]; aim = null;
+  updatePreview();
+});
+canvas.addEventListener("pointermove", e => {
+  if (!drawing) return;
+  const p = toBoard(e);
+  const last = stroke[stroke.length - 1];
+  if (dist(p, last) < 2) return;
+  stroke.push(p);
+  const team = teamOf(pz);
+  for (let i = 0; i < team.length; i++) {
+    if (i === route[route.length - 1]) continue;
+    if (dist(p, team[i]) < P.capture) { route.push(i); break; }
+  }
+  updatePreview();
+});
+function endStroke() {
+  if (!drawing) return;
+  drawing = false;
+  updatePreview(true);
+}
+canvas.addEventListener("pointerup", endStroke);
+canvas.addEventListener("pointercancel", endStroke);
+
+function computeAim() {
+  const team = teamOf(pz);
+  const from = team[route[route.length - 1]];
+  const end = stroke[stroke.length - 1];
+  if (!end || end.y > GOAL_Y + 30 || end.y >= from.y - 10) return null;
+  const t = (GOAL_Y - from.y) / (end.y - from.y);
+  return { x: from.x + (end.x - from.x) * t, y: GOAL_Y };
+}
+function updatePreview(final = false) {
+  aim = computeAim();
+  const passes = route.length - 1;
+  const passTxt = passes === 0 ? "No passes" : passes === 1 ? "1 pass" : `${passes} passes`;
+  if (aim) {
+    const from = teamOf(pz)[route[route.length - 1]];
+    setStatus(`${passTxt}, then a shot from #${NUMBERS[route[route.length - 1]]}. Chance: ${xG(from).toFixed(2)} xG.`);
+  } else if (final) {
+    setStatus("Finish your line inside the goal to take the shot.", "bad");
+  } else {
+    setStatus(`${passTxt} so far. Finish in the goal.`);
+  }
+  $("eraseBtn").disabled = stroke.length === 0;
+  $("playBtn").disabled = !aim || drawing;
+  draw();
+}
+
+$("eraseBtn").addEventListener("click", () => {
+  resetDrawing();
+  setStatus("Start on the ball and draw your play into the goal.");
+  draw();
+});
+$("playBtn").addEventListener("click", () => {
+  if (!aim || mode !== "draw") return;
+  const sim = simulate(pz, route, aim);
+  mode = "anim";
+  $("eraseBtn").disabled = true;
+  $("playBtn").disabled = true;
+  setStatus("");
+  anim = { sim, route: route.slice(), aim: { ...aim }, t: 0, last: performance.now(), seg: 0, done: false, hold: 0 };
+  requestAnimationFrame(tick);
+});
+
+function tick(now) {
+  if (!anim) return;
+  const dt = Math.min(0.05, (now - anim.last) / 1000);
+  anim.last = now;
+  const seg = anim.sim.segs[anim.seg];
+  if (!anim.done) {
+    anim.t += dt;
+    const end = seg.hit ? seg.hit.t : seg.dur;
+    if (anim.t >= end) {
+      if (seg.hit || anim.seg === anim.sim.segs.length - 1) { anim.t = end; anim.done = true; }
+      else { anim.seg++; anim.t = 0; }
+    }
+  } else {
+    anim.hold += dt;
+  }
+  draw();
+  if (anim.done && anim.hold > 0.7) return finishAttempt();
+  requestAnimationFrame(tick);
+}
+
+function finishAttempt() {
+  const { sim, route: r, aim: a } = anim;
+  const shooter = r[r.length - 1];
+  const attempt = { route: r, aim: a, result: sim.result, xg: +xG(teamOf(pz)[shooter]).toFixed(2) };
+  anim = null;
+  record.attempts.push(attempt);
+  if (sim.result === "goal") { record.done = true; record.won = true; }
+  else if (record.attempts.length >= P.maxTries) { record.done = true; record.won = false; }
+  if (!practice) save(data);
+  renderTries();
+  resetDrawing();
+  if (record.done) { mode = "done"; showResult(true); }
+  else {
+    mode = "draw";
+    const left = P.maxTries - record.attempts.length;
+    setStatus(`${lastMessage(attempt)} ${left} ${left === 1 ? "try" : "tries"} left.`, "bad");
+  }
+  draw();
+}
+
+// ---------- Result panel ----------
+function shareText() {
+  const marks = record.attempts.map(a => a.result === "goal" ? "⚽" : "❌").join("");
+  const won = record.won;
+  const last = record.attempts[record.attempts.length - 1];
+  const passes = last.route.length - 1;
+  const line = won ? `${passes} ${passes === 1 ? "pass" : "passes"} · ${last.xg.toFixed(2)} xG` : "No goal today";
+  return `Chalkboard FC #${day}\n${marks} ${won ? record.attempts.length : "X"}/${P.maxTries}\n${line}`;
+}
+function showResult(fresh) {
+  $("controls").hidden = true;
+  $("result").hidden = false;
+  $("shareFallback").hidden = true;
+  const last = record.attempts[record.attempts.length - 1];
+  if (record.won) {
+    const n = record.attempts.length;
+    const passes = last.route.length - 1;
+    $("resTitle").textContent = n === 1 ? "Goal, first time!" : "Goal!";
+    $("resText").textContent = `Scored on try ${n} of ${P.maxTries} after ${passes} ${passes === 1 ? "pass" : "passes"}, from a ${last.xg.toFixed(2)} xG chance.`;
+    setStatus(practice ? "Practice goal. Not counted in your stats." : "That's today's play done.", "good");
+  } else {
+    $("resTitle").textContent = "Kept out";
+    $("resText").textContent = "Three tries, no goal. The dashed yellow line on the board shows one way through.";
+    setStatus("One way through is drawn on the board.");
+  }
+  const s = computeStats(data);
+  $("stats").innerHTML = practice ? "" :
+    [["Played", s.played], ["Win %", s.winPct], ["Streak", s.cur], ["Best", s.best]]
+      .map(([l, v]) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`).join("");
+  $("stats").hidden = practice;
+  $("shareBtn").hidden = practice;
+  $("practiceBtn").textContent = practice ? "Another practice" : "Practice play";
+  updateNext();
+}
+function updateNext() {
+  if ($("result").hidden) return;
+  const now = new Date();
+  const tmr = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const ms = tmr - now;
+  const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000), s = Math.floor((ms % 60000) / 1000);
+  const pad = v => String(v).padStart(2, "0");
+  $("next").innerHTML = practice
+    ? `<button class="btn" id="backBtn" style="width:100%">Back to today's play</button>`
+    : `Next play in ${pad(h)}:${pad(m)}:${pad(s)}`;
+  const back = document.getElementById("backBtn");
+  if (back) back.onclick = () => startPuzzle(hashStr("chalkboard-" + day), false);
+}
+setInterval(() => { if (!practice) updateNext(); if (!practice && todayIndex() !== day) location.reload(); }, 1000);
+
+$("shareBtn").addEventListener("click", () => {
+  const text = shareText();
+  const done = () => { $("shareBtn").textContent = "Copied"; setTimeout(() => $("shareBtn").textContent = "Share result", 1600); };
+  const fallback = () => {
+    const ta = $("shareFallback");
+    ta.value = text; ta.hidden = false; ta.focus(); ta.select();
+    $("shareBtn").textContent = "Copy the text below";
+  };
+  try {
+    navigator.clipboard.writeText(text).then(done, fallback);
+  } catch { fallback(); }
+});
+$("practiceBtn").addEventListener("click", () => {
+  startPuzzle(Math.floor(Math.random() * 2 ** 31), true);
+});
+$("helpBtn").addEventListener("click", () => {
+  const h = $("help");
+  h.hidden = !h.hidden;
+  $("helpBtn").setAttribute("aria-expanded", String(!h.hidden));
+});
+
+// ---------- Drawing ----------
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let C = {};
+function readColors() {
+  C = { board: css("--board"), deep: css("--board-deep"), chalk: css("--chalk"), dim: css("--chalk-dim"), yellow: css("--yellow"), red: css("--red") };
+}
+function setupCanvas() {
+  const dpr = Math.min(3, window.devicePixelRatio || 1);
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+// Deterministic wobble so chalk lines look hand-drawn but don't shimmer between frames.
+function jitter(i, k) { const v = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453; return (v - Math.floor(v)) - 0.5; }
+function chalkPath(pts, color, width = 2, alpha = 0.9, dash = null) {
+  if (pts.length < 2) return;
+  ctx.save();
+  ctx.strokeStyle = color; ctx.lineCap = "round"; ctx.lineJoin = "round";
+  if (dash) ctx.setLineDash(dash);
+  for (let pass = 0; pass < 2; pass++) {
+    ctx.globalAlpha = pass ? alpha * 0.3 : alpha;
+    ctx.lineWidth = pass ? width * 2.2 : width;
+    ctx.beginPath();
+    pts.forEach((p, i) => {
+      const o = pass ? 0 : 0.6;
+      const x = p.x + jitter(i, 1) * o, y = p.y + jitter(i, 2) * o;
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    });
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+function line(a, b, color, width, alpha, dash) {
+  const n = Math.max(2, Math.ceil(dist(a, b) / 14));
+  const pts = [];
+  for (let i = 0; i <= n; i++) pts.push({ x: a.x + (b.x - a.x) * i / n, y: a.y + (b.y - a.y) * i / n });
+  chalkPath(pts, color, width, alpha, dash);
+}
+function circlePts(c, r, a0 = 0, a1 = Math.PI * 2) {
+  const n = Math.max(12, Math.ceil(r * Math.abs(a1 - a0) / 8));
+  const pts = [];
+  for (let i = 0; i <= n; i++) { const a = a0 + (a1 - a0) * i / n; pts.push({ x: c.x + Math.cos(a) * r, y: c.y + Math.sin(a) * r }); }
+  return pts;
+}
+function arrowHead(a, b, color, alpha = 0.9) {
+  const ang = Math.atan2(b.y - a.y, b.x - a.x), s = 9;
+  line(b, { x: b.x - Math.cos(ang - 0.45) * s, y: b.y - Math.sin(ang - 0.45) * s }, color, 2, alpha);
+  line(b, { x: b.x - Math.cos(ang + 0.45) * s, y: b.y - Math.sin(ang + 0.45) * s }, color, 2, alpha);
+}
+
+function drawPitch() {
+  ctx.fillStyle = C.board;
+  ctx.fillRect(0, 0, W, H);
+  // old chalk smudges
+  const g = ctx.createRadialGradient(W * 0.45, H * 0.4, 40, W * 0.5, H * 0.5, H * 0.75);
+  g.addColorStop(0, "rgba(255,255,255,0.05)");
+  g.addColorStop(1, "rgba(0,0,0,0.18)");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+  const lc = C.chalk, la = 0.42;
+  line({ x: 0, y: GOAL_Y }, { x: W, y: GOAL_Y }, lc, 2, la);               // goal line
+  const boxD = 16.5 * PX_PER_M, sixD = 5.5 * PX_PER_M, sixW = 18.32 * PX_PER_M;
+  line({ x: 0, y: GOAL_Y + boxD }, { x: W, y: GOAL_Y + boxD }, lc, 2, la); // 18-yard line (box sides run off the board)
+  const sx0 = GOAL_C - sixW / 2, sx1 = GOAL_C + sixW / 2;
+  chalkPath([{ x: sx0, y: GOAL_Y }, { x: sx0, y: GOAL_Y + sixD }, { x: sx1, y: GOAL_Y + sixD }, { x: sx1, y: GOAL_Y }], lc, 2, la);
+  const spot = { x: GOAL_C, y: GOAL_Y + 11 * PX_PER_M };
+  ctx.fillStyle = lc; ctx.globalAlpha = la; ctx.beginPath(); ctx.arc(spot.x, spot.y, 2.5, 0, 7); ctx.fill(); ctx.globalAlpha = 1;
+  const arcR = 9.15 * PX_PER_M, dy = boxD - 11 * PX_PER_M, half = Math.acos(dy / arcR);
+  chalkPath(circlePts(spot, arcR, Math.PI / 2 - half, Math.PI / 2 + half), lc, 2, la);
+  // goal frame and net
+  ctx.save();
+  ctx.globalAlpha = 0.16; ctx.strokeStyle = C.chalk; ctx.lineWidth = 1;
+  for (let x = POST_L + 6; x < POST_R; x += 9) { ctx.beginPath(); ctx.moveTo(x, GOAL_Y); ctx.lineTo(x, 14); ctx.stroke(); }
+  for (let y = 18; y < GOAL_Y; y += 7) { ctx.beginPath(); ctx.moveTo(POST_L, y); ctx.lineTo(POST_R, y); ctx.stroke(); }
+  ctx.restore();
+  chalkPath([{ x: POST_L, y: GOAL_Y }, { x: POST_L, y: 12 }, { x: POST_R, y: 12 }, { x: POST_R, y: GOAL_Y }], lc, 3, 0.85);
+}
+
+function drawMate(p, num, hasBall) {
+  chalkPath(circlePts(p, 11), C.yellow, 2.4, 0.95);
+  ctx.save();
+  ctx.fillStyle = C.yellow; ctx.font = "700 13px 'Barlow Condensed', sans-serif";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(String(num), p.x, p.y + 0.5);
+  ctx.restore();
+  if (hasBall) {
+    ctx.save();
+    ctx.setLineDash([3, 4]); ctx.strokeStyle = C.yellow; ctx.globalAlpha = 0.5; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(p.x, p.y, P.startRadius - 6, 0, 7); ctx.stroke();
+    ctx.restore();
+  }
+}
+function drawOpp(o, gk) {
+  const s = 8;
+  line({ x: o.x - s, y: o.y - s }, { x: o.x + s, y: o.y + s }, C.red, 2.6, 0.95);
+  line({ x: o.x + s, y: o.y - s }, { x: o.x - s, y: o.y + s }, C.red, 2.6, 0.95);
+  if (gk) {
+    ctx.save();
+    ctx.fillStyle = C.red; ctx.font = "700 10px 'Barlow Condensed', sans-serif";
+    ctx.textAlign = "left"; ctx.textBaseline = "middle";
+    ctx.fillText("GK", o.x + 11, o.y + 1);
+    ctx.restore();
+  }
+}
+function drawBall(p) {
+  ctx.save();
+  ctx.fillStyle = C.chalk;
+  ctx.beginPath(); ctx.arc(p.x, p.y, BALL_R, 0, 7); ctx.fill();
+  ctx.fillStyle = C.board; ctx.beginPath(); ctx.arc(p.x, p.y, 1.8, 0, 7); ctx.fill();
+  ctx.restore();
+}
+function routePts(r, a) { const team = teamOf(pz); return [...r.map(i => team[i]), a]; }
+function drawRoute(r, a, color, alpha, dash) {
+  const pts = routePts(r, a);
+  for (let i = 0; i < pts.length - 1; i++) {
+    line(pts[i], pts[i + 1], color, 2.2, alpha, dash);
+    arrowHead(pts[i], pts[i + 1], color, alpha);
+  }
+}
+
+function draw() {
+  if (!pz) return;
+  ctx.clearRect(0, 0, W, H);
+  drawPitch();
+  const team = teamOf(pz), opp = oppOf(pz);
+
+  // earlier tries, faded
+  const shown = anim ? record.attempts : record.attempts;
+  shown.forEach(a => { if (a.result !== "goal") drawRoute(a.route, a.aim, C.dim, 0.28, [6, 6]); });
+
+  // reach rings
+  if (mode === "draw") {
+    opp.forEach(o => {
+      ctx.save(); ctx.globalAlpha = 0.18; ctx.fillStyle = C.red;
+      ctx.beginPath(); ctx.arc(o.x, o.y, o.reach + BALL_R, 0, 7); ctx.fill(); ctx.restore();
+    });
+  }
+  let ballPos = pz.carrier;
+  let moved = new Map();
+  if (anim) {
+    const segs = anim.sim.segs;
+    for (let i = 0; i < anim.seg; i++) line(segs[i].a, segs[i].b, C.chalk, 2, 0.5);
+    const s = segs[anim.seg];
+    const f = Math.min(1, (anim.t * s.speed) / s.len);
+    ballPos = { x: s.a.x + (s.b.x - s.a.x) * f, y: s.a.y + (s.b.y - s.a.y) * f };
+    line(s.a, ballPos, C.chalk, 2, 0.5);
+    const wide = isWide(anim.aim);
+    opp.forEach((o, j) => {
+      if (o.gk && s.shot && wide) return;
+      const R = o.reach + BALL_R + o.speed * Math.max(0, anim.t - o.react);
+      chalkPath(circlePts(o, R), C.red, 1.5, s.hit && s.hit.j === j && anim.done ? 0.8 : 0.4, [4, 5]);
+    });
+    if (s.hit && anim.done) {
+      const o = opp[s.hit.j];
+      const k = Math.min(1, anim.hold / 0.2);
+      moved.set(s.hit.j, { x: o.x + (s.hit.x - o.x) * k, y: o.y + (s.hit.y - o.y) * k });
+    }
+  } else if (mode === "done") {
+    const last = record.attempts[record.attempts.length - 1];
+    if (last && last.result === "goal") {
+      drawRoute(last.route, last.aim, C.yellow, 0.9);
+      ballPos = { x: last.aim.x, y: GOAL_Y - 14 };
+    } else if (pz.solution) {
+      drawRoute(pz.solution.route, pz.solution.aim, C.yellow, 0.85, [7, 6]);
+    }
+  }
+
+  // live drawing
+  if (mode === "draw" && stroke.length > 1) {
+    chalkPath(stroke, C.chalk, 1.5, 0.35);
+    const end = aim || stroke[stroke.length - 1];
+    const pts = [...route.map(i => team[i]), end];
+    for (let i = 0; i < pts.length - 1; i++) {
+      line(pts[i], pts[i + 1], aim || i < pts.length - 2 ? C.chalk : C.dim, 2.4, 0.95, i === pts.length - 2 && !aim ? [5, 6] : null);
+      if (aim || i < pts.length - 2) arrowHead(pts[i], pts[i + 1], C.chalk);
+    }
+  }
+
+  // players
+  team.forEach((p, i) => drawMate(p, NUMBERS[i], mode === "draw" && i === 0 && stroke.length === 0));
+  opp.forEach((o, j) => drawOpp(moved.get(j) || o, o.gk));
+  drawBall(ballPos.x === pz.carrier.x && ballPos.y === pz.carrier.y ? { x: pz.carrier.x + 9, y: pz.carrier.y - 12 } : ballPos);
+
+  // goal flash
+  if (anim && anim.done && anim.sim.result === "goal") {
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, anim.hold * 3);
+    ctx.fillStyle = C.yellow; ctx.font = "700 64px 'Cabin Sketch', cursive";
+    ctx.textAlign = "center"; ctx.fillText("GOAL!", W / 2, H * 0.55);
+    ctx.restore();
+  }
+}
+
+// ---------- Boot ----------
+readColors();
+setupCanvas();
+window.addEventListener("resize", () => { setupCanvas(); draw(); });
+startPuzzle(hashStr("chalkboard-" + day), false);
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(draw);
+
+// exposed for tests
+window.__cfc = { generate, simulate, solve, hashStr, xG, get pz() { return pz; } };
+})();
+</script>
