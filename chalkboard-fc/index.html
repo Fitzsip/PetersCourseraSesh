@@ -800,16 +800,17 @@ function startPlay() {
   requestAnimationFrame(tick);
 }
 
-function frameIndex() { return Math.min(anim.sim.frames.length - 1, Math.floor(anim.t / DT)); }
+function frameIndex() { return Math.max(0, Math.min(anim.sim.frames.length - 1, Math.floor(anim.t / DT))); }
 function tick(now) {
   if (!anim) return;
-  const dt = Math.min(0.05, (now - anim.last) / 1000);
-  anim.last = now;
+  // A frame's timestamp can be earlier than the moment the play started (seen on Android): clamp at 0.
+  const dt = Math.max(0, Math.min(0.05, (now - anim.last) / 1000));
+  anim.last = Math.max(anim.last, now);
   if (!anim.done) {
     anim.t += dt;
     if (anim.t / DT >= anim.sim.frames.length - 1) anim.done = true;
   } else anim.hold += dt;
-  draw();
+  try { draw(); } catch (err) { console.error(err); anim.done = true; anim.hold = 99; }
   if (anim.done && anim.hold > (anim.sim.result === "offside" ? 1.3 : 0.8)) return finishAttempt();
   requestAnimationFrame(tick);
 }
