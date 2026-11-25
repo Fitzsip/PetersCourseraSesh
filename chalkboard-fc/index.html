@@ -259,11 +259,14 @@ const DT = 1 / 90;                       // simulation step (s)
 const P = {
   passSpeed: 300, shotSpeed: 600, dribbleSpeed: 140,
   defReach: 14, defReact: 0.3,           // defenders take a moment to read each pass
-  defMin: 85, defMax: 105, pressRadius: 150, jogFactor: 0.45,
-  gkSpeed: 100, gkPosSpeed: 70, gkReach: 10, gkReact: 0.1,
+  defMin: 85, defMax: 105,
+  laneRadius: 90,                        // a defender jumps into a pass that comes this close
+  shapePull: 0.3, shapeMax: 60, jogFactor: 0.6, lineHold: 15,
+  gkSpeed: 80, gkPosSpeed: 70, gkReach: 8, gkReact: 0.18,
   control: 0.12,                         // first touch: receiver needs this long to control a pass
   capture: 22, startRadius: 44, maxTries: 3,
   straightTol: 14, minDribble: 18, offsideTol: 4, goalSlack: 50,
+  minWindow: 18, minRoutes: 3, maxRoutes: 16, gkOut: 20,
 };
 const NUMBERS = [8, 9, 10, 7, 11];
 
@@ -317,7 +320,11 @@ function offsideLine(opp) { const ys = opp.map(o => o.y).sort((a, b) => a - b); 
 // ---------- Simulation ----------
 // State carries everyone's position through the whole play: defenders never reset between passes.
 function initState(pz) {
-  return { t: 0, holder: 0, team: teamOf(pz).map(cp), opp: oppOf(pz).map(o => ({ ...o, vx: 0, vy: 0 })) };
+  const opp = oppOf(pz).map(o => ({ ...o, vx: 0, vy: 0, hx: o.x, hy: o.y, last: false }));
+  let li = -1;
+  opp.forEach((o, j) => { if (!o.gk && (li < 0 || o.y < opp[li].y)) li = j; });
+  if (li >= 0) opp[li].last = true;
+  return { t: 0, holder: 0, team: teamOf(pz).map(cp), opp };
 }
 function cloneState(s) {
   return { t: s.t, holder: s.holder, team: s.team.map(cp), opp: s.opp.map(o => ({ ...o })) };
@@ -327,7 +334,7 @@ function snap(st, ball) {
 }
 function gkSpot(ball) {                       // keeper comes off his line to narrow the angle
   const dx = ball.x - GOAL_C, dy = ball.y - GOAL_Y, d = Math.hypot(dx, dy) || 1;
-  const k = Math.max(8, Math.min(34, d * 0.12));
+  const k = Math.max(8, Math.min(P.gkOut, d * 0.12));
   return { x: GOAL_C + (dx / d) * k, y: Math.max(GOAL_Y + 6, GOAL_Y + (dy / d) * k) };
 }
 // Earliest point where a runner at speed v (reach R) can meet a ball moving at velocity u for rem seconds.
@@ -348,7 +355,9 @@ function interceptPoint(o, p, u, rem, end, v, R) {
   if (t === null || t > rem) return end;
   return { x: p.x + u.x * t, y: p.y + u.y * t };
 }
-function steer(o, ball, vel, rem, end, tt, kind) {
+// Defensive roles: the nearest defender presses the ball, a defender near the ball's path jumps into
+// the lane, the rest hold their zone and shift across. The last defender holds the offside line.
+function steer(o, ball, vel, rem, end, tt, kind, presser) {
   const react = kind === "shot" ? (o.gk ? P.gkReact : P.defReact) : kind === "pass" && !o.gk ? P.defReact : 0;
   if (tt < react) return;                     // still reading it: keep running the old way
   let target, spd;
@@ -356,8 +365,16 @@ function steer(o, ball, vel, rem, end, tt, kind) {
   else {
     spd = o.speed;
     target = interceptPoint(o, ball, vel, rem, end, spd, o.reach + BALL_R);
-    // Far from the ball a defender only jogs across to cover; close to it he sprints.
-    if (kind !== "shot" && dist(o, target) > P.pressRadius) spd *= P.jogFactor;
+    const inLane = (kind === "pass" || kind === "shot") && dist(o, target) < P.laneRadius;
+    if (!o.gk && !presser && !inLane) {
+      // hold shape: drift from home toward the ball, at a jog
+      let dx = (ball.x - o.hx) * P.shapePull, dy = (ball.y - o.hy) * P.shapePull;
+      const L = Math.hypot(dx, dy);
+      if (L > P.shapeMax) { dx *= P.shapeMax / L; dy *= P.shapeMax / L; }
+      target = { x: o.hx + dx, y: o.hy + dy };
+      spd *= P.jogFactor;
+    }
+    if (o.last && !presser) target = { x: target.x, y: Math.min(target.y, o.hy + P.lineHold) };
   }
   const dx = target.x - o.x, dy = target.y - o.y, d = Math.hypot(dx, dy);
   if (d < 0.5) { o.vx = 0; o.vy = 0; return; }
@@ -383,9 +400,11 @@ function moveBall(st, pts, speed, kind, frames, wide = false) {
       rem = (l - (s - sBase)) / speed; end = b;
     }
     if (kind === "dribble") st.team[st.holder] = cp(ball);
+    let presser = -1;
+    st.opp.forEach((o, j) => { if (!o.gk && (presser < 0 || dist(o, ball) < dist(st.opp[presser], ball))) presser = j; });
     for (let j = 0; j < st.opp.length; j++) {
       const o = st.opp[j];
-      steer(o, ball, vel, rem, end, tt, kind);
+      steer(o, ball, vel, rem, end, tt, kind, j === presser);
       o.x += o.vx * h; o.y += o.vy * h;
       const catchable = !(o.gk && kind === "shot" && wide);
       if (catchable && dist(o, ball) <= o.reach + BALL_R) {
@@ -446,7 +465,7 @@ function bestAim(st) {
     if (ok && runStart === null) runStart = x;
     if (!ok && runStart !== null) {
       const w = x - runStart;
-      if (w >= 12 && w > bestRun) { bestRun = w; scored = { x: runStart + (w - 3) / 2, y: GOAL_Y }; }
+      if (w >= P.minWindow && w > bestRun) { bestRun = w; scored = { x: runStart + (w - 3) / 2, y: GOAL_Y }; }
       runStart = null;
     }
   }
@@ -534,7 +553,7 @@ function generate(seed) {
       if (free(p, 45)) pz.mates.push(p);
     }
     const sol = solve(pz);
-    if (sol.direct || sol.count < 1 || sol.count > 16) continue;
+    if (sol.direct || sol.count < P.minRoutes || sol.count > P.maxRoutes) continue;
     if (easyDribble(pz)) continue;
     pz.solution = sol.best;
     pz.routes = sol.count;
@@ -549,7 +568,7 @@ function todayIndex(d = new Date()) {
   const mid = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   return Math.round((mid - EPOCH) / 86400000) + 1;
 }
-const STORE_KEY = "chalkboardfc:v2";
+const STORE_KEY = "chalkboardfc:v3";
 function load() {
   try { return JSON.parse(localStorage.getItem(STORE_KEY)) || { days: {} }; } catch { return { days: {} }; }
 }
@@ -830,7 +849,8 @@ function finishAttempt() {
   else {
     mode = "draw";
     const left = P.maxTries - record.attempts.length;
-    setStatus(`${lastMessage(attempt)} ${left} ${left === 1 ? "try" : "tries"} left.`, "bad");
+    setStatus(`${lastMessage(attempt)} ${left} ${left === 1 ? "try" : "tries"} left.` +
+      (left === 1 ? " Coach's tip: the dashed yellow arrow is a good first move." : ""), "bad");
   }
   draw();
 }
@@ -1113,6 +1133,11 @@ function draw() {
     const last = record.attempts[record.attempts.length - 1];
     if (last && last.result === "goal") drawPlan(last.plan, C.yellow, 0.9);
     else if (pz.solution) drawPlan(pz.solution.plan, C.yellow, 0.85, [7, 6]);
+  }
+
+  const tip = mode === "draw" && !record.done && record.attempts.length >= P.maxTries - 1 && pz.solution;
+  if (tip && stroke.length === 0) {
+    drawPlan(pz.solution.plan.slice(0, 1), C.yellow, 0.75, [7, 6]);
   }
 
   if (mode === "draw" && stroke.length > 1) {
