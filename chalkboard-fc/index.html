@@ -266,7 +266,8 @@ const P = {
   control: 0.12,                         // first touch: receiver needs this long to control a pass
   capture: 22, startRadius: 44, maxTries: 3,
   straightTol: 14, minDribble: 18, offsideTol: 4, goalSlack: 50,
-  minWindow: 18, minRoutes: 3, maxRoutes: 16, gkOut: 20,
+  minWindow: 15, minRoutes: 2, maxRoutes: 16, gkOut: 20,
+  minShare: 3, maxShare: 4.5,          // % of simple plays (<=3 passes, any aim) that score: the difficulty band
 };
 const NUMBERS = [8, 9, 10, 7, 11];
 
@@ -492,6 +493,23 @@ function solve(pz, maxPasses = 4) {
   rec([], initState(pz), 0);
   return { count, direct, best };
 }
+// Difficulty: what share of simple plays (up to 3 passes, shooting anywhere along the goal) score.
+function winShare(pz) {
+  let tot = 0, ok = 0;
+  const n = 1 + pz.mates.length;
+  const rec = (st, passes) => {
+    for (let x = 180; x <= 260; x += 5) { tot++; if (applyAction(cloneState(st), { type: "shot", aim: { x, y: GOAL_Y } }).result === "goal") ok++; }
+    if (passes >= 3) return;
+    for (let i = 0; i < n; i++) {
+      if (i === st.holder) continue;
+      const s2 = cloneState(st);
+      if (applyAction(s2, { type: "pass", to: i })) { tot += 17; continue; }
+      rec(s2, passes + 1);
+    }
+  };
+  rec(initState(pz), 0);
+  return (100 * ok) / tot;
+}
 // Reject puzzles a simple run-and-shoot solves.
 function easyDribble(pz) {
   const c = pz.carrier;
@@ -555,6 +573,9 @@ function generate(seed) {
     const sol = solve(pz);
     if (sol.direct || sol.count < P.minRoutes || sol.count > P.maxRoutes) continue;
     if (easyDribble(pz)) continue;
+    const share = winShare(pz);
+    if (share < P.minShare || share > P.maxShare) continue;
+    pz.share = share;
     pz.solution = sol.best;
     pz.routes = sol.count;
     return pz;
@@ -568,7 +589,7 @@ function todayIndex(d = new Date()) {
   const mid = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   return Math.round((mid - EPOCH) / 86400000) + 1;
 }
-const STORE_KEY = "chalkboardfc:v3";
+const STORE_KEY = "chalkboardfc:v4";
 function load() {
   try { return JSON.parse(localStorage.getItem(STORE_KEY)) || { days: {} }; } catch { return { days: {} }; }
 }
@@ -1179,6 +1200,6 @@ startPuzzle(hashStr("chalkboard-" + day), false);
 if (document.fonts && document.fonts.ready) document.fonts.ready.then(draw);
 
 // exposed for tests
-window.__cfc = { bestAim, initState, applyAction, P, generate, simulate, solve, hashStr, xG, offsideLine, oppOf, teamOf, get pz() { return pz; } };
+window.__cfc = { initState, cloneState, applyAction, bestAim, initState, applyAction, P, generate, simulate, solve, hashStr, xG, offsideLine, oppOf, teamOf, get pz() { return pz; } };
 })();
 </script>
