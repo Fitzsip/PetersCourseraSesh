@@ -1,5 +1,5 @@
-# Publishes the Charge Ireland map (ev-charge-ireland/) to GitHub Pages,
-# with the Chalkboard FC game at /chalkboard-fc/,
+# Publishes the Charge Ireland map (ev-charge-ireland/) to GitHub Pages, plus the
+# Chalkboard FC app's privacy policy at /chalkboard-fc/privacy.html,
 # whenever master changes. Requires Settings → Pages → Source: "GitHub Actions".
 name: Deploy map to GitHub Pages
 
@@ -40,7 +40,8 @@ jobs:
           mkdir _site
           cp -r ev-charge-ireland/index.html ev-charge-ireland/styles.css \
                 ev-charge-ireland/config.js ev-charge-ireland/js _site/
-          cp -r chalkboard-fc _site/chalkboard-fc
+          mkdir -p _site/chalkboard-fc
+          cp chalkboard-fc/privacy.html _site/chalkboard-fc/
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
